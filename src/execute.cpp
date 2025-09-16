@@ -388,8 +388,8 @@ CExecuteItem ArgumentsExecutes[] =
 
 // Initial directory
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM InitDirExecutes[] = 
 {
   {MNTT_PB, 0
@@ -419,8 +419,8 @@ CExecuteItem InitDirExecutes[] =
 
 // Information Line Content
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM InfoLineContentItems[] = 
 {
   {MNTT_PB, 0
@@ -447,8 +447,8 @@ CExecuteItem InfoLineContentItems[] =
 
 // Make File List Items
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM MakeFileListItems[] = 
 {
   {MNTT_PB, 0
@@ -498,8 +498,8 @@ CExecuteItem MakeFileListItems[] =
 
 // Regular Expression Items
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM RegularExpressionItems[] = 
 {
   {MNTT_PB, 0
@@ -569,7 +569,7 @@ CExecuteItem RegularExpressionItems[] =
 
 //******************************************************************************
 //
-// Vlastni funkce
+// Custom functions
 //
 
 struct CExecuteExpData
@@ -579,10 +579,10 @@ struct CExecuteExpData
     char Buffer[MAX_PATH];
     BOOL* FileNameUsed;
 
-    CUserMenuAdvancedData* UserMenuAdvancedData; // tyka se jen User Menu, jinak je zde NULL
+    CUserMenuAdvancedData* UserMenuAdvancedData; // applies only to User Menu, otherwise NULL here
 };
 
-const char* WINAPI ExecuteExpDrive(HWND msgParent, void* param) // drive ("D:", "\\server\share") bez backslashe
+const char* WINAPI ExecuteExpDrive(HWND msgParent, void* param) // drive ("D:", "\\server\share") without backslash
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     if (data->FileNameUsed != NULL)
@@ -594,7 +594,7 @@ const char* WINAPI ExecuteExpDrive(HWND msgParent, void* param) // drive ("D:", 
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpPath(HWND msgParent, void* param) // plna cesta ("\\", "\\path\\")
+const char* WINAPI ExecuteExpPath(HWND msgParent, void* param) // full path ("\\", "\\path\\")
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     if (data->FileNameUsed != NULL)
@@ -664,7 +664,7 @@ const char* WINAPI ExecuteExpDOSName(HWND msgParent, void* param)
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpPath2(HWND msgParent, void* param) // plna cesta ("\\", "\\path")
+const char* WINAPI ExecuteExpPath2(HWND msgParent, void* param) // full path ("\\", "\\path")
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     if (data->FileNameUsed != NULL)
@@ -683,7 +683,7 @@ const char* WINAPI ExecuteExpPath2(HWND msgParent, void* param) // plna cesta ("
     if (s != data->Buffer)
         *s = 0;
     else
-        *++s = 0; // root musi koncit na '\\'
+        *++s = 0; // root must end with '\\'
     return data->Buffer;
 }
 
@@ -694,7 +694,7 @@ const char* WINAPI ExecuteExpFullName(HWND msgParent, void* param)
         *data->FileNameUsed = TRUE;
     const char* s = strrchr(data->Name, '\\');
     if (s != NULL && *(s + 1) == 0)
-        return ""; // user-menu na "" nebo ".."
+        return ""; // user-menu on "" or ".."
     return data->Name;
 }
 
@@ -705,7 +705,7 @@ const char* WINAPI ExecuteExpDOSFullName(HWND msgParent, void* param)
         *data->FileNameUsed = TRUE;
     const char* s = strrchr(data->DosName, '\\');
     if (s != NULL && *(s + 1) == 0)
-        return ""; // user-menu na "" nebo ".."
+        return ""; // user-menu on "" or ".."
     return data->DosName;
 }
 
@@ -722,8 +722,8 @@ const char* WINAPI ExecuteExpNamePart(HWND msgParent, void* param)
     }
     strcpy(data->Buffer, s + 1);
     char* ss = strrchr(data->Buffer, '.');
-    //  if (ss != NULL && ss != data->Buffer)   // je zde pripona ('.' a to ne na zacatku jmena, viz ".cvspass")
-    if (ss != NULL) // je zde pripona (".cvspass" ve Windows je pripona)
+    //  if (ss != NULL && ss != data->Buffer)   // extension is present ('.' not at the begining of the name, e.g. ".cvspass")
+    if (ss != NULL) // extension is present (".cvspass" is considered an extension in Windows)
         *ss = 0;
     return data->Buffer;
 }
@@ -741,8 +741,8 @@ const char* WINAPI ExecuteExpExtPart(HWND msgParent, void* param)
     }
     strcpy(data->Buffer, s + 1);
     s = strrchr(data->Buffer, '.');
-    //  if (s != NULL && s != data->Buffer)   // je zde pripona ('.' a to ne na zacatku jmena, viz ".cvspass")
-    if (s != NULL) // je zde pripona (".cvspass" ve Windows je pripona)
+    //  if (s != NULL && s != data->Buffer)   // extension is present ('.' not at the begining of the name, e.g. ".cvspass")
+    if (s != NULL) // extension is present (".cvspass" is considered an extension in Windows)
         return s + 1;
     return "";
 }
@@ -760,8 +760,8 @@ const char* WINAPI ExecuteExpDOSNamePart(HWND msgParent, void* param)
     }
     strcpy(data->Buffer, s + 1);
     char* ss = strrchr(data->Buffer, '.');
-    //  if (ss != NULL && ss != data->Buffer)   // je zde pripona ('.' a to ne na zacatku jmena, viz ".cvspass")
-    if (ss != NULL) // je zde pripona (".cvspass" ve Windows je pripona)
+    //  if (ss != NULL && ss != data->Buffer)   // extension is present ('.' not at the begining of the name, e.g. ".cvspass")
+    if (ss != NULL) // extension is present (".cvspass" is considered an extension in Windows)
         *ss = 0;
     return data->Buffer;
 }
@@ -779,13 +779,13 @@ const char* WINAPI ExecuteExpDOSExtPart(HWND msgParent, void* param)
     }
     strcpy(data->Buffer, s + 1);
     s = strrchr(data->Buffer, '.');
-    //  if (s != NULL && s != data->Buffer)   // je zde pripona ('.' a to ne na zacatku jmena, viz ".cvspass")
-    if (s != NULL) // je zde pripona (".cvspass" ve Windows je pripona)
+    //  if (s != NULL && s != data->Buffer)   // extension is present ('.' not at the begining of the name, e.g. ".cvspass")
+    if (s != NULL) // extension is present (".cvspass" is considered an extension in Windows)
         return s + 1;
     return "";
 }
 
-const char* WINAPI ExecuteExpFullPath(HWND msgParent, void* param) // plna cesta "c:\\long path\\"
+const char* WINAPI ExecuteExpFullPath(HWND msgParent, void* param) // full path "c:\\long path\\"
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     if (data->FileNameUsed != NULL)
@@ -801,7 +801,7 @@ const char* WINAPI ExecuteExpFullPath(HWND msgParent, void* param) // plna cesta
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpWinDir(HWND msgParent, void* param) // plna cesta do Windows adresare
+const char* WINAPI ExecuteExpWinDir(HWND msgParent, void* param) // full path to the Windows directory
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     GetWindowsDirectory(data->Buffer, MAX_PATH);
@@ -811,7 +811,7 @@ const char* WINAPI ExecuteExpWinDir(HWND msgParent, void* param) // plna cesta d
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpSysDir(HWND msgParent, void* param) // plna cesta do Systemoveho adresare
+const char* WINAPI ExecuteExpSysDir(HWND msgParent, void* param) // full path to the System directory
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     GetSystemDirectory(data->Buffer, MAX_PATH);
@@ -821,7 +821,7 @@ const char* WINAPI ExecuteExpSysDir(HWND msgParent, void* param) // plna cesta d
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpSalDir(HWND msgParent, void* param) // plna cesta do Salamanderiho adresare
+const char* WINAPI ExecuteExpSalDir(HWND msgParent, void* param) // full path to the Salamander directory
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     GetModuleFileName(HInstance, data->Buffer, MAX_PATH);
@@ -829,7 +829,7 @@ const char* WINAPI ExecuteExpSalDir(HWND msgParent, void* param) // plna cesta d
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpDOSFullPath(HWND msgParent, void* param) // DOS plna cesta "c:\\sh_path\\"
+const char* WINAPI ExecuteExpDOSFullPath(HWND msgParent, void* param) // DOS full path "c:\\sh_path\\"
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     if (data->FileNameUsed != NULL)
@@ -845,7 +845,7 @@ const char* WINAPI ExecuteExpDOSFullPath(HWND msgParent, void* param) // DOS pln
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpDOSWinDir(HWND msgParent, void* param) // DOS plna cesta do Windows adresare
+const char* WINAPI ExecuteExpDOSWinDir(HWND msgParent, void* param) // DOS full path to the Windows directory
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     char path[MAX_PATH];
@@ -857,7 +857,7 @@ const char* WINAPI ExecuteExpDOSWinDir(HWND msgParent, void* param) // DOS plna 
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpDOSSysDir(HWND msgParent, void* param) // DOS plna cesta do Systemoveho adresare
+const char* WINAPI ExecuteExpDOSSysDir(HWND msgParent, void* param) // DOS full path to the System directory
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     char path[MAX_PATH];
@@ -869,7 +869,7 @@ const char* WINAPI ExecuteExpDOSSysDir(HWND msgParent, void* param) // DOS plna 
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpFullPath2(HWND msgParent, void* param) // plna cesta "c:\\long path"
+const char* WINAPI ExecuteExpFullPath2(HWND msgParent, void* param) // full path "c:\\long path"
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     if (data->FileNameUsed != NULL)
@@ -881,7 +881,7 @@ const char* WINAPI ExecuteExpFullPath2(HWND msgParent, void* param) // plna cest
         TRACE_E("Unexpected value in ExecuteExpFullPath2().");
         return "C:\\";
     }
-    if (s - data->Buffer == 2 && data->Buffer[1] == ':') // ne UNC cesta
+    if (s - data->Buffer == 2 && data->Buffer[1] == ':') // not a UNC path
     {
         *(s + 1) = 0;
     }
@@ -892,7 +892,7 @@ const char* WINAPI ExecuteExpFullPath2(HWND msgParent, void* param) // plna cest
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpWinDir2(HWND msgParent, void* param) // plna cesta do Windows adresare, bez '\\' na konci
+const char* WINAPI ExecuteExpWinDir2(HWND msgParent, void* param) // full path to the Windows directory without trailing '\\'
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     GetWindowsDirectory(data->Buffer, MAX_PATH);
@@ -902,7 +902,7 @@ const char* WINAPI ExecuteExpWinDir2(HWND msgParent, void* param) // plna cesta 
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpSysDir2(HWND msgParent, void* param) // plna cesta do Systemoveho adresare, bez '\\' na konci
+const char* WINAPI ExecuteExpSysDir2(HWND msgParent, void* param) // full path to the System directory without trailing '\\'
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     GetSystemDirectory(data->Buffer, MAX_PATH);
@@ -912,7 +912,7 @@ const char* WINAPI ExecuteExpSysDir2(HWND msgParent, void* param) // plna cesta 
     return data->Buffer;
 }
 
-const char* WINAPI ExecuteExpSalDir2(HWND msgParent, void* param) // plna cesta do Salamanderiho adresare, bez '\\' na konci
+const char* WINAPI ExecuteExpSalDir2(HWND msgParent, void* param) // full path to the Salamander directory without trailing '\\'
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     GetModuleFileName(HInstance, data->Buffer, MAX_PATH);
@@ -922,7 +922,7 @@ const char* WINAPI ExecuteExpSalDir2(HWND msgParent, void* param) // plna cesta 
         TRACE_E("Unexpected value in ExecuteExpSalDir2().");
         return "C:\\";
     }
-    if (s - data->Buffer == 2 && data->Buffer[1] == ':') // ne UNC cesta
+    if (s - data->Buffer == 2 && data->Buffer[1] == ':') // not a UNC path
     {
         *(s + 1) = 0;
     }
@@ -939,9 +939,9 @@ struct CFileDataExpData
 {
     CPluginDataInterfaceEncapsulation* PluginData;
     const CFileData* FileData;
-    BOOL IsDir;          // jde o soubor, ne adresar
-    DWORD ValidFileData; // maska platnych dat v CFileData
-    char Path[MAX_PATH]; // cesta do aktualniho panelu (jen pro Make File List)
+    BOOL IsDir;          // this is a file, not a directory
+    DWORD ValidFileData; // mask of valid data in CFileData
+    char Path[MAX_PATH]; // path to the current panel (only for Make File List)
     char Buffer[2000];
 };
 
@@ -999,7 +999,7 @@ const char* WINAPI FileDataExpFileSize(HWND msgParent, void* param)
         }
     }
     if (!sizeValid && !plSizeValid && !data->IsDir)
-    { // jde o soubor a size neni platne -> neni co ukazat
+    { // it's a file and size is not valid -> nothing to show
         return STR_FILE_DATA_NONE;
     }
     if (!data->IsDir || sizeValid && data->FileData->SizeValid || plSizeValid)
@@ -1027,7 +1027,7 @@ const char* WINAPI FileDataExpFileSizeNoSpaces(HWND msgParent, void* param)
         }
     }
     if (!sizeValid && !plSizeValid && !data->IsDir)
-    { // jde o soubor a size neni platne -> neni co ukazat
+    { // it's a file and size is not valid -> nothing to show
         return STR_FILE_DATA_NONE;
     }
     if (!data->IsDir || sizeValid && data->FileData->SizeValid || plSizeValid)
@@ -1048,10 +1048,10 @@ const char* WINAPI FileDataExpFileDate(HWND msgParent, void* param)
         ((data->ValidFileData & VALID_DATA_PL_DATE) == 0 ||
          !data->PluginData->NotEmpty() ||
          !data->PluginData->GetLastWriteDate(data->FileData, data->IsDir, &st)))
-    { // last-write neni platne -> neni co ukazat
+    { // last-write is not valid -> nothing to show
         return STR_FILE_DATA_NONE;
     }
-    if ((data->ValidFileData & VALID_DATA_DATE) == 0) // datum z pluginu - je potreba zvalidnit "casovou cast" struktury
+    if ((data->ValidFileData & VALID_DATA_DATE) == 0) // date from the plugin - we need to validate the time part of the structure
     {
         st.wHour = 0;
         st.wMinute = 0;
