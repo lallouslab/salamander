@@ -56,7 +56,7 @@ void CComboboxEdit::GetSel(DWORD* start, DWORD* end)
 
 void CComboboxEdit::ReplaceText(const char* text)
 {
-    // musime ozivit selection, protoze dementni combobox ji zapomel
+    // we must refresh the selection because the dumb combobox forgot it
     SendMessage(HWindow, EM_SETSEL, SelStart, SelEnd);
     SendMessage(HWindow, EM_REPLACESEL, TRUE, (LPARAM)text);
 }
@@ -105,11 +105,11 @@ const char* EXECUTE_LISTOFSELFULLNAMES = "ListOfSelectedFullNames";
 const char* EXECUTE_ENV = "$[]";
 
 // dummy strings
-// !!! stringy nesmi mit stejnou hodnotu, protoze release verze
-// v ramci optimalizaci pak nasmeruje ukazatele na jedno misto
+// !!! strings must not have the same value because the release build
+// would redirect pointers to a single instance during optimizations
 const char* EXECUTE_SEPARATOR = "Separator";
-const char* EXECUTE_BROWSE = "Browse";       // prochazeni adresaru pomoci Open dialogu
-const char* EXECUTE_BROWSEDIR = "BrowseDir"; // prochazeni adresaru pomoci GetTargetDirectory
+const char* EXECUTE_BROWSE = "Browse";       // directory browsing using the Open dialog
+const char* EXECUTE_BROWSEDIR = "BrowseDir"; // directory browsing using GetTargetDirectory
 const char* EXECUTE_HELP = "Help";
 const char* EXECUTE_TERMINATOR = "Terminator";
 const char* EXECUTE_SUBMENUSTART = "SubMenuStart";
@@ -133,10 +133,10 @@ const char* FILEDATA_CR = "CR";
 const char* FILEDATA_CRLF = "CRLF";
 const char* FILEDATA_TAB = "TAB";
 
-// retezec zobrazovany pokud nejsou platna data pro pozadovanou promennou
+// string displayed when no valid data exist for the requested variable
 const char* STR_FILE_DATA_NONE = "-";
 
-// retezce pro regular expressions
+// strings for regular expressions
 const char* REGEXP_ANYCHAR = ".";
 const char* REGEXP_SETOFCHAR = "[]";
 const char* REGEXP_NOTSETOFCHAR = "[^]";
@@ -168,14 +168,14 @@ const char* REGEXP_IDENTIFIER = "([a-zA-Z_$][a-zA-Z0-9_$]*)";
 
 //******************************************************************************
 //
-// Preddefinovana pola
+// Predefined arrays
 //
 //
 
 // Arguments - User Menu
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM UserMenuArgsExecutes[] = 
 {
   {MNTT_PB, 0
@@ -276,8 +276,8 @@ CExecuteItem UserMenuArgsExecutes[] =
 
 // HotPath
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM HotPathItems[] = 
 {
   {MNTT_PB, 0
@@ -304,8 +304,8 @@ CExecuteItem HotPathItems[] =
 
 // Command - external View/Edit
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM CommandExecutes[] = 
 {
   {MNTT_PB, 0
@@ -332,8 +332,8 @@ CExecuteItem CommandExecutes[] =
 
 // Arguments - External View/Edit
 
-/* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s polem dole...
+/* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   keep synchronized with the array below...
 MENU_TEMPLATE_ITEM ArgumentsExecutes[] = 
 {
   {MNTT_PB, 0
