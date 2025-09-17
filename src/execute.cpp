@@ -1080,7 +1080,7 @@ const char* WINAPI FileDataExpFileDateOnlyForDisk(HWND msgParent, void* param)
         FileTimeToSystemTime(&ft, &st) && (stIsReady = TRUE) != 0 &&
         st.wYear == 1602 && st.wMonth == 1 && st.wDay == 1 && st.wHour == 0 &&
         st.wMinute == 0 && st.wSecond == 0 && st.wMilliseconds == 0 &&
-        strcmp(data->FileData->Name, "..") == 0) // pro UP-DIR je 1.1.1602 0:00:00.000 je "prazdna hodnota"
+        strcmp(data->FileData->Name, "..") == 0) // for UP-DIR 1.1.1602 0:00:00.000 is an "empty value"
     {
         return STR_FILE_DATA_NONE;
     }
@@ -1103,15 +1103,15 @@ const char* WINAPI FileDataExpFileTime(HWND msgParent, void* param)
         ((data->ValidFileData & VALID_DATA_PL_TIME) == 0 ||
          !data->PluginData->NotEmpty() ||
          !data->PluginData->GetLastWriteTime(data->FileData, data->IsDir, &st)))
-    { // last-write neni platne -> neni co ukazat
+    { // last-write is not valid -> nothing to show
         return STR_FILE_DATA_NONE;
     }
-    if ((data->ValidFileData & VALID_DATA_TIME) == 0) // cas z pluginu - je potreba zvalidnit "datumovou cast" struktury
+    if ((data->ValidFileData & VALID_DATA_TIME) == 0) // time from the plugin - we need to validate the "date part" of the structure
     {
         st.wYear = 2000;
         st.wMonth = 12;
         st.wDay = 24;
-        st.wDayOfWeek = 0; // nedele
+        st.wDayOfWeek = 0; // Sunday
     }
     if ((data->ValidFileData & VALID_DATA_TIME) == 0 ||
         FileTimeToLocalFileTime(&data->FileData->LastWrite, &ft) &&
@@ -1135,7 +1135,7 @@ const char* WINAPI FileDataExpFileTimeOnlyForDisk(HWND msgParent, void* param)
         FileTimeToSystemTime(&ft, &st) && (stIsReady = TRUE) != 0 &&
         st.wYear == 1602 && st.wMonth == 1 && st.wDay == 1 && st.wHour == 0 &&
         st.wMinute == 0 && st.wSecond == 0 && st.wMilliseconds == 0 &&
-        strcmp(data->FileData->Name, "..") == 0) // pro UP-DIR je 1.1.1602 0:00:00.000 je "prazdna hodnota"
+        strcmp(data->FileData->Name, "..") == 0) // for UP-DIR 1.1.1602 0:00:00.000 is an "empty value"
     {
         return STR_FILE_DATA_NONE;
     }
@@ -1153,14 +1153,14 @@ const char* WINAPI FileDataExpFileAttr(HWND msgParent, void* param)
 {
     CFileDataExpData* data = (CFileDataExpData*)param;
     if ((data->ValidFileData & VALID_DATA_ATTRIBUTES) == 0)
-    { // attr neni platne -> neni co ukazat
+    { // attr is not valid -> nothing to show
         return STR_FILE_DATA_NONE;
     }
     char attr[20];
     GetAttrsString(attr, data->FileData->Attr);
     if (attr[0] == 0)
     {
-        attr[0] = '-'; // zadny atribut
+        attr[0] = '-'; // no attribute
         attr[1] = 0;
     }
     strcpy(data->Buffer, attr);
@@ -1171,7 +1171,7 @@ const char* WINAPI FileDataExpFileDOSName(HWND msgParent, void* param)
 {
     CFileDataExpData* data = (CFileDataExpData*)param;
     if ((data->ValidFileData & VALID_DATA_DOSNAME) == 0)
-    { // dos-name neni platne -> neni co ukazat
+    { // DOS name is not valid -> nothing to show
         return STR_FILE_DATA_NONE;
     }
     strcpy(data->Buffer, (data->FileData->DosName != NULL ? data->FileData->DosName : data->FileData->Name));
@@ -1299,7 +1299,7 @@ const char* WINAPI ExecuteValCompFileLeft(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 1)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareLeftOrActive = TRUE;
     return "";
@@ -1314,7 +1314,7 @@ const char* WINAPI ExecuteValCompFileRight(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 1)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareRightOrInactive = TRUE;
     return "";
@@ -1329,7 +1329,7 @@ const char* WINAPI ExecuteValCompDirLeft(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 3)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareLeftOrActive = TRUE;
     return "";
@@ -1344,7 +1344,7 @@ const char* WINAPI ExecuteValCompDirRight(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 3)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareRightOrInactive = TRUE;
     return "";
@@ -1359,7 +1359,7 @@ const char* WINAPI ExecuteValCompLeft(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 6)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareLeftOrActive = TRUE;
     return "";
@@ -1374,7 +1374,7 @@ const char* WINAPI ExecuteValCompRight(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 6)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareRightOrInactive = TRUE;
     return "";
@@ -1389,7 +1389,7 @@ const char* WINAPI ExecuteValCompFileActive(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 2)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareLeftOrActive = TRUE;
     return "";
@@ -1404,7 +1404,7 @@ const char* WINAPI ExecuteValCompFileInact(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 2)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareRightOrInactive = TRUE;
     return "";
@@ -1419,7 +1419,7 @@ const char* WINAPI ExecuteValCompDirActive(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 4)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareLeftOrActive = TRUE;
     return "";
@@ -1434,7 +1434,7 @@ const char* WINAPI ExecuteValCompDirInact(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 4)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareRightOrInactive = TRUE;
     return "";
@@ -1449,7 +1449,7 @@ const char* WINAPI ExecuteValCompActive(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 7)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareLeftOrActive = TRUE;
     return "";
@@ -1464,7 +1464,7 @@ const char* WINAPI ExecuteValCompInact(HWND msgParent, void* param)
     else
     {
         if (data->UsedCompareType != 7)
-            data->UsedCompareType = 5 /* kolize vice typu */;
+            data->UsedCompareType = 5 /* collision of multiple types */;
     }
     data->UsedCompareRightOrInactive = TRUE;
     return "";
@@ -1486,43 +1486,43 @@ const char* WINAPI ExecuteValListOfSelFullNames(HWND msgParent, void* param)
     return "";
 }
 
-const char* WINAPI ExecuteExpFullPathInact(HWND msgParent, void* param) // plna cesta "c:\\long path\\"
+const char* WINAPI ExecuteExpFullPathInact(HWND msgParent, void* param) // full path "c:\\long path\\"
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     return data->UserMenuAdvancedData->FullPathInactive;
 }
 
-const char* WINAPI ExecuteExpFullPathLeft(HWND msgParent, void* param) // plna cesta "c:\\long path\\"
+const char* WINAPI ExecuteExpFullPathLeft(HWND msgParent, void* param) // full path "c:\\long path\\"
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     return data->UserMenuAdvancedData->FullPathLeft;
 }
 
-const char* WINAPI ExecuteExpFullPathRight(HWND msgParent, void* param) // plna cesta "c:\\long path\\"
+const char* WINAPI ExecuteExpFullPathRight(HWND msgParent, void* param) // full path "c:\\long path\\"
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     return data->UserMenuAdvancedData->FullPathRight;
 }
 
-const char* WINAPI ExecuteExpCompareName1(HWND msgParent, void* param) // plne jmeno k porovnavanemu souboru/adresari
+const char* WINAPI ExecuteExpCompareName1(HWND msgParent, void* param) // full name of the file/directory to compare
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     return data->UserMenuAdvancedData->CompareName1;
 }
 
-const char* WINAPI ExecuteExpCompareName2(HWND msgParent, void* param) // plne jmeno k porovnavanemu souboru/adresari
+const char* WINAPI ExecuteExpCompareName2(HWND msgParent, void* param) // full name of the file/directory to compare
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     return data->UserMenuAdvancedData->CompareName2;
 }
 
-const char* WINAPI ExecuteExpListOfSelNames(HWND msgParent, void* param) // seznam jmen (bez cest) oddelenych mezerami
+const char* WINAPI ExecuteExpListOfSelNames(HWND msgParent, void* param) // list of names (without paths) separated by spaces
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     return data->UserMenuAdvancedData->ListOfSelNames;
 }
 
-const char* WINAPI ExecuteExpListOfSelFullNames(HWND msgParent, void* param) // seznam jmen (bez cest) oddelenych mezerami
+const char* WINAPI ExecuteExpListOfSelFullNames(HWND msgParent, void* param) // list of names (without paths) separated by spaces
 {
     CExecuteExpData* data = (CExecuteExpData*)param;
     return data->UserMenuAdvancedData->ListOfSelFullNames;
@@ -1568,7 +1568,7 @@ CSalamanderVarStrEntry UserMenuArgsExpArray[] =
         {EXECUTE_LISTOFSELFULLNAMES, ExecuteExpListOfSelFullNames},
         {NULL, NULL}};
 
-// jen pro zjisteni, jake promenne se pouzivaji, aby se dalo zkontrolovat, jestli jsou to pripustne kombinace
+// only to detect which variables are used so we can check if the combinations are allowed
 CSalamanderVarStrEntry UserMenuArgsValidationArray[] =
     {
         {EXECUTE_DRIVE, ExecuteValDummy},
@@ -1645,20 +1645,20 @@ CSalamanderVarStrEntry ArgumentsExpArray[] =
 CSalamanderVarStrEntry InitDirExpArray[] =
     {
         {EXECUTE_DRIVE, ExecuteExpDrive},
-        {EXECUTE_PATH, ExecuteExpPath2},         // j.r. nemam tuseni, proc se zde volaji specialni verze promennych bez
-        {EXECUTE_FULLPATH, ExecuteExpFullPath2}, // zpetnych lomitek na konci; kazdopadne jsem nyni pridal volani funkce
-        {EXECUTE_WINDIR, ExecuteExpWinDir2},     // RemoveDoubleBackslahesFromPath, takze bychom asi mohli prejit na verze
-        {EXECUTE_SYSDIR, ExecuteExpSysDir2},     // s lomitkama na konci -- pouze bychom do ExpandInitDir() dopsali oriznuti
-        {EXECUTE_SALDIR, ExecuteExpSalDir2},     // posledniho zpetneho lomitka (pokud nejde o root)
+        {EXECUTE_PATH, ExecuteExpPath2},         // j.r. I have no idea why the special versions of variables without
+        {EXECUTE_FULLPATH, ExecuteExpFullPath2}, // trailing backslashes are used; anyway, I added a call to
+        {EXECUTE_WINDIR, ExecuteExpWinDir2},     // RemoveDoubleBackslahesFromPath so we could probably switch to the
+        {EXECUTE_SYSDIR, ExecuteExpSysDir2},     // versions with backslashes at the end -- we would just trim the
+        {EXECUTE_SALDIR, ExecuteExpSalDir2},     // last backslash in ExpandInitDir() (unless it's the root)
         {NULL, NULL}};
 
-// !!! nepouzivat primo InfoLineExpArray, pouzivat GetInfoLineExpArray()
+// !!! do not use InfoLineExpArray directly; use GetInfoLineExpArray()
 CSalamanderVarStrEntry InfoLineExpArray[] =
     {
         {FILEDATA_FILENAME, FileDataExpFileName},
         {FILEDATA_FILESIZE, FileDataExpFileSize},
-        {FILEDATA_FILEDATE, NULL /* viz nize */},
-        {FILEDATA_FILETIME, NULL /* viz nize */},
+        {FILEDATA_FILEDATE, NULL /* see below */},
+        {FILEDATA_FILETIME, NULL /* see below */},
         {FILEDATA_FILEATTR, FileDataExpFileAttr},
         {FILEDATA_FILEDOSNAME, FileDataExpFileDOSName},
         {NULL, NULL}};
@@ -1720,10 +1720,10 @@ BOOL ValidateUserMenuArguments(HWND msgParent, const char* varText, int& errorPo
     CALL_STACK_MESSAGE2("ValidateUserMenuArguments(, %s, ,)", strlen(varText) > 300 ? "(too long)" : varText);
     CUserMenuValidationData dummyUserMenuValidationData;
     if (userMenuValidationData == NULL)
-        userMenuValidationData = &dummyUserMenuValidationData; // volajiciho nezajimaji validacni data
+        userMenuValidationData = &dummyUserMenuValidationData; // the caller does not care about validation data
     memset(userMenuValidationData, 0, sizeof(CUserMenuValidationData));
     if (!ValidateVarString(msgParent, varText, errorPos1, errorPos2, UserMenuArgsExpArray))
-        return FALSE; // pokud jde o syntaktickou chybu, nahlasime ji zde (vcetne pozice pro editaci)
+        return FALSE; // if this is a syntax error, report it here (including the edit position)
     errorPos1 = errorPos2 = 0;
     char dummyBuffer[USRMNUARGS_MAXLEN];
     ExpandVarString(msgParent, varText, dummyBuffer, USRMNUARGS_MAXLEN, UserMenuArgsValidationArray,
@@ -1731,13 +1731,13 @@ BOOL ValidateUserMenuArguments(HWND msgParent, const char* varText, int& errorPo
 
     if (userMenuValidationData->MustHandleItemsAsGroup &&
         userMenuValidationData->MustHandleItemsOneByOne)
-    { // nekompatibilni prace s oznacenim
+    { // incompatible work with selection
         SalMessageBox(msgParent, LoadStr(IDS_INCOMPATIBLEARGS),
                       LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     if (userMenuValidationData->UsedCompareType == 5)
-    { // kolize vice typu Compare parametru
+    { // collision of multiple Compare parameter types
         SalMessageBox(msgParent, LoadStr(IDS_COMPAREARGSCOLISION),
                       LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
@@ -1745,7 +1745,7 @@ BOOL ValidateUserMenuArguments(HWND msgParent, const char* varText, int& errorPo
     if (userMenuValidationData->UsedCompareType != 0 &&
         (!userMenuValidationData->UsedCompareLeftOrActive ||
          !userMenuValidationData->UsedCompareRightOrInactive))
-    { // nepouzivaji se oba Compare parametry -> nesmysl
+    { // both Compare parameters are not used together -> nonsense
         SalMessageBox(msgParent, LoadStr(IDS_COMPARENEEDSBOTHARGS),
                       LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
@@ -1776,7 +1776,7 @@ BOOL ValidateCommandFile(HWND msgParent, const char* varText, int& errorPos1, in
 
     if (!ValidatePathIsNotEmpty(msgParent, varText))
     {
-        // edit line je prazdna nebo plna mezer -- vyberem vse
+        // edit line is empty or with only spaces -- select all
         errorPos1 = 0;
         errorPos2 = -1;
         return FALSE;
@@ -1791,7 +1791,7 @@ BOOL ValidateHotPath(HWND msgParent, const char* varText, int& errorPos1, int& e
 
     if (!ValidatePathIsNotEmpty(msgParent, varText))
     {
-        // edit line je prazdna nebo plna mezer -- vyberem vse
+        // edit line is empty or with only spaces -- select all
         errorPos1 = 0;
         errorPos2 = -1;
         return FALSE;
@@ -1833,7 +1833,7 @@ BOOL ValidateInfoLineItems(HWND msgParent, const char* varText, int& errorPos1, 
 {
     CALL_STACK_MESSAGE2("ValidateInfoLineItems(, %s, ,)", varText);
     return ValidateVarString(msgParent, varText, errorPos1, errorPos2,
-                             GetInfoLineExpArray(TRUE /* pro validaci neni rozdil mezi TRUE a FALSE */));
+                             GetInfoLineExpArray(TRUE /* for validation there is no difference between TRUE and FALSE */));
 }
 
 BOOL ExpandInfoLineItems(HWND msgParent, const char* varText, CPluginDataInterfaceEncapsulation* pluginData,
@@ -1884,7 +1884,7 @@ BOOL RemoveDoubleBackslahesFromPath(char* text)
     int len = (int)strlen(text);
     if (len < 3)
         return TRUE;
-    char* s = text + 2; // UNC cesty maji na zacatku "\\"
+    char* s = text + 2; // UNC paths start with "\\"
     char* d = s;
     while (*s != 0)
     {
@@ -1909,10 +1909,10 @@ BOOL ExpandInitDir(HWND msgParent, const char* name, const char* dosName, const 
     if (ExpandVarString(msgParent, varText, buffer, bufferLen, InitDirExpArray,
                         &data, ignoreEnvVarNotFoundOrTooLong))
     {
-        // promenne $() z Initial Directory sice normalne nejsou zakonceny zpetnym lomitkem,
-        // ale pokud vedou do rootu, pak jsou; potom se cesta "$(SalDir)\Editor" prevede na
-        // "C:\\Editor", takze dostaneme dve zpetna lomitka
-        RemoveDoubleBackslahesFromPath(buffer); // setreseme dvojita zpetna lomitka na jedno
+        // variables $() from Initial Directory normally do not end with a backslash,
+        // but if they point to the root they do; then path "$(SalDir)\\Editor" becomes
+        // "C:\\Editor" and we get two backslashes
+        RemoveDoubleBackslahesFromPath(buffer); // collapse double backslashes into one
         return TRUE;
     }
     else
@@ -1931,9 +1931,9 @@ BOOL ExpandCommand(HWND msgParent, const char* varText, char* buffer, int buffer
     if (ExpandVarString(msgParent, varText, buffer, bufferLen, CommandExpArray, &data,
                         ignoreEnvVarNotFoundOrTooLong))
     {
-        // promenne EXECUTE_WINDIR, EXECUTE_SYSDIR a EXECUTE_SALDIR jsou zakonceny zpetnym lomitkem
-        // uzivatel doplni vlastni zpetne lomitko, takze jsou ve vysledku v ceste dve
-        RemoveDoubleBackslahesFromPath(buffer); // setreseme dvojita zpetna lomitka na jedno
+        // the EXECUTE_WINDIR, EXECUTE_SYSDIR and EXECUTE_SALDIR variables end with a backslash
+        // the user adds another one, so the path contains two of them
+        RemoveDoubleBackslahesFromPath(buffer); // collapse double backslashes into one
         return TRUE;
     }
     else
@@ -1952,9 +1952,9 @@ BOOL ExpandHotPath(HWND msgParent, const char* varText, char* buffer, int buffer
     if (ExpandVarString(msgParent, varText, buffer, bufferLen, HotPathExpArray, &data,
                         ignoreEnvVarNotFoundOrTooLong))
     {
-        // promenne EXECUTE_WINDIR, EXECUTE_SYSDIR a EXECUTE_SALDIR jsou zakonceny zpetnym lomitkem
-        // uzivatel doplni vlastni zpetne lomitko, takze jsou ve vysledku v ceste dve
-        RemoveDoubleBackslahesFromPath(buffer); // setreseme dvojita zpetna lomitka na jedno
+        // the EXECUTE_WINDIR, EXECUTE_SYSDIR and EXECUTE_SALDIR variables end with a backslash
+        // the user adds another one, so the path contains two of them
+        RemoveDoubleBackslahesFromPath(buffer); // collapse double backslashes into one
         return TRUE;
     }
     else
@@ -2073,7 +2073,7 @@ TrackExecuteMenu(HWND hParent, int buttonResID, int editlineResID,
         }
         if ((item->Flags & EIF_DONT_FOCUS) == 0)
         {
-            // v pripade comba je treba napred nastavit focus
+            // in the case of a combo box we need to set the focus first
             DWORD start;
             DWORD end;
             if (comboEdit != NULL)
@@ -2099,7 +2099,7 @@ TrackExecuteMenu(HWND hParent, int buttonResID, int editlineResID,
                 SendMessage(hEdit, EM_SETSEL, end, end);
             if (comboEdit == NULL)
                 SetFocus(hEdit);
-            // default by zustal u nas -- vratime ho dialogu
+            // the default would remain with us -- give it back to the dialog
             SendMessage(hButton, BM_SETSTYLE, BS_PUSHBUTTON, TRUE);
             HWND hDialog = hParent;
             DWORD dlgStyle;
@@ -2134,7 +2134,7 @@ BOOL BrowseCommand(HWND hParent, int editlineResID, int filterResID)
     ofn.hwndOwner = hParent;
     char* s = LoadStr(filterResID);
     ofn.lpstrFilter = s;
-    while (*s != 0) // vytvoreni double-null terminated listu
+    while (*s != 0) // create a double-null terminated list
     {
         if (*s == '|')
             *s = 0;
