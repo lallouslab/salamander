@@ -88,6 +88,7 @@ void AddAnsiHistoryFallback(HWND legacyCombo, HWND unicodeCombo)
 }
 } // namespace
 
+
 CUnicodeNameInputController::CUnicodeNameInputController()
 {
     HParent = NULL;

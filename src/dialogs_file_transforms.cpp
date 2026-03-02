@@ -608,6 +608,7 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
 
+
     case WM_DESTROY:
     {
         // Clear any stale HWND references before the dialog object is reused.
