@@ -69,8 +69,6 @@ inline bool TryGenerateUniqueCopyName(const std::wstring& directoryWithBackslash
 {
     if (directoryWithBackslash.empty() || originalName.empty() || copyToken.empty())
         return false;
-    if (directoryWithBackslash.back() != L'\\' && directoryWithBackslash.back() != L'/')
-        return false;
 
     for (int copyIndex = 1; copyIndex < 10000; copyIndex++)
     {

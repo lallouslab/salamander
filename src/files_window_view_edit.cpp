@@ -92,7 +92,6 @@ BOOL MakeValidFileNameW(wchar_t* path)
     return ch;
 }
 
-
 void RepairLossyQuickRenameHistoryForCurrentName(wchar_t* historyW[], int historyCount,
                                                  const char* currentAnsiName, const wchar_t* currentWideName)
 {

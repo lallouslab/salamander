@@ -88,12 +88,12 @@ void AddAnsiHistoryFallback(HWND legacyCombo, HWND unicodeCombo)
 }
 } // namespace
 
-
 CUnicodeNameInputController::CUnicodeNameInputController()
 {
     HParent = NULL;
     HLegacyCombo = NULL;
     HUnicodeCombo = NULL;
+    HUnicodeEdit = NULL;
     HOwnedFont = NULL;
     LegacyID = 0;
     ControlID = 0;
@@ -206,17 +206,50 @@ BOOL CUnicodeNameInputController::EnableForCombo(HWND parent, int controlID, con
     if (wideItems == 0)
         AddAnsiHistoryFallback(hCombo, HUnicodeCombo);
 
+    COMBOBOXINFO cbi = {};
+    cbi.cbSize = sizeof(cbi);
+    if (GetComboBoxInfo(HUnicodeCombo, &cbi) && cbi.hwndItem != NULL)
+    {
+        RECT editRect = {};
+        GetWindowRect(cbi.hwndItem, &editRect);
+        MapWindowPoints(NULL, parent, (LPPOINT)&editRect, 2);
+
+        HUnicodeEdit = CreateWindowExW(
+            0, L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+            editRect.left, editRect.top,
+            editRect.right - editRect.left, editRect.bottom - editRect.top,
+            parent, NULL, hInstance, NULL);
+
+        if (HUnicodeEdit != NULL)
+        {
+            if (comboFont != NULL)
+                SendMessage(HUnicodeEdit, WM_SETFONT, (WPARAM)comboFont, TRUE);
+            if (maxChars > 0)
+                SendMessage(HUnicodeEdit, EM_LIMITTEXT, (WPARAM)(maxChars - 1), 0);
+            ShowWindow(cbi.hwndItem, SW_HIDE);
+        }
+    }
+
     SetText(initialText);
     if (selectionEnd < 0)
         selectionEnd = (int)initialText.length();
-    PostMessage(HUnicodeCombo, CB_SETEDITSEL, 0, MAKELPARAM(0, selectionEnd));
-    SetFocus(HUnicodeCombo);
+    if (HUnicodeEdit != NULL)
+        PostMessage(HUnicodeEdit, EM_SETSEL, 0, selectionEnd);
+    else
+        PostMessage(HUnicodeCombo, CB_SETEDITSEL, 0, MAKELPARAM(0, selectionEnd));
+    SetFocus(HUnicodeEdit != NULL ? HUnicodeEdit : HUnicodeCombo);
 
     return TRUE;
 }
 
 void CUnicodeNameInputController::Reset()
 {
+    if (HUnicodeEdit != NULL)
+    {
+        DestroyWindow(HUnicodeEdit);
+        HUnicodeEdit = NULL;
+    }
     if (HUnicodeCombo != NULL)
     {
         DestroyWindow(HUnicodeCombo);
@@ -240,15 +273,16 @@ void CUnicodeNameInputController::Reset()
 
 std::wstring CUnicodeNameInputController::GetText() const
 {
-    if (HUnicodeCombo == NULL)
+    HWND hText = HUnicodeEdit != NULL ? HUnicodeEdit : HUnicodeCombo;
+    if (hText == NULL)
         return std::wstring();
 
-    int len = GetWindowTextLengthW(HUnicodeCombo);
+    int len = GetWindowTextLengthW(hText);
     if (len <= 0)
         return std::wstring();
 
     std::vector<wchar_t> buffer(len + 1);
-    GetWindowTextW(HUnicodeCombo, buffer.data(), len + 1);
+    GetWindowTextW(hText, buffer.data(), len + 1);
     return std::wstring(buffer.data());
 }
 
@@ -256,6 +290,8 @@ void CUnicodeNameInputController::SetText(const std::wstring& text) const
 {
     if (HUnicodeCombo != NULL)
         SetWindowTextW(HUnicodeCombo, text.c_str());
+    if (HUnicodeEdit != NULL)
+        SetWindowTextW(HUnicodeEdit, text.c_str());
 }
 
 void CUnicodeNameInputController::SyncSelectionToEdit() const
@@ -274,6 +310,4 @@ void CUnicodeNameInputController::SyncSelectionToEdit() const
     std::vector<wchar_t> text((size_t)len + 1);
     SendMessageW(HUnicodeCombo, CB_GETLBTEXT, (WPARAM)sel, (LPARAM)text.data());
     SetText(text.data());
-    PostMessage(HUnicodeCombo, CB_SETEDITSEL, 0, MAKELPARAM(len, len));
-    SetFocus(HUnicodeCombo);
 }
