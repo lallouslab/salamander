@@ -28,7 +28,6 @@
 #include "common/unicode/helpers.h"
 #include "common/unicode/NameFallbackRecovery.h"
 #include "common/unicode/PathIdentityPolicy.h"
-#include "common/unicode/RenameRetryPolicy.h"
 #include <vector>
 
 namespace
