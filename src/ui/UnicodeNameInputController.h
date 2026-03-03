@@ -27,7 +27,6 @@ private:
     HWND HParent;
     HWND HLegacyCombo;
     HWND HUnicodeCombo;
-    HWND HUnicodeEdit;
     HFONT HOwnedFont;
     LONG_PTR LegacyID;
     int ControlID;
