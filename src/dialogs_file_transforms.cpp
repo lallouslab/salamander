@@ -623,7 +623,7 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             HWND hCombo = (HWND)lParam;
             BOOL isDropdownOpen = hCombo != NULL ? (BOOL)SendMessage(hCombo, CB_GETDROPPEDSTATE, 0, 0) : FALSE;
             if (sally::unicode::ShouldSyncUnicodeComboSelection(HIWORD(wParam), isDropdownOpen))
-                PostMessage(HWindow, WM_APP_SYNC_UNICODE_COMBO_SELECTION, (WPARAM)UnicodeInput.GetControlHandle(), 0);
+                UnicodeInput.SyncSelectionToEdit();
         }
         // Fall through to base class for all WM_COMMAND messages (IDOK, IDCANCEL, etc.)
     }
