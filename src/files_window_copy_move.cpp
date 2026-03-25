@@ -711,11 +711,11 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                     BOOL handledWideCopyName = FALSE;
                     if (wideNameOnly != NULL && !(attrs & FILE_ATTRIBUTE_DIRECTORY))
                     {
-                        std::wstring targetPathW = AnsiToWide(targetPath);
                         std::wstring copyTokenW = AnsiToWide(LoadStr(IDS_NEWNAME_COPY));
-                        if (!targetPathW.empty() && !copyTokenW.empty())
+                        if (!targetDirWithBackslashW.empty() && !copyTokenW.empty())
                         {
-                            if (sally::unicode::TryGenerateUniqueCopyName(targetPathW, wideNameOnly,
+                            // The helper expects the destination directory with trailing backslash.
+                            if (sally::unicode::TryGenerateUniqueCopyName(targetDirWithBackslashW, wideNameOnly,
                                                                           copyTokenW, usedNamesW, mapNameWide))
                             {
                                 if (WideCharToMultiByte(CP_ACP, 0, mapNameWide.c_str(), -1,
