@@ -426,8 +426,6 @@ static LRESULT CALLBACK UnicodeEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPa
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-static const UINT WM_APP_SYNC_UNICODE_COMBO_SELECTION = WM_APP + 42;
-
 CCopyMoveDialog::CCopyMoveDialog(HWND parent, char* path, int pathBufSize, char* title,
                                  CTruncatedString* subject, DWORD helpID,
                                  char* history[], int historyCount, BOOL directoryHelper,
@@ -601,14 +599,6 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
 
-    case WM_APP_SYNC_UNICODE_COMBO_SELECTION:
-    {
-        if (UnicodeInput.IsEnabled() && (HWND)wParam == UnicodeInput.GetControlHandle())
-            UnicodeInput.SyncSelectionToEdit();
-        return 0;
-    }
-
-
     case WM_DESTROY:
     {
         // Clear any stale HWND references before the dialog object is reused.
@@ -621,9 +611,12 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (LOWORD(wParam) == IDE_PATH && UnicodeInput.IsEnabled())
         {
             HWND hCombo = (HWND)lParam;
-            BOOL isDropdownOpen = hCombo != NULL ? (BOOL)SendMessage(hCombo, CB_GETDROPPEDSTATE, 0, 0) : FALSE;
-            if (sally::unicode::ShouldSyncUnicodeComboSelection(HIWORD(wParam), isDropdownOpen))
-                UnicodeInput.SyncSelectionToEdit();
+            if (hCombo == UnicodeInput.GetControlHandle())
+            {
+                BOOL isDropdownOpen = (BOOL)SendMessage(hCombo, CB_GETDROPPEDSTATE, 0, 0);
+                if (sally::unicode::ShouldSyncUnicodeComboSelection(HIWORD(wParam), isDropdownOpen))
+                    UnicodeInput.SyncSelectionToEdit();
+            }
         }
         // Fall through to base class for all WM_COMMAND messages (IDOK, IDCANCEL, etc.)
     }

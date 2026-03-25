@@ -257,22 +257,41 @@ void CUnicodeNameInputController::SetText(const std::wstring& text) const
         SetWindowTextW(HUnicodeCombo, text.c_str());
 }
 
-void CUnicodeNameInputController::SyncSelectionToEdit() const
+bool CUnicodeNameInputController::TryGetSelectedItemText(std::wstring& text) const
 {
     if (HUnicodeCombo == NULL)
-        return;
+        return false;
 
     int sel = (int)SendMessage(HUnicodeCombo, CB_GETCURSEL, 0, 0);
     if (sel == CB_ERR)
-        return;
+        return false;
 
     int len = (int)SendMessageW(HUnicodeCombo, CB_GETLBTEXTLEN, (WPARAM)sel, 0);
     if (len < 0)
+        return false;
+
+    std::vector<wchar_t> buffer((size_t)len + 1);
+    if (SendMessageW(HUnicodeCombo, CB_GETLBTEXT, (WPARAM)sel, (LPARAM)buffer.data()) == CB_ERR)
+        return false;
+
+    text.assign(buffer.data());
+    return true;
+}
+
+void CUnicodeNameInputController::SyncSelectionToEdit() const
+{
+    std::wstring text;
+    if (!TryGetSelectedItemText(text))
         return;
 
-    std::vector<wchar_t> text((size_t)len + 1);
-    SendMessageW(HUnicodeCombo, CB_GETLBTEXT, (WPARAM)sel, (LPARAM)text.data());
-    SetText(text.data());
-    PostMessage(HUnicodeCombo, CB_SETEDITSEL, 0, MAKELPARAM(len, len));
-    SetFocus(HUnicodeCombo);
+    SetText(text);
+
+    int len = (int)text.length();
+    SendMessage(HUnicodeCombo, CB_SETEDITSEL, 0, MAKELPARAM(len, len));
+
+    HWND hEdit = GetComboEditControl(HUnicodeCombo);
+    if (hEdit != NULL)
+        SetFocus(hEdit);
+    else
+        SetFocus(HUnicodeCombo);
 }

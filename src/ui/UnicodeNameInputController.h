@@ -22,6 +22,7 @@ public:
     std::wstring GetText() const;
     void SetText(const std::wstring& text) const;
     void SyncSelectionToEdit() const;
+    bool TryGetSelectedItemText(std::wstring& text) const;
 
 private:
     HWND HParent;
