@@ -2490,7 +2490,7 @@ void CFilesWindow::RenameFileInternalW(CFileData* f, const std::wstring& newName
     // Validate the new filename - check for invalid characters
     for (wchar_t c : newName)
     {
-        if (c == L'\\' || c == L'/' || c == L':' || c < 32 ||
+        if (c == L'?' || c == L'*' || c == L'\\' || c == L'/' || c == L':' || c < 32 ||
             c == L'<' || c == L'>' || c == L'|' || c == L'"')
         {
             gPrompter->ShowError(LoadStrW(IDS_ERRORRENAMINGFILE), GetErrorTextW(ERROR_INVALID_NAME));
@@ -2648,8 +2648,15 @@ void CFilesWindow::RenameFile(int specialIndex)
         BeginSuspendMode(); // snooper takes a break
 
         BOOL mayChange = FALSE;
+        int renameAttempt = 0;
         while (1)
         {
+            renameAttempt++;
+            TRACE_I("RenameFile: attempt=" << renameAttempt
+                    << " f->Name=" << (f->Name ? f->Name : "(null)")
+                    << " f->NameW=" << (f->NameW ? "non-null" : "NULL")
+                    << " f->NameW[0]=" << (f->NameW ? (int)f->NameW[0] : -1)
+                    << " dlg.PathW.len=" << dlg.GetUnicodeResult().length());
             // if no item is selected, select the one under focus and store its name
             CPathBuffer temporarySelected; // Heap-allocated for long path support
             SelectFocusedItemAndGetName(temporarySelected, temporarySelected.Size());
