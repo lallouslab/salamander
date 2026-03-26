@@ -466,6 +466,9 @@ void CCopyMoveDialog::SetUnicodePath(const std::wstring& pathW)
     UseUnicodeInput = TRUE;
     PathW = pathW;
     ResultW.clear();
+#ifndef _UNICODE
+    UnicodeWnd = TRUE; // Use DialogBoxParamW for Unicode text integrity
+#endif
 }
 
 void CCopyMoveDialog::Transfer(CTransferInfo& ti)
@@ -490,6 +493,8 @@ void CCopyMoveDialog::Transfer(CTransferInfo& ti)
                 {
                     ResultW = UnicodeInput.GetText();
                     PathW = ResultW; // preserve latest value if this dialog instance is retried
+                    TRACE_I("Transfer OUT: UnicodeInput enabled, ResultW.len=" << ResultW.length()
+                            << " hasNonAscii=" << (ResultW.find_first_not_of(L" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~") != std::wstring::npos ? 1 : 0));
                     // Also get ANSI version for history (lossy but needed for ANSI history)
                     if (!ResultW.empty())
                         WideCharToMultiByte(CP_ACP, 0, ResultW.c_str(), -1, Path, PathBufSize, "?", NULL);
@@ -562,14 +567,25 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         HWND hCombo = GetDlgItem(HWindow, IDE_PATH);
 
         // In Unicode mode replace ANSI combo with a Unicode combo (including dropdown list)
-        TRACE_I("CCopyMoveDialog: UseUnicodeInput=" << UseUnicodeInput << " hCombo=" << (void*)hCombo);
+        TRACE_I("CCopyMoveDialog: UseUnicodeInput=" << UseUnicodeInput << " hCombo=" << (void*)hCombo
+                << " PathW.len=" << PathW.length()
+                << " PathW.hasNonAscii=" << (PathW.find_first_not_of(L" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~") != std::wstring::npos ? 1 : 0)
+                << " Path[0..20]=" << std::string(Path, (std::min)((size_t)20, strlen(Path))));
         if (UseUnicodeInput && hCombo != NULL)
         {
             if (UnicodeInput.EnableForCombo(HWindow, IDE_PATH, PathW, HistoryW, HistoryWCount, PathBufSize, SelectionEnd))
             {
-                InstallWordBreakProc(UnicodeInput.GetControlHandle());
-                CreateKeyForwarder(HWindow, IDE_PATH);
-                TRACE_I("CCopyMoveDialog: Unicode combo created");
+                // NOTE: Do NOT call InstallWordBreakProc or CreateKeyForwarder on the
+                // Unicode combo. Both use SetWindowLongPtr(GWLP_WNDPROC) with ANSI subclass
+                // procs which convert the edit control from Unicode to ANSI, causing
+                // GetWindowTextW to return lossy ANSI text instead of Unicode.
+                // The ANSI combo (hidden) already has both installed (lines 551, 553).
+                // See issue #40.
+                TRACE_I("CCopyMoveDialog: Unicode combo created, GetText().len=" << UnicodeInput.GetText().length());
+            }
+            else
+            {
+                TRACE_E("CCopyMoveDialog: EnableForCombo FAILED!");
             }
         }
 
