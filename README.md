@@ -33,6 +33,11 @@ Sally is an independent fork of [Open Salamander](https://github.com/OpenSalaman
 - WebView2 markdown viewer replaces the legacy IE WebBrowser control
 - Plugin naming standardized: `ieviewer` renamed to `webviewer` to match its WebView2 implementation
 
+**Localization**
+- 10 languages included: Chinese (Simplified), Czech, Dutch, French, German, Hungarian, Romanian, Russian, Slovak, Spanish
+- Language packs ship on all platforms (x64, x86, ARM64)
+- Translator workspace artifact for community translators
+
 **Platform & Compatibility**
 - ARM64 native build for Windows on ARM
 - Runs under Wine on Linux (`imageres.dll` dependency made optional)
@@ -40,7 +45,7 @@ Sally is an independent fork of [Open Salamander](https://github.com/OpenSalaman
 
 ## Downloads
 
-Pre-built binaries are available on the [Releases](https://github.com/0xeb/sally/releases) page.
+Pre-built binaries for x64, x86, and ARM64 are available on the [Releases](https://github.com/0xeb/sally/releases) page. Each release includes language packs for 10 languages and a translator workspace for community contributors.
 
 ## Building
 
