@@ -1,3 +1,6 @@
+NOTE: For the current Sally contributor workflow, see doc\LOCALIZATION.md.
+This file is preserved as a historical Open Salamander-era note about translation cadence.
+
 In the subdirectories salamand\translations, there are current translations of the latest version
 published on the forum. This is a version that translators can work on, and it is available for
 download at the Translators section on the forum.

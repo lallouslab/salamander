@@ -28,7 +28,7 @@ COMMENT,"Version française"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Parcourir…"
-40014,1,"Répertoire de Salamander"
+40014,1,"Répertoire de Sally"
 40015,1,"Variable d'environnement"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Version française"
 [STRINGTABLE 2]
 144,1,"Interrompre le script"
 145,1,"Interrompre l'exécution du script\tCtrl+Break"
-146,1,"La fenêtre Open Salamander est bloquée par le module Automatisation. Veuillez terminer le script en, cours d'exécution."
+146,1,"La fenêtre Sally est bloquée par le module Automatisation. Veuillez terminer le script en, cours d'exécution."
 147,1,"Echec du lancement du moteur de scripting."
 
 [STRINGTABLE 3]

@@ -4,6 +4,8 @@
 
 #include "precomp.h"
 
+#include "translator.h"
+
 //*****************************************************************************
 //
 // CStrData
@@ -49,7 +51,7 @@ BOOL CStrData::LoadStrings(WORD group, const wchar_t* original, const wchar_t* t
         {
             if (!data->MUIMode)
             {
-                MessageBox(GetMsgParent(), "Original and translated file has different string ids.",
+                TranslatorMessageBox(GetMsgParent(), "Original and translated file has different string ids.",
                            ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
                 return FALSE;
             }

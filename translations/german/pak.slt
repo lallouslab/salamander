@@ -64,7 +64,7 @@ COMMENT,"Deutsche Version"
 
 [STRINGTABLE 3]
 1024,1,"Kann die Datei nicht lesen: "
-1025,1,"Kann das Plugin nicht mit dem Open Salamander verbinden."
+1025,1,"Kann das Plugin nicht mit dem Sally verbinden."
 1026,1,"Optimiere, bitte warten..."
 1027,1,"Optimiere PAK-Archiv - %s"
 1028,1,"Das Löschen der Dateien wurde nicht erfolgreich beendet. Sie müssen die PAK-Optimierung u.U. nochmals vom PAK-Pluginmenü starten, um überflüssigen Plattenplatz frei zu machen."

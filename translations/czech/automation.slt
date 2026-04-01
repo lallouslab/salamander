@@ -28,7 +28,7 @@ COMMENT,"Česká verze"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Procházet…"
-40014,1,"Adresář Salamander"
+40014,1,"Adresář Sally"
 40015,1,"Proměnná prostředí"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Česká verze"
 [STRINGTABLE 2]
 144,1,"Přerušit skript"
 145,1,"Přerušit spuštěný skript\tCtrl+Break"
-146,1,"Okno Open Salamanderu je uzamčené pluginem automatizace. Prosím dokončete spuštěný skript."
+146,1,"Okno Sally je uzamčené pluginem automatizace. Prosím dokončete spuštěný skript."
 147,1,"Nelze inicializovat skriptovací stroj."
 
 [STRINGTABLE 3]

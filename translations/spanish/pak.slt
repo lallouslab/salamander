@@ -64,7 +64,7 @@ COMMENT,"Versión en español"
 
 [STRINGTABLE 3]
 1024,1,"Imposible leer desde fichero: "
-1025,1,"Imposible conectar plugin con Open Salamander."
+1025,1,"Imposible conectar plugin con Sally."
 1026,1,"optimizando, espere..."
 1027,1,"Optimizando archivo PAK - %s"
 1028,1,"El borrado de ficheros no terminó bien. Puede que tenga que optimizar desde el menú del plugin PAK para evitar malgastar especio en el disco."

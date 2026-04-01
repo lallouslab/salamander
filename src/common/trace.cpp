@@ -30,8 +30,51 @@ __declspec(allocate(".i_trc$a")) const _PVFV i_trace = (_PVFV)1; // at the begin
 #pragma section(".i_trc$z", read)
 __declspec(allocate(".i_trc$z")) const _PVFV i_trace_end = (_PVFV)1; // and at the end of section .i_trc we place variable i_trace_end
 
+static TCHAR __TraceFileMappingName[64];
+static TCHAR __TraceOpenConnectionMutexName[64];
+static TCHAR __TraceConnectDataReadyEventName[64];
+static TCHAR __TraceConnectDataAcceptedEventName[64];
+
+static DWORD GetTraceNamespaceHash()
+{
+    WCHAR modulePath[MAX_PATH];
+    DWORD len = GetModuleFileNameW(NULL, modulePath, _countof(modulePath));
+    if (len == 0 || len >= _countof(modulePath))
+        return 0;
+
+    while (len > 0 && modulePath[len - 1] != L'\\' && modulePath[len - 1] != L'/')
+        len--;
+
+    DWORD hash = 2166136261U; // FNV-1a
+    for (DWORD i = 0; i < len; i++)
+    {
+        WCHAR ch = modulePath[i];
+        if (ch == L'/')
+            ch = L'\\';
+        if (ch >= L'A' && ch <= L'Z')
+            ch = ch - L'A' + L'a';
+        hash ^= ch & 0xff;
+        hash *= 16777619U;
+        hash ^= ch >> 8;
+        hash *= 16777619U;
+    }
+    return hash;
+}
+
+static void InitializeTraceObjectNames()
+{
+    DWORD namespaceHash = GetTraceNamespaceHash();
+
+    _stprintf_s(__TraceFileMappingName, _T("TraceServerMappingName.%08X"), namespaceHash);
+    _stprintf_s(__TraceOpenConnectionMutexName, _T("TraceServerOpenConnectionMutex.%08X"), namespaceHash);
+    _stprintf_s(__TraceConnectDataReadyEventName, _T("TraceServerConnectDataReadyEvent.%08X"), namespaceHash);
+    _stprintf_s(__TraceConnectDataAcceptedEventName, _T("TraceServerConnectDataAcceptedEvent.%08X"), namespaceHash);
+}
+
 void Initialize__Trace()
 {
+    InitializeTraceObjectNames();
+
     const _PVFV* x = &i_trace;
     for (++x; x < &i_trace_end; ++x)
         if (*x != NULL)
@@ -40,10 +83,10 @@ void Initialize__Trace()
 
 #pragma init_seg(".i_trc$m")
 
-const TCHAR* __FILE_MAPPING_NAME = _T("TraceServerMappingName");
-const TCHAR* __OPEN_CONNECTION_MUTEX = _T("TraceServerOpenConnectionMutex");
-const TCHAR* __CONNECT_DATA_READY_EVENT_NAME = _T("TraceServerConnectDataReadyEvent");
-const TCHAR* __CONNECT_DATA_ACCEPTED_EVENT_NAME = _T("TraceServerConnectDataAcceptedEvent");
+const TCHAR* __FILE_MAPPING_NAME = __TraceFileMappingName;
+const TCHAR* __OPEN_CONNECTION_MUTEX = __TraceOpenConnectionMutexName;
+const TCHAR* __CONNECT_DATA_READY_EVENT_NAME = __TraceConnectDataReadyEventName;
+const TCHAR* __CONNECT_DATA_ACCEPTED_EVENT_NAME = __TraceConnectDataAcceptedEventName;
 
 #endif // defined(__TRACESERVER) || defined(TRACE_ENABLE)
 

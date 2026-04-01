@@ -64,7 +64,7 @@ COMMENT,"Slovenská verzia"
 
 [STRINGTABLE 3]
 1024,1,"Nie je možné čítať zo súboru: "
-1025,1,"Nie je možné pripojiť plugin k Open Salamanderu."
+1025,1,"Nie je možné pripojiť plugin k Sally."
 1026,1,"optimalizácia, čakajte prosím..."
 1027,1,"Optimalizácia PAK archívu - %s"
 1028,1,"Odstránenie súborov bolo úspešne dokončené. Môže byť potrebné spustiť PAK optimalizáciu z ponuky PAK pluginu, aby nedošlo k plytvaniu miestom na disku."

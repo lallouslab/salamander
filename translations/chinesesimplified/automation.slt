@@ -28,7 +28,7 @@ COMMENT,"简体中文版"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"浏览…"
-40014,1,"Salamander 目录"
+40014,1,"Sally 目录"
 40015,1,"环境变量"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"简体中文版"
 [STRINGTABLE 2]
 144,1,"中止脚本"
 145,1,"中止正在运行的脚本\tCtrl+Break"
-146,1,"Open Salamander 窗口被自动化插件锁定。请完成正在运行的脚本。"
+146,1,"Sally 窗口被自动化插件锁定。请完成正在运行的脚本。"
 147,1,"初始化脚本引擎失败。"
 
 [STRINGTABLE 3]

@@ -28,7 +28,7 @@ COMMENT,"Magyar változat"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Tallóz…"
-40014,1,"Salamander mappa"
+40014,1,"Sally mappa"
 40015,1,"Környezeti változó"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Magyar változat"
 [STRINGTABLE 2]
 144,1,"Szkript megszakítása"
 145,1,"Szkript futásának megszakítása\tCtrl+Break"
-146,1,"Az Open Salamander ablakot lezárta az Automation plugin. Fejezze be a szkript futtatását."
+146,1,"Az Sally ablakot lezárta az Automation plugin. Fejezze be a szkript futtatását."
 147,1,"A parancsértelmező inicializálása sikertelen."
 
 [STRINGTABLE 3]

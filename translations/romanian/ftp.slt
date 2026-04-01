@@ -1536,7 +1536,7 @@ COMMENT,"Versiunea romana"
 10674,1,"Sir invalid cu luni in mod text (format: 12 luni separate cu spatii)."
 10680,1,"Conditia autodetect contine eroare.\n\nEroare: %s"
 10685,1,"Tip server necunoscut, nu pot analiza listarea...\r\n"
-10686,1,"Nu pot analiza listarea fisierelor si directoarelor de pe server. Numai tip text din listare va fi afisat in panou.\n\nVa rugam verificati paginile noastre web pentru o versiune mai noua a Open Salamander. Daca folositi ultima versiune, va rugam sa ne trimiteti listarea raw (daca nu e confidentiala; click drt in panou > Arata Listare Raw > Salveaza Ca) la email support@altap.cz. Va rugam ajutati-ne sa sustinem cat mai multe tipuri de server-e."
+10686,1,"Nu pot analiza listarea fisierelor si directoarelor de pe server. Numai tip text din listare va fi afisat in panou.\n\nVa rugam verificati paginile noastre web pentru o versiune mai noua a Sally. Daca folositi ultima versiune, va rugam sa ne trimiteti listarea raw (daca nu e confidentiala; click drt in panou > Arata Listare Raw > Salveaza Ca) la email support@altap.cz. Va rugam ajutati-ne sa sustinem cat mai multe tipuri de server-e."
 10687,1,"Nu pot analiza listarea text folosind tip server selectat...\r\n"
 
 [STRINGTABLE 42]
@@ -1974,7 +1974,7 @@ COMMENT,"Versiunea romana"
 11337,1,"Nu pot obtine marimea (in bytes) a unei parti copiate deja/mutate a fisierului tinta.\r\n"
 11338,1,"Nu pot relua (adauga) fisierul (eroare neasteptata).\r\n"
 11339,1,"Fisierul intreg a fost trimis dar server-ul nu a confirmat primirea sa.\r\nAm sa obtin marimea fisierului (in bytes) pentru a testa daca fisierula fost copiat/mutat cu succes.\r\n"
-11340,1,"Nu pot gasi sau incarca librariile OpenSSL necesare criptarii.\r\nFisierele necesare sunt ssleay32.dll si libeay32.dll.\r\nEle fac parte din instalarea Open Salamander."
+11340,1,"Nu pot gasi sau incarca librariile OpenSSL necesare criptarii.\r\nFisierele necesare sunt ssleay32.dll si libeay32.dll.\r\nEle fac parte din instalarea Sally."
 11342,1,"Nu pot aloca structura control OpenSSL. Fara memorie."
 11343,1,"EROARE SSL: Nu pot aloca structura control OpenSSL. Fara memorie.\r\n"
 

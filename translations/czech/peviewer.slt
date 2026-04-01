@@ -34,5 +34,5 @@ COMMENT,"Česká verze"
 10104,1,"Zobrazí informace o spustitelných souborech - EXE, DLL, atd."
 
 [STRINGTABLE 2]
-10118,1,"V konfiguraci pluginu nebyly nalezeny žádné viditelné sekce. K výběru\nviditelných sekcí použijte v hlavním okně Open Salamandera nabídku\nMožnosti > Konfigurace pluginů > Prohlížeč spustitelných souborů."
+10118,1,"V konfiguraci pluginu nebyly nalezeny žádné viditelné sekce. K výběru\nviditelných sekcí použijte v hlavním okně Sally nabídku\nMožnosti > Konfigurace pluginů > Prohlížeč spustitelných souborů."
 

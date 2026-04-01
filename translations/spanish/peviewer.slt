@@ -34,5 +34,5 @@ COMMENT,"Versión en español"
 10104,1,"Presenta información sobre ficheros ejecutables portátiles como EXE, DLL, etc."
 
 [STRINGTABLE 2]
-10118,1,"No se encontró sección de ejecutable portátil en la configuración del plugin.\nUse menú Opciones > Configuración del plugin > Visor de ejecutable portátil\nen la ventana principal de Open Salamander para configurar secciones visibles."
+10118,1,"No se encontró sección de ejecutable portátil en la configuración del plugin.\nUse menú Opciones > Configuración del plugin > Visor de ejecutable portátil\nen la ventana principal de Sally para configurar secciones visibles."
 

@@ -35,7 +35,7 @@ COMMENT,"Versiunea romana"
 [STRINGTABLE 0]
 32,1,"DiskMap"
 33,1,"Afiseaza o harta arborescenta a fisierelor de pe disk-ul dumneavoastra."
-34,1,"Despre Salamander DiskMap Plugin"
+34,1,"Despre Sally DiskMap Plugin"
 35,1,"Arata &DiskMap"
 40,1,"Doriti sa inchideti DiskMap?"
 41,1,"Nu aratati acest mesaj din nou si inchideti DiskMap fara a mai intreba"

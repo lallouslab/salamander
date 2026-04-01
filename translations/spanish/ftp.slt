@@ -1536,7 +1536,7 @@ COMMENT,"Versión en español"
 10674,1,"Cadena con meses en texto incorrecta (formato: 12 meses separados con espacios)."
 10680,1,"La condición de autodetección contiene un error.\n\nError: %s"
 10685,1,"Tipo de servidor desconocido; imposible analizar listado de texto...\r\n"
-10686,1,"Imposible analizar listado de ficheros y directorios del servidor. Sólo se mostrará el texto del listado en el panel.\n\nCompruebe nuestra página web para una nueva versión de Open Salamander. Si está usando la última versión, envíenos el listado bruto (si no es confidencial; haga click derecho en panel > Ver listado bruto > Guardar como) a la dirección support@altap.cz. Ayúdenos a poder usar tantos tipos de servidor como sea posible."
+10686,1,"Imposible analizar listado de ficheros y directorios del servidor. Sólo se mostrará el texto del listado en el panel.\n\nCompruebe nuestra página web para una nueva versión de Sally. Si está usando la última versión, envíenos el listado bruto (si no es confidencial; haga click derecho en panel > Ver listado bruto > Guardar como) a la dirección support@altap.cz. Ayúdenos a poder usar tantos tipos de servidor como sea posible."
 10687,1,"Imposible analizar el listado de texto usando el tipo de servidor seleccionado...\r\n"
 
 [STRINGTABLE 42]
@@ -1974,7 +1974,7 @@ COMMENT,"Versión en español"
 11337,1,"Imposible conseguir tamaño (en bytes) de la parte ya copiada/trasladada del fichero destino.\r\n"
 11338,1,"Imposible reanudar (añadir) el fichero (error inesperado) .\r\n"
 11339,1,"Se envió todo el fichero pero el servidor no confirmó su recepción.\r\nSe va a conseguir el tamaño del fichero (en bytes) para comprobar si el fichero fue copiado/trasladado bien.\r\n"
-11340,1,"Imposible encontrar o cargar librerías OpenSSL necesarias para la encriptación.\r\nLos ficheros necesarios son ssleay32.dll y libeay32.dll.\r\nSon parte de la instalación de Open Salamander."
+11340,1,"Imposible encontrar o cargar librerías OpenSSL necesarias para la encriptación.\r\nLos ficheros necesarios son ssleay32.dll y libeay32.dll.\r\nSon parte de la instalación de Sally."
 11342,1,"Imposible asignar estructura de control OpenSSL. Memoria insuficiente."
 11343,1,"ERROR SSL: Imposible asignar estructura de control OpenSSL. Memoria insuficiente.\r\n"
 

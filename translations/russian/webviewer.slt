@@ -11,7 +11,7 @@ COMMENT,"Русская версия"
 
 [STRINGTABLE 0]
 10100,1,"Средство просмотра Internet Explorer"
-10101,0,"Unable to open Internet Explorer Viewer.\nPlease report this problem to support@altap.cz."
+10101,1,"Не удалось открыть средство просмотра Internet Explorer.\nПожалуйста, сообщите об этой проблеме по адресу support@altap.cz."
 10102,1,"Ошибка"
 10103,1,"Облегченное средство просмотра HTML и XML, использующее Internet Explorer."
 10105,1,"О модуле"

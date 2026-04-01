@@ -221,8 +221,8 @@ COMMENT,"Magyar változat"
 11505,1,"Aktuális rekord/Rekordszám\tG"
 
 [STRINGTABLE 15]
-11520,0,"Use &default font"
+11520,1,"&Alapértelmezett betűtípus használata"
 11521,1,"&Egyéni betűtípus..."
-11522,0,"default font"
+11522,1,"alapértelmezett betűtípus"
 11523,1,"egyéni betűtípus"
 

@@ -28,7 +28,7 @@ COMMENT,"Versiunea romana"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Rasfoieste…"
-40014,1,"Directorul Salamander"
+40014,1,"Directorul Sally"
 40015,1,"Variabila de Mediu"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Versiunea romana"
 [STRINGTABLE 2]
 144,1,"Anuleaza script"
 145,1,"Anuleaza script care ruleaza\tCtrl+Break"
-146,1,"Fereastra Open Salamander este blocata de plugin Automation. Va rugam terminati de rulat scriptul."
+146,1,"Fereastra Sally este blocata de plugin Automation. Va rugam terminati de rulat scriptul."
 147,1,"Esuare in initializarea motorului de script."
 
 [STRINGTABLE 3]

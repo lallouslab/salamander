@@ -34,5 +34,5 @@ COMMENT,"Deutsche Version"
 10104,1,"Zeigt Informationen über ausführbare Dateien an (EXE, DLL, usw.)."
 
 [STRINGTABLE 2]
-10118,1,"Es wurde kein ausgewählter PE Bereich in der Pluginkonfiguration gefunden.\nGehe zu Optionen > Pluginkonfiguration > PE Dateibetrachter\nim Open Salamander Hauptfenster, um sichtbare Bereiche einzurichten."
+10118,1,"Es wurde kein ausgewählter PE Bereich in der Pluginkonfiguration gefunden.\nGehe zu Optionen > Pluginkonfiguration > PE Dateibetrachter\nim Sally Hauptfenster, um sichtbare Bereiche einzurichten."
 

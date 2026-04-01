@@ -10,6 +10,7 @@
 #include "wndframe.h"
 #include "config.h"
 #include "datarh.h"
+#include "translator.h"
 
 const char* TEXTWINDOW_NAME = "Texts (Alt+3)";
 
@@ -398,7 +399,7 @@ BOOL CTextWindow::CanLeaveText()
         (Mode != TREE_TYPE_DIALOG || strIndex == 0 ||
          !Data.DlgData[groupIndex]->Controls[strIndex]->IsStaticText()))
     {
-        MessageBox(GetMsgParent(), "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         SetFocus(HTranslated);
         return FALSE;
     }

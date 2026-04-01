@@ -34,5 +34,5 @@ COMMENT,"Versiunea romana"
 10104,1,"Afiseaza informatii despre fisiere Executabile Portabile cum ar fi EXE, DLL, etc."
 
 [STRINGTABLE 2]
-10118,1,"Nici o sectiune Portabila Executabila selectata in configuratia plugin-ului nu a fost gasita.\nFoloseste meniul Optiuni > Configurare Plugin >Vizualizator Portabil Executabil\nin Open Salamander fereastra principala pentru a seta sectiunile vizibile."
+10118,1,"Nici o sectiune Portabila Executabila selectata in configuratia plugin-ului nu a fost gasita.\nFoloseste meniul Optiuni > Configurare Plugin >Vizualizator Portabil Executabil\nin Sally fereastra principala pentru a seta sectiunile vizibile."
 

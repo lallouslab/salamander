@@ -64,7 +64,7 @@ COMMENT,"Version française"
 
 [STRINGTABLE 3]
 1024,1,"Lecture impossible à partir du fichier: "
-1025,1,"Impossible connecter le module à Open Salamander."
+1025,1,"Impossible connecter le module à Sally."
 1026,1,"optimisation en cours, veuillez patienter..."
 1027,1,"Optimisation de l'archive PAK - %s"
 1028,1,"La suppression de fichiers a échoué. Vous devriez lancer l'optimisation du PAK à partir du menu du Module PAK pour éviter la perte d'espace disque."

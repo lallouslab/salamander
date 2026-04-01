@@ -64,7 +64,7 @@ COMMENT,"Versiunea romana"
 
 [STRINGTABLE 3]
 1024,1,"Nu pot citi din fisier: "
-1025,1,"Nu pot conecta plugin la Open Salamander."
+1025,1,"Nu pot conecta plugin la Sally."
 1026,1,"optimizez, va rugam asteptati..."
 1027,1,"Optimizez Arhiva PAK - %s"
 1028,1,"Stergerea fisierelor nu a fost terminata cu succes. Va trebui sa rulezi optimizare PAK din meniul de Plugin al PAK pentru a pastra risipirea spatiului discului."

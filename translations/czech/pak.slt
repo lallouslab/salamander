@@ -64,7 +64,7 @@ COMMENT,"Česká verze"
 
 [STRINGTABLE 3]
 1024,1,"Nelze číst ze souboru: "
-1025,1,"Nelze připojit plugin k Open Salamanderu."
+1025,1,"Nelze připojit plugin k Sally."
 1026,1,"optimalizace, čekejte prosím..."
 1027,1,"Optimalizace PAK archivu - %s"
 1028,1,"Odstranění souborů bylo úspěšně dokončeno. Může být potřeba spustit PAK optimalizaci z nabídky PAK pluginu, aby nedošlo k plýtvání místem na disku."

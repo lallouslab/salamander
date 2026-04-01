@@ -1536,7 +1536,7 @@ COMMENT,"Slovenská verzia"
 10674,1,"Neplatný reťazec s textom mesiacov (formát: 12 mesiacov sa oddeľuje medzerou)."
 10680,1,"Stav automatickej detekcie obsahuje chybu.\n\nChyba: %s"
 10685,1,"Neznámy typ servera, nie je možné analyzovať text výpisu...\r\n"
-10686,1,"Nie je možné analyzovať výpis súborov a adresárov zo servera. V paneli bude zobrazený len čistý text výpisu.\n\nProsím skontrolujte naše web stránky pre novšiu verziu Open Salamandera. Ak používate poslednú verziu, prosím pošlite nám raw výpis (ak nie je dôverný; pravý klik v paneli > Zobraziť Raw výpis > Uložiť ako) na e-mail support@altap.cz. Prosím pomôžte nám s podporou ďalších typov serverov, ak je to možné."
+10686,1,"Nie je možné analyzovať výpis súborov a adresárov zo servera. V paneli bude zobrazený len čistý text výpisu.\n\nProsím skontrolujte naše web stránky pre novšiu verziu Sally. Ak používate poslednú verziu, prosím pošlite nám raw výpis (ak nie je dôverný; pravý klik v paneli > Zobraziť Raw výpis > Uložiť ako) na e-mail support@altap.cz. Prosím pomôžte nám s podporou ďalších typov serverov, ak je to možné."
 10687,1,"Nie je možné analyzovať text výpisu používajúci vybraný typ servera...\r\n"
 
 [STRINGTABLE 42]
@@ -1974,7 +1974,7 @@ COMMENT,"Slovenská verzia"
 11337,1,"Nie je možné získať veľkosť (v bajtoch) už skopírovanej/presunutej časti cieľového súboru.\r\n"
 11338,1,"Nie je možné pokračovať v prenose súboru (neočakávaná chyba).\r\n"
 11339,1,"Bol odoslaný celý súbor, ale server nepotvrdil jeho prijatie.\r\nChystám sa získať veľkosť súboru (v bajtoch), pre test úspešného kopírovania/presunutia súboru.\r\n"
-11340,1,"Nie je možné nájsť alebo zaviesť knižnice OpenSSL potrebné na šifrovanie.\r\nPotrebujete súbory ssleay32.dll a libeay32.dll.\r\nSú súčasťou inštalácie Open Salamandera."
+11340,1,"Nie je možné nájsť alebo zaviesť knižnice OpenSSL potrebné na šifrovanie.\r\nPotrebujete súbory ssleay32.dll a libeay32.dll.\r\nSú súčasťou inštalácie Sally."
 11342,1,"Nie je možné priradiť OpenSSL riadiacu štruktúru. Nedostatok pamäti."
 11343,1,"SSL CHYBA: Nie je možné priradiť OpenSSL riadiacu štruktúru. Nedostatok pamäti.\r\n"
 

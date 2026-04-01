@@ -64,7 +64,7 @@ COMMENT,"Magyar változat"
 
 [STRINGTABLE 3]
 1024,1,"Nem lehet a fájlból olvasni: "
-1025,1,"A plugin nem tud a Open Salamander-hez kapcsolódni."
+1025,1,"A plugin nem tud a Sally-hez kapcsolódni."
 1026,1,"optimalizálás, kérem várjon..."
 1027,1,"PAK archívum optimalizálása - %s"
 1028,1,"A fájlok törlését nem sikerült befejezni. Talán futtatnia kellene a PAK optimalizálót a PAK Plugin menüjéből, a terület pazarlása miatt."

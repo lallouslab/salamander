@@ -90,7 +90,7 @@ BOOL CreateKey(HKEY hKey, const char* name, HKEY& createdKey)
         return TRUE;
     else
     {
-        MessageBox(FrameWindow.HWindow, GetErrorText(res),
+        TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                    "Chyba pri ukladani klice", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
@@ -108,7 +108,7 @@ BOOL SetValue(HKEY hKey, const char* name, DWORD type,
         return TRUE;
     else
     {
-        MessageBox(FrameWindow.HWindow, GetErrorText(res),
+        TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                    "Chyba pri ukladani klice", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
@@ -128,7 +128,7 @@ BOOL SetValueW(HKEY hKey, const char* name, DWORD type,
         return TRUE;
     else
     {
-        MessageBox(FrameWindow.HWindow, GetErrorText(res),
+        TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                    "Chyba pri ukladani klice", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
@@ -144,7 +144,7 @@ BOOL OpenKey(HKEY hKey, const char* name, HKEY& openedKey)
     else
     {
         if (res != ERROR_FILE_NOT_FOUND)
-            MessageBox(FrameWindow.HWindow, GetErrorText(res),
+            TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
@@ -161,14 +161,14 @@ BOOL GetValue(HKEY hKey, const char* name, DWORD type, void* buffer, DWORD buffe
             return TRUE;
         else
         {
-            MessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
+            TranslatorMessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
     else
     {
         if (res != ERROR_FILE_NOT_FOUND)
-            MessageBox(FrameWindow.HWindow, GetErrorText(res),
+            TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
@@ -187,14 +187,14 @@ BOOL GetValueW(HKEY hKey, const char* name, DWORD type, void* buffer, DWORD buff
             return TRUE;
         else
         {
-            MessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
+            TranslatorMessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
     else
     {
         if (res != ERROR_FILE_NOT_FOUND)
-            MessageBox(FrameWindow.HWindow, GetErrorText(res),
+            TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
@@ -211,14 +211,14 @@ BOOL GetSize(HKEY hKey, const char* name, DWORD type, DWORD& bufferSize)
             return TRUE;
         else
         {
-            MessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
+            TranslatorMessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
     else
     {
         if (res != ERROR_FILE_NOT_FOUND)
-            MessageBox(FrameWindow.HWindow, GetErrorText(res),
+            TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
@@ -237,14 +237,14 @@ BOOL GetSizeW(HKEY hKey, const char* name, DWORD type, DWORD& bufferSize)
             return TRUE;
         else
         {
-            MessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
+            TranslatorMessageBox(FrameWindow.HWindow, "Neocekavany typ hodnoty",
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
     else
     {
         if (res != ERROR_FILE_NOT_FOUND)
-            MessageBox(FrameWindow.HWindow, GetErrorText(res),
+            TranslatorMessageBox(FrameWindow.HWindow, GetErrorText(res),
                        "Chyba pri nacitani konfigurace", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }

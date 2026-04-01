@@ -204,7 +204,7 @@ BOOL CData::LoadCheckLst(const char* fileName)
         char buf[MAX_PATH + 100];
         DWORD err = GetLastError();
         sprintf_s(buf, "Error opening file %s.\n%s", fileName, GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
 
@@ -213,7 +213,7 @@ BOOL CData::LoadCheckLst(const char* fileName)
     {
         char buf[MAX_PATH + 100];
         sprintf_s(buf, "Error reading file %s.", fileName);
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         HANDLES(CloseHandle(hFile));
         return FALSE;
     }
@@ -232,7 +232,7 @@ BOOL CData::LoadCheckLst(const char* fileName)
         char buf[MAX_PATH + 100];
         DWORD err = GetLastError();
         sprintf_s(buf, "Error reading file %s.\n%s", fileName, GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         free(checkLstData);
         HANDLES(CloseHandle(hFile));
         return FALSE;
@@ -259,7 +259,7 @@ BOOL CData::LoadCheckLst(const char* fileName)
                               "\n"
                               "%s",
                       fileName, line, lineText);
-            MessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             //free(checkLstData);
             //HANDLES(CloseHandle(hFile));
             //return FALSE;

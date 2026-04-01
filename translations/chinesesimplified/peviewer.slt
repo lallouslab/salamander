@@ -34,5 +34,5 @@ COMMENT,"简体中文版"
 10104,1,"显示可移植的可执行文件，例如EXE，DLL等信息。"
 
 [STRINGTABLE 2]
-10118,1,"在插件配置中没有找到选中的 Portable Executable 部分。\n 在 Open Salamander 主窗口中使用菜单 选项> 插件配置 > Portable Executable Viewer \n来设置可见部分。"
+10118,1,"在插件配置中没有找到选中的 Portable Executable 部分。\n 在 Sally 主窗口中使用菜单 选项> 插件配置 > Portable Executable Viewer \n来设置可见部分。"
 

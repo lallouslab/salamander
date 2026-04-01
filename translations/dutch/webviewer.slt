@@ -11,7 +11,7 @@ COMMENT,"Nederlandse versie"
 
 [STRINGTABLE 0]
 10100,1,"Internet Explorer Viewer"
-10101,0,"Unable to open Internet Explorer Viewer.\nPlease report this problem to support@altap.cz."
+10101,1,"Kan Internet Explorer Viewer niet openen.\nMeld dit probleem aan support@altap.cz."
 10102,1,"Fout"
 10103,1,"Lichtgewicht HTML en XML viewer gebaseerd op Internet Explorer."
 10105,1,"Over plugin"

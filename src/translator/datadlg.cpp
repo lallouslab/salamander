@@ -7,12 +7,53 @@
 #include "wndout.h"
 #include "datarh.h"
 #include "config.h"
+#include "translator.h"
 
 //                               [dlg units]
 #define DIALOG_MARGIN_WIDTH 7
 #define DIALOG_STD_MARGIN_HEIGHT 7
 #define DIALOG_WIDE_MARGIN_HEIGHT 14
 #define BUTTONS_SPACING 4
+
+static UINT_PTR GetPtrValue(const void* value)
+{
+    return reinterpret_cast<UINT_PTR>(value);
+}
+
+static BOOL IsWordResourceValue(const wchar_t* value)
+{
+    return value != NULL && (GetPtrValue(value) >> 16) == 0;
+}
+
+static WORD GetWordResourceID(const wchar_t* value)
+{
+    return LOWORD(GetPtrValue(value));
+}
+
+static wchar_t* MakeWordResourceValue(WORD value)
+{
+    return reinterpret_cast<wchar_t*>((UINT_PTR)value);
+}
+
+static BOOL IsClassAtomValue(const wchar_t* value)
+{
+    return value != NULL && LOWORD(GetPtrValue(value)) == 0xFFFF;
+}
+
+static WORD GetClassAtomID(const wchar_t* value)
+{
+    return HIWORD(GetPtrValue(value));
+}
+
+static wchar_t* MakeClassAtomValue(WORD value)
+{
+    return reinterpret_cast<wchar_t*>((UINT_PTR)MAKELONG(0xFFFF, value));
+}
+
+static WORD* AlignWordPtrToDword(WORD* value)
+{
+    return reinterpret_cast<WORD*>((GetPtrValue(value) + 3) & ~(UINT_PTR)3);
+}
 
 //*****************************************************************************
 //
@@ -105,17 +146,17 @@ CControl::~CControl()
 
 void CControl::Clean()
 {
-    if (ClassName != NULL && LOWORD(ClassName) != 0xFFFF)
+    if (ClassName != NULL && !IsClassAtomValue(ClassName))
     {
         free(ClassName);
         ClassName = NULL;
     }
-    if (OWindowName != NULL && HIWORD(OWindowName) != 0x0000)
+    if (OWindowName != NULL && !IsWordResourceValue(OWindowName))
     {
         free(OWindowName);
         OWindowName = NULL;
     }
-    if (TWindowName != NULL && HIWORD(TWindowName) != 0x0000)
+    if (TWindowName != NULL && !IsWordResourceValue(TWindowName))
     {
         free(TWindowName);
         TWindowName = NULL;
@@ -141,17 +182,17 @@ void CControl::LoadFrom(CControl* src)
     TCX = src->TCX;
     TCY = src->TCY;
 
-    if (LOWORD(src->ClassName) != 0xFFFF)
+    if (!IsClassAtomValue(src->ClassName))
         ClassName = dupstr(src->ClassName);
     else
         ClassName = src->ClassName;
 
-    if (HIWORD(src->OWindowName) != 0x0000)
+    if (!IsWordResourceValue(src->OWindowName))
         OWindowName = dupstr(src->OWindowName);
     else
         OWindowName = src->OWindowName;
 
-    if (HIWORD(src->TWindowName) != 0x0000)
+    if (!IsWordResourceValue(src->TWindowName))
         TWindowName = dupstr(src->TWindowName);
     else
         TWindowName = src->TWindowName;
@@ -172,42 +213,42 @@ BOOL IsStyleStaticText(DWORD style, BOOL onlyLeft, BOOL onlyRight)
 
 BOOL CControl::IsStaticText(BOOL onlyLeft, BOOL onlyRight) const
 {
-    return ClassName == (wchar_t*)0x0082FFFF &&             // is a static control
+    return ClassName == MakeClassAtomValue(0x0082) &&       // is a static control
            IsStyleStaticText(Style, onlyLeft, onlyRight) && // not an icon, frame, etc.
            OCY > 1;                                         // eliminate horizontal lines (they are handled as text statics); no text is written into them
 }
 
 BOOL CControl::IsIcon() const
 {
-    return ClassName == (wchar_t*)0x0082FFFF && // is a static control
+    return ClassName == MakeClassAtomValue(0x0082) && // is a static control
            (Style & SS_TYPEMASK) == SS_ICON;    // is an icon
 }
 
 BOOL CControl::IsWhiteFrame() const
 {
-    return ClassName == (wchar_t*)0x0082FFFF &&    // is a static control
+    return ClassName == MakeClassAtomValue(0x0082) && // is a static control
            (Style & SS_TYPEMASK) == SS_WHITEFRAME; // is a white frame
 }
 
 BOOL CControl::IsComboBox() const
 {
-    return ClassName == (wchar_t*)0x0085ffff;
+    return ClassName == MakeClassAtomValue(0x0085);
 }
 
 BOOL CControl::IsEditBox() const
 {
-    return ClassName == (wchar_t*)0x0081ffff;
+    return ClassName == MakeClassAtomValue(0x0081);
 }
 
 BOOL CControl::IsGroupBox() const
 {
-    return ClassName == (wchar_t*)0x0080ffff &&
+    return ClassName == MakeClassAtomValue(0x0080) &&
            (Style & BS_TYPEMASK) == BS_GROUPBOX;
 }
 
 BOOL CControl::IsHorizLine() const
 {
-    return ClassName == (wchar_t*)0x0082FFFF &&    // is a static control
+    return ClassName == MakeClassAtomValue(0x0082) && // is a static control
            (Style & SS_TYPEMASK) == SS_ETCHEDHORZ; // etched-horizontal
 }
 
@@ -217,19 +258,19 @@ BOOL IsCheckBox(int bt);
 
 BOOL CControl::IsRadioOrCheckBox() const
 {
-    return ClassName == (wchar_t*)0x0080FFFF && // is a button
+    return ClassName == MakeClassAtomValue(0x0080) && // is a button
            ::IsRadioOrCheckBox(Style);          // is a check or radio button
 }
 
 BOOL CControl::IsRadioBox() const
 {
-    return ClassName == (wchar_t*)0x0080FFFF && // is a button
+    return ClassName == MakeClassAtomValue(0x0080) && // is a button
            ::IsRadioBox(Style);
 }
 
 BOOL CControl::IsCheckBox() const
 {
-    return ClassName == (wchar_t*)0x0080FFFF && // is a button
+    return ClassName == MakeClassAtomValue(0x0080) && // is a button
            ::IsCheckBox(Style);
 }
 
@@ -237,7 +278,7 @@ BOOL IsPushButton(int bt);
 
 BOOL CControl::IsPushButton() const
 {
-    return ClassName == (wchar_t*)0x0080FFFF && // is a button
+    return ClassName == MakeClassAtomValue(0x0080) && // is a button
            ::IsPushButton(Style);               // is a push button
 }
 
@@ -254,7 +295,7 @@ BOOL CControl::IsTVertContainedIn(CControl const* c) const
 
 BOOL CControl::ShowInLVWithControls(int i)
 {
-    return OWindowName != NULL && HIWORD(OWindowName) != 0x0000 &&
+    return OWindowName != NULL && !IsWordResourceValue(OWindowName) &&
            (IsTranslatableControl(OWindowName) || // everything except icons and other non-translatable elements
             i > 0 && IsStaticText());             // we make an exception for statics with text: it is possible to translate even an empty string (e.g., "" -> "Translated (c) 2010 Ferda" in the PictView About dialog)
 }
@@ -355,12 +396,12 @@ CDialogData::~CDialogData()
 
 void CDialogData::Clean()
 {
-    if (MenuName != NULL && HIWORD(MenuName) != 0)
+    if (MenuName != NULL && !IsWordResourceValue(MenuName))
     {
         free(MenuName);
         MenuName = NULL;
     }
-    if (ClassName != NULL && HIWORD(ClassName) != 0)
+    if (ClassName != NULL && !IsWordResourceValue(ClassName))
     {
         free(ClassName);
         ClassName = NULL;
@@ -399,12 +440,12 @@ void CDialogData::LoadFrom(CDialogData* src, BOOL keepLangID)
     TCX = src->TCX;
     TCY = src->TCY;
 
-    if (HIWORD(src->MenuName) != 0)
+    if (!IsWordResourceValue(src->MenuName))
         MenuName = dupstr(src->MenuName); // allocated string
     else
         MenuName = src->MenuName;
 
-    if (HIWORD(src->ClassName) != 0)
+    if (!IsWordResourceValue(src->ClassName))
         ClassName = dupstr(src->ClassName); // allocated string
     else
         ClassName = src->ClassName;
@@ -473,7 +514,7 @@ BOOL IsFilteredDialogStyleSame(DWORD style1, DWORD style2)
 
 BOOL IsEmptyWindowName(const wchar_t* windowName)
 {
-    return windowName != NULL && HIWORD(windowName) != 0x0000 && windowName[0] == 0;
+    return windowName != NULL && !IsWordResourceValue(windowName) && windowName[0] == 0;
 }
 
 BOOL IsFilteredControlStyleSame(CControl* control, CControl* controlOrg)
@@ -534,10 +575,10 @@ BOOL CDialogData::DoesLayoutChanged2(CDialogData* orgDialogData)
         changed = TRUE;
     }
 
-    if (HIWORD(MenuName) == 0 && HIWORD(dataOrg->MenuName) != 0 ||
-        HIWORD(MenuName) != 0 && HIWORD(dataOrg->MenuName) == 0 ||
-        HIWORD(MenuName) == 0 && (DWORD)MenuName != (DWORD)dataOrg->MenuName ||
-        HIWORD(MenuName) != 0 && wcscmp(MenuName, dataOrg->MenuName) != 0)
+    if (IsWordResourceValue(MenuName) && !IsWordResourceValue(dataOrg->MenuName) ||
+        !IsWordResourceValue(MenuName) && IsWordResourceValue(dataOrg->MenuName) ||
+        IsWordResourceValue(MenuName) && MenuName != dataOrg->MenuName ||
+        !IsWordResourceValue(MenuName) && wcscmp(MenuName, dataOrg->MenuName) != 0)
     {
         swprintf_s(buff, L"Dialog %hs: MenuName changed",
                    DataRH.GetIdentifier(ID));
@@ -545,10 +586,10 @@ BOOL CDialogData::DoesLayoutChanged2(CDialogData* orgDialogData)
         changed = TRUE;
     }
 
-    if (HIWORD(ClassName) == 0 && HIWORD(dataOrg->ClassName) != 0 ||
-        HIWORD(ClassName) != 0 && HIWORD(dataOrg->ClassName) == 0 ||
-        HIWORD(ClassName) == 0 && (DWORD)ClassName != (DWORD)dataOrg->ClassName ||
-        HIWORD(ClassName) != 0 && wcscmp(ClassName, dataOrg->ClassName) != 0)
+    if (IsWordResourceValue(ClassName) && !IsWordResourceValue(dataOrg->ClassName) ||
+        !IsWordResourceValue(ClassName) && IsWordResourceValue(dataOrg->ClassName) ||
+        IsWordResourceValue(ClassName) && ClassName != dataOrg->ClassName ||
+        !IsWordResourceValue(ClassName) && wcscmp(ClassName, dataOrg->ClassName) != 0)
     {
         swprintf_s(buff, L"Dialog %hs: ClassName changed",
                    DataRH.GetIdentifier(ID));
@@ -626,10 +667,10 @@ BOOL CDialogData::DoesLayoutChanged2(CDialogData* orgDialogData)
                 changed = TRUE;
             }
 
-            if (LOWORD(control->ClassName) == 0xFFFF && LOWORD(controlOrg->ClassName) != 0xFFFF ||
-                LOWORD(control->ClassName) != 0xFFFF && LOWORD(controlOrg->ClassName) == 0xFFFF ||
-                LOWORD(control->ClassName) == 0xFFFF && (DWORD)control->ClassName != (DWORD)controlOrg->ClassName ||
-                LOWORD(control->ClassName) != 0xFFFF && control->ClassName != NULL && controlOrg->ClassName != NULL && wcscmp(control->ClassName, controlOrg->ClassName) != 0)
+            if (IsClassAtomValue(control->ClassName) && !IsClassAtomValue(controlOrg->ClassName) ||
+                !IsClassAtomValue(control->ClassName) && IsClassAtomValue(controlOrg->ClassName) ||
+                IsClassAtomValue(control->ClassName) && control->ClassName != controlOrg->ClassName ||
+                !IsClassAtomValue(control->ClassName) && control->ClassName != NULL && controlOrg->ClassName != NULL && wcscmp(control->ClassName, controlOrg->ClassName) != 0)
             {
                 swprintf_s(buff, L"Dialog %hs, control %hs: ClassName changed",
                            DataRH.GetIdentifier(ID), DataRH.GetIdentifier(control->ID));
@@ -719,7 +760,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
                       DataRH.GetIdentifier(ID),
                       oIsEX ? "DLGTEMPLATEEX" : "DLGTEMPLATE",
                       tIsEX ? "DLGTEMPLATEEX" : "DLGTEMPLATE");
-            MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             *showDlgEXWarning = FALSE;
         }
         swprintf_s(buff, L"Dialog %hs: original is %s, translated is %s",
@@ -775,7 +816,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
                                "number of controls in original dialog: %d\n"
                                "number of controls in translated dialog: %d",
                       ID, oStyle, tStyle, oExStyle, tExStyle, oCount, tCount);
-            MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
     }
@@ -840,7 +881,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
 
     case 0xffff:
     {
-        MenuName = (wchar_t*)(UINT)GET_WORD(oBuff + 1);
+        MenuName = MakeWordResourceValue(GET_WORD(oBuff + 1));
         oBuff += 2;
         break;
     }
@@ -887,7 +928,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
 
     case 0xffff:
     {
-        ClassName = (wchar_t*)(UINT)GET_WORD(oBuff + 1);
+        ClassName = MakeWordResourceValue(GET_WORD(oBuff + 1));
         oBuff += 2;
         break;
     }
@@ -972,8 +1013,8 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
     for (int i = 0; i < oCount; i++)
     {
         // controls are aligned to DWORDs
-        oBuff = (WORD*)((((int)oBuff) + 3) & ~3);
-        tBuff = (WORD*)((((int)tBuff) + 3) & ~3);
+        oBuff = AlignWordPtrToDword(oBuff);
+        tBuff = AlignWordPtrToDword(tBuff);
 
         control = new CControl();
         if (control == NULL)
@@ -1049,7 +1090,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
                 if (!data->MUIMode)
                 {
                     sprintf_s(errtext, "32-bit IDs are not supported");
-                    MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+                    TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
                     delete control;
                     return FALSE;
                 }
@@ -1073,7 +1114,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
                 if (!data->MUIMode)
                 {
                     sprintf_s(errtext, "32-bit IDs are not supported");
-                    MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+                    TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
                     delete control;
                     return FALSE;
                 }
@@ -1096,7 +1137,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
         wchar_t* oClassName;
         if (GET_WORD(oBuff) == 0xffff)
         {
-            oClassName = (wchar_t*)(UINT)GET_DWORD(oBuff);
+            oClassName = MakeClassAtomValue(GET_WORD(oBuff + 1));
             oBuff += 2;
         }
         else
@@ -1112,7 +1153,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
 
         if (GET_WORD(tBuff) == 0xffff)
         {
-            control->ClassName = (wchar_t*)(UINT)GET_DWORD(tBuff);
+            control->ClassName = MakeClassAtomValue(GET_WORD(tBuff + 1));
             tBuff += 2;
         }
         else
@@ -1121,7 +1162,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
             if (!DecodeString((wchar_t*)tBuff, len, &control->ClassName))
             {
                 delete control;
-                if (LOWORD(oClassName) != 0xFFFF)
+                if (!IsClassAtomValue(oClassName))
                     free(oClassName);
                 return FALSE;
             }
@@ -1129,14 +1170,14 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
         }
 
         BOOL sameClasses = oClassName == control->ClassName ||
-                           LOWORD(oClassName) != 0xFFFF && LOWORD(control->ClassName) != 0xFFFF &&
+                           !IsClassAtomValue(oClassName) && !IsClassAtomValue(control->ClassName) &&
                                wcscmp(oClassName, control->ClassName) == 0;
 
         // window name
         wchar_t* oWinName = (wchar_t*)L"";
         if (GET_WORD(oBuff) == 0xffff)
         {
-            control->OWindowName = (wchar_t*)(UINT)GET_WORD(oBuff + 1);
+            control->OWindowName = MakeWordResourceValue(GET_WORD(oBuff + 1));
             oBuff += 2;
         }
         else
@@ -1145,7 +1186,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
             if (!DecodeString((wchar_t*)oBuff, len, &control->OWindowName))
             {
                 delete control;
-                if (LOWORD(oClassName) != 0xFFFF)
+                if (!IsClassAtomValue(oClassName))
                     free(oClassName);
                 return FALSE;
             }
@@ -1156,7 +1197,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
         wchar_t* tWinName = (wchar_t*)L"";
         if (GET_WORD(tBuff) == 0xffff)
         {
-            control->TWindowName = (wchar_t*)(UINT)GET_WORD(tBuff + 1);
+            control->TWindowName = MakeWordResourceValue(GET_WORD(tBuff + 1));
             tBuff += 2;
         }
         else
@@ -1165,7 +1206,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
             if (!DecodeString((wchar_t*)tBuff, len, &control->TWindowName))
             {
                 delete control;
-                if (LOWORD(oClassName) != 0xFFFF)
+                if (!IsClassAtomValue(oClassName))
                     free(oClassName);
                 return FALSE;
             }
@@ -1173,7 +1214,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
             tBuff += len + 1;
         }
 
-        if (!data->MUIMode && (GET_WORD(tBuff) == 0xffff || HIWORD(control->TWindowName) != 0x0000 && wcslen(control->TWindowName) > 0))
+        if (!data->MUIMode && (GET_WORD(tBuff) == 0xffff || !IsWordResourceValue(control->TWindowName) && wcslen(control->TWindowName) > 0))
             control->State = data->QueryTranslationState(tteDialogs, Controls.Count, ID, oWinName, tWinName);
         else
             control->State = PROGRESS_STATE_TRANSLATED; // an empty string counts as "translated"
@@ -1183,9 +1224,9 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
         if (oExtraCount && !data->MUIMode)
         {
             sprintf_s(errtext, "Control creation data are not supported");
-            MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             delete control;
-            if (LOWORD(oClassName) != 0xFFFF)
+            if (!IsClassAtomValue(oClassName))
                 free(oClassName);
             return FALSE;
         }
@@ -1195,9 +1236,9 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
         if (tExtraCount && !data->MUIMode)
         {
             sprintf_s(errtext, "Control creation data are not supported");
-            MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             delete control;
-            if (LOWORD(oClassName) != 0xFFFF)
+            if (!IsClassAtomValue(oClassName))
                 free(oClassName);
             return FALSE;
         }
@@ -1209,16 +1250,16 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
             wchar_t tClass[50];
             wchar_t* oStrClass;
             wchar_t* tStrClass;
-            if (LOWORD(oClassName) == 0xFFFF)
+            if (IsClassAtomValue(oClassName))
             {
-                swprintf_s(oClass, L"0x%04X", (UINT)HIWORD(oClassName));
+                swprintf_s(oClass, L"0x%04X", GetClassAtomID(oClassName));
                 oStrClass = oClass;
             }
             else
                 oStrClass = oClassName;
-            if (LOWORD(control->ClassName) == 0xFFFF)
+            if (IsClassAtomValue(control->ClassName))
             {
-                swprintf_s(tClass, L"0x%04X", (UINT)HIWORD(control->ClassName));
+                swprintf_s(tClass, L"0x%04X", GetClassAtomID(control->ClassName));
                 tStrClass = tClass;
             }
             else
@@ -1243,15 +1284,15 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
                           (sameExStyles ? "yes" : "no"),
                           oStrClass, tStrClass,
                           (sameClasses ? "yes" : "no"));
-                MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+                TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             }
             delete control;
-            if (LOWORD(oClassName) != 0xFFFF)
+            if (!IsClassAtomValue(oClassName))
                 free(oClassName);
             return FALSE;
         }
 
-        if (LOWORD(oClassName) != 0xFFFF)
+        if (!IsClassAtomValue(oClassName))
             free(oClassName);
 
         Controls.Add(control);
@@ -1275,7 +1316,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
                                    "Translated Style=0x%08X",
                           DataRH.GetIdentifier(ID), DataRH.GetIdentifier(oControlID),
                           control->Style, tControlStyle);
-                MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+                TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
                 *showStyleWarning = FALSE;
             }
             swprintf_s(buff, L"Dialog %hs: %s %hs: org=0x%08X, tr=0x%08X",
@@ -1299,7 +1340,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
                                    "Translated Ex-Style=0x%08X",
                           DataRH.GetIdentifier(ID), DataRH.GetIdentifier(oControlID),
                           control->ExStyle, tControlExStyle);
-                MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+                TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
                 *showExStyleWarning = FALSE;
             }
             swprintf_s(buff, L"Dialog %hs: diff. ex-style of %hs: org=0x%08X, tr=0x%08X",
@@ -1314,7 +1355,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
     }
     /*
 //    sprintf_s(errtext, "DLGTEMPLATEEX templates are not supported");
-//    MessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+//    TranslatorMessageBox(GetMsgParent(), errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
 //    return FALSE;
 
     DWORD oHelpID = GET_DWORD(oBuff); oBuff += 2;
@@ -1408,11 +1449,11 @@ CDialogData::PrepareTemplate(WORD* buff, BOOL addProgress, BOOL forPreview, BOOL
         PUT_WORD(p, 0);
         p++;
     }
-    else if (HIWORD(MenuName) == 0)
+    else if (IsWordResourceValue(MenuName))
     {
         PUT_WORD(p, 0xffff);
         p++;
-        PUT_WORD(p, LOWORD(MenuName));
+        PUT_WORD(p, GetWordResourceID(MenuName));
         p++;
     }
     else
@@ -1426,11 +1467,11 @@ CDialogData::PrepareTemplate(WORD* buff, BOOL addProgress, BOOL forPreview, BOOL
         PUT_WORD(p, 0);
         p++;
     }
-    else if (HIWORD(ClassName) == 0)
+    else if (IsWordResourceValue(ClassName))
     {
         PUT_WORD(p, 0xffff);
         p++;
-        PUT_WORD(p, LOWORD(ClassName));
+        PUT_WORD(p, GetWordResourceID(ClassName));
         p++;
     }
     else
@@ -1466,7 +1507,7 @@ CDialogData::PrepareTemplate(WORD* buff, BOOL addProgress, BOOL forPreview, BOOL
         *p = 0;
         *(p + 1) = 0;
         // align to DWORDs
-        p = (WORD*)((((int)p) + 3) & ~3);
+        p = AlignWordPtrToDword(p);
 
         if (IsEX)
         {
@@ -1530,11 +1571,11 @@ CDialogData::PrepareTemplate(WORD* buff, BOOL addProgress, BOOL forPreview, BOOL
             PUT_DWORD(p, 0);
             p += 2;
         }
-        else if (LOWORD(control->ClassName) == 0xFFFF)
+        else if (IsClassAtomValue(control->ClassName))
         {
             PUT_WORD(p, 0xFFFF);
             p++;
-            PUT_WORD(p, HIWORD(control->ClassName));
+            PUT_WORD(p, GetClassAtomID(control->ClassName));
             p++;
         }
         else
@@ -1556,11 +1597,11 @@ CDialogData::PrepareTemplate(WORD* buff, BOOL addProgress, BOOL forPreview, BOOL
         }
 
         // window name
-        if (HIWORD(control->TWindowName) == 0x0000)
+        if (IsWordResourceValue(control->TWindowName))
         {
             PUT_WORD(p, 0xFFFF);
             p++;
-            PUT_WORD(p, LOWORD(control->TWindowName));
+            PUT_WORD(p, GetWordResourceID(control->TWindowName));
             p++;
         }
         else
@@ -1840,7 +1881,7 @@ BOOL CDialogData::BelongsToSameSelectionGroup(int fromIndex, int testIndex)
     CControl* testCtrl = Controls[testIndex];
 
     // if the ClassName differs (string or ID), the controls are not in the same group
-    if (LOWORD(fromCtrl->ClassName) != 0xFFFF && LOWORD(testCtrl->ClassName) != 0xFFFF)
+    if (!IsClassAtomValue(fromCtrl->ClassName) && !IsClassAtomValue(testCtrl->ClassName))
     {
         if (wcscmp(fromCtrl->ClassName, testCtrl->ClassName) != 0)
             return FALSE;
@@ -2106,7 +2147,7 @@ BOOL CData::DialogsAddTranslationStates()
         for (int j = 1; j < dlgData->Controls.Count; j++)
         {
             CControl* control = dlgData->Controls[j];
-            if ((HIWORD(control->TWindowName) == 0x0000 || wcslen(control->TWindowName) > 0) &&
+            if ((IsWordResourceValue(control->TWindowName) || wcslen(control->TWindowName) > 0) &&
                 !Data.AddTranslationState(tteDialogs, j, dlgData->ID, control->State))
             {
                 return FALSE;

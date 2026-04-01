@@ -11,7 +11,7 @@ COMMENT,"Versiunea romana"
 
 [STRINGTABLE 0]
 10100,1,"Vizualizator Internet Explorer"
-10101,0,"Unable to open Internet Explorer Viewer.\nPlease report this problem to support@altap.cz."
+10101,1,"Nu se poate deschide Vizualizatorul Internet Explorer.\nVă rugăm să raportați această problemă la support@altap.cz."
 10102,1,"Eroare"
 10103,1,"Lightweight HTML si XML vizualizator bazate pe Internet Explorer."
 10105,1,"Despre Plugin"

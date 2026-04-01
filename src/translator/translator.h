@@ -4,6 +4,23 @@
 
 #pragma once
 
+enum CQuietAutomationCommandEnum
+{
+    qacNone,
+    qacValidateAll,
+    qacValidateLayout,
+    qacImportSLT,
+    qacExportSLT,
+    qacExportSLTForDiff
+};
+
+enum CQuietAutomationExitCodeEnum
+{
+    qaecSuccess = 0,
+    qaecContentFailure = 1,
+    qaecRuntimeFailure = 2
+};
+
 extern int QuietValidate;                       // 0 = the "-quiet-validate-???" command-line switch was not used; 1 = all, 2 = layout only
 extern int QuietTranslate;                      // 0 = the "-quiet-translate" switch was not used, 1 = it was supplied
 extern int QuietMarkChAsTrl;                    // 0 = the "-quiet-mark-changed-as-translated" switch was not used, 1 = it was supplied
@@ -17,9 +34,21 @@ extern char QuietImportSLT[MAX_PATH];           // empty string = do not import;
 extern char QuietExportSpellChecker[MAX_PATH];  // empty string = do not export; otherwise the directory for exporting spell-checker text
 extern char OpenLayoutEditorDialogID[MAX_PATH]; // empty string = do not open the layout editor; otherwise ID of the dialog to open
 extern BYTE* SharedMemoryCopy;                  // NULL = we do not keep a copy of the shared memory block
+extern CQuietAutomationCommandEnum QuietAutomationCommand;
+extern int QuietAutomationFailureExitCode;
+extern char QuietAutomationProjectFile[MAX_PATH];
+extern char QuietAutomationLogFile[MAX_PATH];
 
 char* GetErrorText(DWORD error); // converts an error code to a human-readable string
 char* LoadStr(int resID);        // retrieves a string from resources
+
+BOOL IsSupportedQuietAutomationActive();
+void ClearQuietAutomation();
+void PrepareQuietAutomation(CQuietAutomationCommandEnum command, const char* projectFile);
+void SetQuietAutomationFailureExitCode(int exitCode);
+BOOL QuietAutomationEnsureDirectory(const char* path);
+void QuietAutomationExit(int exitCode);
+int TranslatorMessageBox(HWND hWnd, const char* text, const char* caption, UINT type);
 
 BOOL GetTargetDirectory(HWND parent, const char* title, const char* comment,
                         char* path, const char* initDir);

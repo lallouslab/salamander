@@ -11,7 +11,7 @@ COMMENT,"Slovenská verzia"
 
 [STRINGTABLE 0]
 10100,1,"Prehliadač Internet Explorer"
-10101,0,"Unable to open Internet Explorer Viewer.\nPlease report this problem to support@altap.cz."
+10101,1,"Nie je možné otvoriť prehliadač Internet Explorer.\nNahláste tento problém na support@altap.cz."
 10102,1,"Chyba"
 10103,1,"Jednoduchý HTML alebo XML prehliadač založený na Internet Exploreri."
 10105,1,"O plugine"

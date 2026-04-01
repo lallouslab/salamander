@@ -35,7 +35,7 @@ COMMENT,"Magyar változat"
 [STRINGTABLE 0]
 32,1,"DiskMap"
 33,1,"A lemez fájljainak faszerkezetét jeleníti meg."
-34,1,"Salamander DiskMap Plugin névjegy"
+34,1,"Sally DiskMap Plugin névjegy"
 35,1,"&DiskMap megjelenítése"
 40,1,"Be akarja zárni a DiskMap-ot?"
 41,1,"Ne mutassa ezt az üzenetet és kérdés nélkül zárja be a DiskMap-ot"

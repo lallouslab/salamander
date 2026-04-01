@@ -28,7 +28,7 @@ COMMENT,"Versión en español"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Hojear…"
-40014,1,"Directorio de Salamander"
+40014,1,"Directorio de Sally"
 40015,1,"Variable de entorno"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Versión en español"
 [STRINGTABLE 2]
 144,1,"Interrumpir script"
 145,1,"Interrumpir script en ejecución\tCtrl+Pausa"
-146,1,"La ventana de Open Salamander está bloqueada por el plugin de automatización. Finalice el script en ejecución."
+146,1,"La ventana de Sally está bloqueada por el plugin de automatización. Finalice el script en ejecución."
 147,1,"No se pudo inicializar el motor de scripting."
 
 [STRINGTABLE 3]

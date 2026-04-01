@@ -35,7 +35,7 @@ COMMENT,"Version française"
 [STRINGTABLE 0]
 32,1,"DiskMap"
 33,1,"Affiche un graphique hiérarchique des fichiers sur votre disque."
-34,1,"A propos du module DiskMap de Salamander"
+34,1,"A propos du module DiskMap de Sally"
 35,1,"Voir &DiskMap"
 40,1,"Voulez-vous fermer DiskMap?"
 41,1,"Ne pas remontrer ce message et fermer DiskMap sans rien demander"

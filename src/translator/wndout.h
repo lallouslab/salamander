@@ -60,6 +60,7 @@ public:
 
     int GetErrorLines();
     int GetInfoLines();
+    BOOL WriteTextLog(const char* fileName);
 
     void Navigate(BOOL next);
 

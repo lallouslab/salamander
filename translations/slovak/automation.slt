@@ -28,7 +28,7 @@ COMMENT,"Slovenská verzia"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Prechádzať…"
-40014,1,"Adresár Salamander"
+40014,1,"Adresár Sally"
 40015,1,"Premenná prostredia"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Slovenská verzia"
 [STRINGTABLE 2]
 144,1,"Prerušiť skript"
 145,1,"Prerušiť spustený skript\tCtrl+Break"
-146,1,"Okno Open Salamandera je uzamknuté pluginom automatizácie. Prosím ukončite spustený skript."
+146,1,"Okno Sally je uzamknuté pluginom automatizácie. Prosím ukončite spustený skript."
 147,1,"Nie je možné inicializovať skriptovací stroj."
 
 [STRINGTABLE 3]

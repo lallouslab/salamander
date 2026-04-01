@@ -101,7 +101,7 @@ BOOL CLayoutEditor::Close()
         CDialogData* dataOrg = OriginalDialogData;
         if (data->DoesLayoutChanged(dataOrg))
         {
-            DWORD ret = MessageBox(HWindow, "The dialog box layout has changed.\nDo you want to use new layout?", "Question", MB_YESNOCANCEL | MB_ICONQUESTION);
+            DWORD ret = TranslatorMessageBox(HWindow, "The dialog box layout has changed.\nDo you want to use new layout?", "Question", MB_YESNOCANCEL | MB_ICONQUESTION);
             if (ret == IDCANCEL)
                 return FALSE;
             if (ret == IDYES)
@@ -304,7 +304,7 @@ void CLayoutEditor::LoadTransformStackStream(const BYTE* stream)
         {
             char buff[10000];
             errors.GetStrings(buff, sizeof(buff));
-            MessageBox(HWindow, buff, "Error", MB_OK | MB_ICONASTERISK);
+            TranslatorMessageBox(HWindow, buff, "Error", MB_OK | MB_ICONASTERISK);
         }
 
         TransformStack.Add(dlgData);
@@ -541,7 +541,7 @@ void CLayoutEditor::NormalizeLayout(BOOL wide)
     CDialogData* dialogData = TransformStack[CurrentDialog];
     if (!dialogData->CanNormalizeLayout())
     {
-        MessageBox(HWindow, "Layout normalization is supported only for dialog boxes with outer controls on the right side.", "Error", MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(HWindow, "Layout normalization is supported only for dialog boxes with outer controls on the right side.", "Error", MB_OK | MB_ICONEXCLAMATION);
         return;
     }
 
@@ -553,7 +553,7 @@ void CLayoutEditor::NormalizeLayout(BOOL wide)
     {
         char buff[10000];
         errors.GetStrings(buff, sizeof(buff));
-        MessageBox(HWindow, buff, "Error", MB_OK | MB_ICONASTERISK);
+        TranslatorMessageBox(HWindow, buff, "Error", MB_OK | MB_ICONASTERISK);
     }
 }
 

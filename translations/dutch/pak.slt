@@ -64,7 +64,7 @@ COMMENT,"Nederlandse versie"
 
 [STRINGTABLE 3]
 1024,1,"Kan bestand niet inlezen: "
-1025,1,"Kan plugin niet verbinden met Open Salamander."
+1025,1,"Kan plugin niet verbinden met Sally."
 1026,1,"optimaliseren, ogenblik geduld a.u.b..."
 1027,1,"Optimiseer PAK archief - %s"
 1028,1,"Bestanden verwijderen is mislukt. U moet wellicht een PAK optimalisatie uitvoeren uit het PAK plugin menu om geen vrije schijfruimte te verspillen."

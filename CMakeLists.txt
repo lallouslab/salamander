@@ -627,6 +627,17 @@ sal_create_populate_target()
 # Ensure populate depends on main targets
 add_dependencies(populate sally salmon salspawn salopen tserver translator salext sal_lang_english)
 
+# Language pack generation (requires populated build with translator.exe)
+add_custom_target(langpacks
+  COMMAND ${CMAKE_COMMAND} -E env
+    pwsh -File ${CMAKE_SOURCE_DIR}/tools/localization/build_language_packs.ps1
+      -BuildRoot ${SAL_OUTPUT_BASE}/$<CONFIG>_${SAL_PLATFORM}
+      -SkipValidation
+      -AllowSeedRejections
+  COMMENT "Building language packs for ${SAL_OUTPUT_BASE}/$<CONFIG>_${SAL_PLATFORM}"
+  DEPENDS populate
+)
+
 message(STATUS "")
 message(STATUS "=== Sally CMake Build ===")
 message(STATUS "Output: ${SAL_OUTPUT_BASE}/<Config>_${SAL_PLATFORM}")

@@ -1536,7 +1536,7 @@ COMMENT,"Magyar változat"
 10674,1,"Érvénytelen szöveges hónap karakterlánc (formátum: 12 hónap szünettel elválasztva)."
 10680,1,"Automatikus észlelés állapota hibát tartalmaz.\n\nHiba: %s"
 10685,1,"Ismeretlen szervertípus, szöveges listázás nem elemezhető...\r\n"
-10686,1,"Nem lehet elemezni a szerver fájljainak és mappáinak listázását. Csak formázatlan szöveges listázás fog megjelenni a panelen.\n\nKeresse fel weboldalunkat az Open Salamander újabb verziójáért. Ha a legfrissebb verziót használja, küldje el nekünk a raw listázást (ha nem titkos; jobb kattintás a panelen > Raw listázás > Mentés mint) erre az email címre: support@altap.cz. Segítsen nekünk minél több szervertípust támogatni."
+10686,1,"Nem lehet elemezni a szerver fájljainak és mappáinak listázását. Csak formázatlan szöveges listázás fog megjelenni a panelen.\n\nKeresse fel weboldalunkat az Sally újabb verziójáért. Ha a legfrissebb verziót használja, küldje el nekünk a raw listázást (ha nem titkos; jobb kattintás a panelen > Raw listázás > Mentés mint) erre az email címre: support@altap.cz. Segítsen nekünk minél több szervertípust támogatni."
 10687,1,"Sikertelen a választott szervertípus használatával a szöveges listázás elemzése...\r\n"
 
 [STRINGTABLE 42]
@@ -1974,7 +1974,7 @@ COMMENT,"Magyar változat"
 11337,1,"A célfájl másolt/áthelyezett részének mérete (bájtban) nem kérhető le.\r\n"
 11338,1,"A fájl folytatása (hozzáfűzése) sikertelen (váratlan hiba).\r\n"
 11339,1,"Az egész fájl elküldésre került, de a szerver nem erősítette meg a fogadást.\r\nA fájlméret le lesz kérve (bájtban) a fájl sikeres másolásának/áthelyezésének ellenőrzéséhez.\r\n"
-11340,1,"Nem található vagy tölthetők be a titkosításhoz szükséges OpenSSL könyvtárak.\r\nA szükséges fájlok: ssleay32.dll és libeay32.dll.\r\nMind részei az Open Salamander telepítésnek."
+11340,1,"Nem található vagy tölthetők be a titkosításhoz szükséges OpenSSL könyvtárak.\r\nA szükséges fájlok: ssleay32.dll és libeay32.dll.\r\nMind részei az Sally telepítésnek."
 11342,1,"Az OpenSSL vezérlő felépítés nem foglalható le. Kevés memória."
 11343,1,"SSL HIBA: Az OpenSSL vezérlő felépítés nem foglalható le. Kevés memória.\r\n"
 

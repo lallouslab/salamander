@@ -28,7 +28,7 @@ COMMENT,"Deutsche Version"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Durchsuchen…"
-40014,1,"Salamander Verzeichnis"
+40014,1,"Sally Verzeichnis"
 40015,1,"Umgebungsvariable"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Deutsche Version"
 [STRINGTABLE 2]
 144,1,"Skript abbrechen"
 145,1,"Laufendes Skript abbrechen\tStrg+Untbr"
-146,1,"Das Fenster des Open Salamanders ist durch das Automation-Plugin blockiert. Bitte beenden Sie das laufende Skript."
+146,1,"Das Fenster des Sally ist durch das Automation-Plugin blockiert. Bitte beenden Sie das laufende Skript."
 147,1,"Fehler bei der Initialisierung des Scriptmoduls."
 
 [STRINGTABLE 3]

@@ -1536,7 +1536,7 @@ COMMENT,"Version française"
 10674,1,"Chaîne de mois texte invalide (format: 12 mois séparés par des espaces)."
 10680,1,"La condition d'autodétection contient une erreur.\n\nErreur: %s"
 10685,1,"Type de serveur inconnu, impossible d'analyser la liste texte...\r\n"
-10686,1,"Impossible d'analyser la liste des fichiers et répertoires depuis le serveur. Seul le texte de la liste sera affiché dans le panneau.\n\nVeuillez consulter nos pages web pour une nouvelle version d'Open Salamander. Si vous utilisez la dernière version, veuillez nous envoyer la liste brute (si ce n'est pas confidentiel; cliquez droit dans le panneau > Voir la liste brute > Enregistrer sous) par email à support@altap.cz. Merci de nous aider à supporter le plus grand nombre possible de types de serveurs."
+10686,1,"Impossible d'analyser la liste des fichiers et répertoires depuis le serveur. Seul le texte de la liste sera affiché dans le panneau.\n\nVeuillez consulter nos pages web pour une nouvelle version d'Sally. Si vous utilisez la dernière version, veuillez nous envoyer la liste brute (si ce n'est pas confidentiel; cliquez droit dans le panneau > Voir la liste brute > Enregistrer sous) par email à support@altap.cz. Merci de nous aider à supporter le plus grand nombre possible de types de serveurs."
 10687,1,"Impossible d'analyser la liste texte avec le type de serveur sélectionné...\r\n"
 
 [STRINGTABLE 42]
@@ -1974,7 +1974,7 @@ COMMENT,"Version française"
 11337,1,"Impossible d'obtenir la taille (en octets) de la partie déjà copiée/déplacée du fichier cible.\r\n"
 11338,1,"Impossible de reprendre (ajouter) le fichier (erreur inattendue).\r\n"
 11339,1,"Tout le fichier a été envoyé mais le serveur n'a pas confirmé sa réception.\r\nRegardez la taille du fichier (en octets) pour tester si le fichier a bien été copié/déplacé.\r\n"
-11340,1,"Impossible de trouver ou de charger les bibliothèques OpenSSL nécessaires au cryptage.\r\nLes fichiers requis sont ssleay32.dll et libeay32.dll.\r\nIls font partie de l'installation d'Open Salamander."
+11340,1,"Impossible de trouver ou de charger les bibliothèques OpenSSL nécessaires au cryptage.\r\nLes fichiers requis sont ssleay32.dll et libeay32.dll.\r\nIls font partie de l'installation d'Sally."
 11342,1,"Impossible d'allouer la structure de contrôle OpenSSL. Mémoire insuffisante."
 11343,1,"ERREUR SSL: Impossible d'allouer la structure de contrôle OpenSSL. Mémoire insuffisante.\r\n"
 

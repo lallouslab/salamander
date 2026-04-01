@@ -32,6 +32,10 @@ char QuietImportSLT[MAX_PATH] = {0};
 char QuietExportSpellChecker[MAX_PATH] = {0};
 char OpenLayoutEditorDialogID[MAX_PATH] = {0};
 BYTE* SharedMemoryCopy = NULL;
+CQuietAutomationCommandEnum QuietAutomationCommand = qacNone;
+int QuietAutomationFailureExitCode = qaecContentFailure;
+char QuietAutomationProjectFile[MAX_PATH] = {0};
+char QuietAutomationLogFile[MAX_PATH] = {0};
 
 BOOL Windows7AndLater = FALSE;
 
@@ -50,6 +54,194 @@ public:
 #pragma warning(disable : 4073)
 #pragma init_seg(lib)
 C__StrCriticalSection __StrCriticalSection;
+
+// ****************************************************************************
+
+static BOOL IsSupportedQuietAutomationSwitch(const char* arg)
+{
+    return arg != NULL &&
+           (_stricmp(arg, "-quiet-validate-all") == 0 ||
+            _stricmp(arg, "-quiet-validate-layout") == 0 ||
+            _stricmp(arg, "-quiet-import-slt") == 0 ||
+            _stricmp(arg, "-quiet-export-slt") == 0 ||
+            _stricmp(arg, "-quiet-export-slt-for-diff") == 0);
+}
+
+static void BuildQuietAutomationLogPath(const char* projectFile, char* logFile, size_t logFileSize)
+{
+    logFile[0] = 0;
+    if (projectFile == NULL || *projectFile == 0)
+        return;
+
+    char projectDir[MAX_PATH];
+    char moduleName[MAX_PATH];
+    lstrcpyn(projectDir, projectFile, _countof(projectDir));
+    lstrcpyn(moduleName, projectFile, _countof(moduleName));
+
+    char* fileName = strrchr(moduleName, '\\');
+    fileName = fileName != NULL ? fileName + 1 : moduleName;
+    char* ext = strrchr(fileName, '.');
+    if (ext != NULL)
+        *ext = 0;
+
+    char* lastSlash = strrchr(projectDir, '\\');
+    if (lastSlash != NULL)
+        *lastSlash = 0;
+    else
+        projectDir[0] = 0;
+
+    if (projectDir[0] != 0)
+    {
+        strcpy_s(logFile, logFileSize, projectDir);
+        if (logFile[strlen(logFile) - 1] != '\\')
+            strcat_s(logFile, logFileSize, "\\");
+    }
+    strcat_s(logFile, logFileSize, fileName);
+    strcat_s(logFile, logFileSize, ".quiet.log");
+}
+
+static void AddQuietAutomationLogLine(const char* text, const char* caption, UINT type)
+{
+    char message[6000];
+    if (caption != NULL && *caption != 0)
+        sprintf_s(message, "Suppressed dialog [%s]: %s", caption, text != NULL ? text : "");
+    else
+        sprintf_s(message, "Suppressed dialog: %s", text != NULL ? text : "");
+
+    int wideLen = MultiByteToWideChar(CP_ACP, 0, message, -1, NULL, 0);
+    if (wideLen <= 0)
+    {
+        OutWindow.AddLine(L"Suppressed dialog with unconvertible text.", mteError);
+        return;
+    }
+
+    wchar_t* wideMessage = (wchar_t*)malloc(wideLen * sizeof(wchar_t));
+    if (wideMessage == NULL)
+    {
+        OutWindow.AddLine(L"Suppressed dialog could not be logged due to low memory.", mteError);
+        return;
+    }
+
+    if (MultiByteToWideChar(CP_ACP, 0, message, -1, wideMessage, wideLen) == 0)
+    {
+        free(wideMessage);
+        OutWindow.AddLine(L"Suppressed dialog could not be converted to Unicode.", mteError);
+        return;
+    }
+
+    CMessageTypeEnum msgType = mteError;
+    switch (type & MB_ICONMASK)
+    {
+    case MB_ICONINFORMATION:
+        msgType = mteInfo;
+        break;
+
+    case MB_ICONQUESTION:
+        msgType = mteWarning;
+        break;
+
+    default:
+        msgType = mteError;
+        break;
+    }
+    OutWindow.AddLine(wideMessage, msgType);
+    free(wideMessage);
+}
+
+static int GetQuietAutomationDialogResult(UINT type)
+{
+    // In quiet automation, always return the safe/abort/cancel/no result.
+    // A prompt during automation means something unexpected happened;
+    // proceeding (OK/YES) would silently consent to overwrites, discards,
+    // or error-recovery branches that should surface as failures instead.
+    switch (type & MB_TYPEMASK)
+    {
+    case MB_OKCANCEL:
+        return IDCANCEL;
+
+    case MB_ABORTRETRYIGNORE:
+        return IDABORT;
+
+    case MB_YESNOCANCEL:
+        return IDCANCEL;
+
+    case MB_YESNO:
+        return IDNO;
+
+    case MB_RETRYCANCEL:
+        return IDCANCEL;
+
+    default:
+        return IDOK; // MB_OK has no cancel option
+    }
+}
+
+BOOL IsSupportedQuietAutomationActive()
+{
+    return QuietAutomationCommand != qacNone;
+}
+
+void ClearQuietAutomation()
+{
+    QuietAutomationCommand = qacNone;
+    QuietAutomationFailureExitCode = qaecContentFailure;
+    QuietAutomationProjectFile[0] = 0;
+    QuietAutomationLogFile[0] = 0;
+}
+
+void PrepareQuietAutomation(CQuietAutomationCommandEnum command, const char* projectFile)
+{
+    ClearQuietAutomation();
+    QuietAutomationCommand = command;
+    QuietAutomationFailureExitCode = qaecContentFailure;
+
+    if (projectFile != NULL)
+        lstrcpyn(QuietAutomationProjectFile, projectFile, _countof(QuietAutomationProjectFile));
+    BuildQuietAutomationLogPath(QuietAutomationProjectFile, QuietAutomationLogFile, _countof(QuietAutomationLogFile));
+    if (QuietAutomationLogFile[0] != 0)
+        DeleteFile(QuietAutomationLogFile);
+}
+
+void SetQuietAutomationFailureExitCode(int exitCode)
+{
+    if (IsSupportedQuietAutomationActive() && exitCode > QuietAutomationFailureExitCode)
+        QuietAutomationFailureExitCode = exitCode;
+}
+
+BOOL QuietAutomationEnsureDirectory(const char* path)
+{
+    if (path == NULL || *path == 0)
+        return FALSE;
+
+    DWORD attrs = GetFileAttributes(path);
+    if (attrs != INVALID_FILE_ATTRIBUTES)
+        return (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+    int result = SHCreateDirectoryEx(FrameWindow.HWindow, path, NULL);
+    return result == ERROR_SUCCESS || result == ERROR_FILE_EXISTS || result == ERROR_ALREADY_EXISTS;
+}
+
+void QuietAutomationExit(int exitCode)
+{
+    if (IsSupportedQuietAutomationActive() && QuietAutomationLogFile[0] != 0)
+    {
+        if (!OutWindow.WriteTextLog(QuietAutomationLogFile) && exitCode == qaecSuccess)
+            exitCode = qaecRuntimeFailure;
+    }
+
+    if (FrameWindow.HWindow != NULL && IsWindow(FrameWindow.HWindow))
+        DestroyWindow(FrameWindow.HWindow);
+    ExitProcess(exitCode);
+}
+
+int TranslatorMessageBox(HWND hWnd, const char* text, const char* caption, UINT type)
+{
+    if (!IsSupportedQuietAutomationActive())
+        return MessageBoxA(hWnd, text, caption, type);
+
+    AddQuietAutomationLogLine(text, caption, type);
+    return GetQuietAutomationDialogResult(type);
+}
 
 // ****************************************************************************
 
@@ -584,8 +776,8 @@ WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine, int cmd
     Windows7AndLater = SalIsWindowsVersionOrGreater(6, 1, 0);
     if (!Windows7AndLater)
     {
-        MessageBox(NULL, "Translator needs Windows 7 or later.",
-                   FRAMEWINDOW_NAME, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(NULL, "Translator needs Windows 7 or later.",
+                             FRAMEWINDOW_NAME, MB_OK | MB_ICONEXCLAMATION);
         return 1;
     }
 
@@ -627,11 +819,17 @@ WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine, int cmd
         HACCEL hAccelTableLayout = HANDLES(LoadAccelerators(HInstance,
                                                             MAKEINTRESOURCE(IDA_LAYOUTACCELS)));
 
-        char buf[MAX_PATH];
         char* argv[20];
         int p = 20; // number of available elements in argv
         BOOL cmdLineParamsUsed = FALSE;
-        if (GetCmdLine(buf, MAX_PATH, argv, p, cmdLine))
+        int cmdLineExitCode = -1;
+        int cmdLineLen = lstrlen(cmdLine) + 1;
+        char* buf = (char*)malloc(cmdLineLen);
+        if (buf == NULL)
+        {
+            TRACE_E("Low memory");
+        }
+        else if (GetCmdLine(buf, cmdLineLen, argv, p, cmdLine))
         {
             if (p > 0)
             {
@@ -650,42 +848,45 @@ WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine, int cmd
                         _stricmp(argv[0], "-open-layout-editor") != 0 ||
                     p > 3)
                 {
-                    MessageBox(FrameWindow.HWindow, "Unexpected command line arguments.\n\n"
-                                                    "Usage: translator.exe [switch] [switch_param] project.atp \n\n"
-                                                    "Switches:\n"
-                                                    "-quiet-validate-all: validates translation (using all tests) "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-validate-layout: validates dialog layout "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-import: imports old translation from [importdir] directory "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-import-only-dialog-layout: imports only dialog layouts from old translation "
-                                                    "(useful e.g. to import dialog layouts from Czech version to Slovak version) "
-                                                    "from [importdir] directory and if all is OK, closes Translator "
-                                                    "automatically.\n\n"
-                                                    "-quiet-import-trlprop: imports translation properties from another [project]"
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-export-slt: exports translation to SLT text archive "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-import-slt: imports translation from SLT text archive "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-export-slt-for-diff: exports translation to special SLT "
-                                                    "text archive which does not contain version info (allows to "
-                                                    "compare data between different versions) "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-export-spellcheck: exports texts for spell checker to text file "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-quiet-translate: searches for untranslated strings "
-                                                    "and if nothing is found or module is completely untranslated, "
-                                                    "closes Translator automatically.\n\n"
-                                                    "-quiet-mark-changed-as-translated: marks all untranslated but changed strings "
-                                                    "as translated.\n\n"
-                                                    "-quiet-export-sizes: exports sizes of dialogs and controls to SDC text file "
-                                                    "and if all is OK, closes Translator automatically.\n\n"
-                                                    "-open-layout-editor: opens layout editor for [dialogid] dialog,"
-                                                    "on layout editor exit closes Translator.\n\n"
-                                                    "Project file (project.atp) must exist.\n\n",
-                               FRAMEWINDOW_NAME, MB_OK | MB_ICONINFORMATION);
+                    if (p > 0 && IsSupportedQuietAutomationSwitch(argv[0]))
+                        cmdLineExitCode = qaecRuntimeFailure;
+                    else
+                        TranslatorMessageBox(FrameWindow.HWindow, "Unexpected command line arguments.\n\n"
+                                                                  "Usage: translator.exe [switch] [switch_param] project.atp \n\n"
+                                                                  "Switches:\n"
+                                                                  "-quiet-validate-all: validates translation (using all tests) "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-validate-layout: validates dialog layout "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-import: imports old translation from [importdir] directory "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-import-only-dialog-layout: imports only dialog layouts from old translation "
+                                                                  "(useful e.g. to import dialog layouts from Czech version to Slovak version) "
+                                                                  "from [importdir] directory and if all is OK, closes Translator "
+                                                                  "automatically.\n\n"
+                                                                  "-quiet-import-trlprop: imports translation properties from another [project]"
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-export-slt: exports translation to SLT text archive "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-import-slt: imports translation from SLT text archive "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-export-slt-for-diff: exports translation to special SLT "
+                                                                  "text archive which does not contain version info (allows to "
+                                                                  "compare data between different versions) "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-export-spellcheck: exports texts for spell checker to text file "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-quiet-translate: searches for untranslated strings "
+                                                                  "and if nothing is found or module is completely untranslated, "
+                                                                  "closes Translator automatically.\n\n"
+                                                                  "-quiet-mark-changed-as-translated: marks all untranslated but changed strings "
+                                                                  "as translated.\n\n"
+                                                                  "-quiet-export-sizes: exports sizes of dialogs and controls to SDC text file "
+                                                                  "and if all is OK, closes Translator automatically.\n\n"
+                                                                  "-open-layout-editor: opens layout editor for [dialogid] dialog,"
+                                                                  "on layout editor exit closes Translator.\n\n"
+                                                                  "Project file (project.atp) must exist.\n\n",
+                                             FRAMEWINDOW_NAME, MB_OK | MB_ICONINFORMATION);
                 }
                 else
                 {
@@ -693,6 +894,14 @@ WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine, int cmd
                     cmdLineParamsUsed = TRUE;
                 }
             }
+        }
+        free(buf);
+
+        if (cmdLineExitCode != -1)
+        {
+            DestroyWindow(FrameWindow.HWindow);
+            TRACE_I("End.");
+            return cmdLineExitCode;
         }
 
         if (Config.FrameWindowPlacement.length == 0) // on first launch maximize and arrange child windows

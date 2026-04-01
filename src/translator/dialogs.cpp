@@ -241,7 +241,7 @@ CNewDialog::Validate(CTransferInfo &ti)
       {
         DWORD err = GetLastError();
         sprintf_s(errtext, "Error opening Resource Symbols file %s.\n%s", include, GetErrorText(err));
-        MessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         ti.ErrorOn(IDC_NEW_INCLUDE);
       }
     }
@@ -249,7 +249,7 @@ CNewDialog::Validate(CTransferInfo &ti)
     {
       DWORD err = GetLastError();
       sprintf_s(errtext, "Error opening Translated file %s.\n%s", target, GetErrorText(err));
-      MessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+      TranslatorMessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
       ti.ErrorOn(IDC_NEW_DESTINATION);
     }
     CloseHandle(hSource);
@@ -258,7 +258,7 @@ CNewDialog::Validate(CTransferInfo &ti)
   {
     DWORD err = GetLastError();
     sprintf_s(errtext, "Error opening Original file %s.\n%s", source, GetErrorText(err));
-    MessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+    TranslatorMessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
     ti.ErrorOn(IDC_NEW_ORIGINAL);
   }
 }
@@ -410,14 +410,14 @@ void CPropertiesDialog::Validate(CTransferInfo& ti)
     CTransferInfo_EditLineW(&ti, IDC_PRP_AUTHOR, buff, 500);
     if (lstrlenW(buff) == 0)
     {
-        MessageBox(HWindow, "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(HWindow, "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         ti.ErrorOn(IDC_PRP_AUTHOR);
     }
 
     CTransferInfo_EditLineW(&ti, IDC_PRP_WEB, buff, 500);
     if (lstrlenW(buff) == 0)
     {
-        MessageBox(HWindow, "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(HWindow, "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         ti.ErrorOn(IDC_PRP_WEB);
     }
 
@@ -428,7 +428,7 @@ void CPropertiesDialog::Validate(CTransferInfo& ti)
         CTransferInfo_EditLineW(&ti, IDC_PRP_HELPDIR, buff, 100);
         if (lstrlenW(buff) == 0)
         {
-            MessageBox(HWindow, "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(HWindow, "Empty string is not allowed here.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             ti.ErrorOn(IDC_PRP_HELPDIR);
         }
     }
@@ -614,7 +614,7 @@ void CImportDialog ::Validate(CTransferInfo& ti)
     {
         DWORD err = GetLastError();
         sprintf_s(errtext, "Error opening project file %s.\n%s", project, GetErrorText(err));
-        MessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         ti.ErrorOn(IDC_NEW_ORIGINAL);
     }
 
@@ -634,7 +634,7 @@ void CImportDialog ::Validate(CTransferInfo& ti)
     {
       DWORD err = GetLastError();
       sprintf_s(errtext, "Error opening translated file %s.\n%s", translated, GetErrorText(err));
-      MessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+      TranslatorMessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
       ti.ErrorOn(IDC_NEW_DESTINATION);
     }
     CloseHandle(hSource);
@@ -643,7 +643,7 @@ void CImportDialog ::Validate(CTransferInfo& ti)
   {
     DWORD err = GetLastError();
     sprintf_s(errtext, "Error opening original file %s.\n%s", original, GetErrorText(err));
-    MessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+    TranslatorMessageBox(HWindow, errtext, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
     ti.ErrorOn(IDC_NEW_ORIGINAL);
   }
   */
@@ -1040,7 +1040,7 @@ void CSetSizeDialog::Validate(CTransferInfo& ti)
     ti.EditLine(IDC_SETSIZE_WIDTH_EL, wedit);
     if (w && wedit < 1)
     {
-        MessageBox(HWindow, "Enter valid width value.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(HWindow, "Enter valid width value.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         ti.ErrorOn(IDC_SETSIZE_WIDTH_EL);
     }
 
@@ -1052,7 +1052,7 @@ void CSetSizeDialog::Validate(CTransferInfo& ti)
         ti.EditLine(IDC_SETSIZE_HEIGHT_EL, hedit);
         if (h && hedit < 1)
         {
-            MessageBox(HWindow, "Enter valid height value.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(HWindow, "Enter valid height value.", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             ti.ErrorOn(IDC_SETSIZE_HEIGHT_EL);
         }
     }

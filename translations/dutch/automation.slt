@@ -28,7 +28,7 @@ COMMENT,"Nederlandse versie"
 [MENU 106]
 0,1,"[POPUP]"
 40013,1,"Bladeren…"
-40014,1,"Salamander map"
+40014,1,"Sally map"
 40015,1,"Omgevingsvariabele"
 
 [STRINGTABLE 0]
@@ -56,7 +56,7 @@ COMMENT,"Nederlandse versie"
 [STRINGTABLE 2]
 144,1,"Script afbreken"
 145,1,"Uitgevoerd script afbreken\tCtrl+Break"
-146,1,"Open Salamander venster is vergrendeld door de Automatisering plugin. Laat de script uitvoering voltooien a.u.b."
+146,1,"Sally venster is vergrendeld door de Automatisering plugin. Laat de script uitvoering voltooien a.u.b."
 147,1,"Initialiseren van het scriptengine mislukt."
 
 [STRINGTABLE 3]

@@ -281,6 +281,78 @@ int COutWindow::GetInfoLines()
     return info;
 }
 
+BOOL COutWindow::WriteTextLog(const char* fileName)
+{
+    HANDLE hFile = HANDLES_Q(CreateFile(fileName, GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL));
+    if (hFile == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    BOOL ret = TRUE;
+    DWORD written = 0;
+    const BYTE utf8Bom[] = {0xEF, 0xBB, 0xBF};
+    ret &= WriteFile(hFile, utf8Bom, sizeof(utf8Bom), &written, NULL) != FALSE && written == sizeof(utf8Bom);
+
+    for (int i = 0; ret && i < OutLines.Count; i++)
+    {
+        const char* prefix = "[INFO] ";
+        switch (OutLines[i].MsgType)
+        {
+        case mteWarning:
+            prefix = "[WARNING] ";
+            break;
+
+        case mteError:
+            prefix = "[ERROR] ";
+            break;
+
+        case mteSummary:
+            prefix = "[SUMMARY] ";
+            break;
+
+        default:
+            break;
+        }
+
+        int prefixLen = lstrlen(prefix);
+        ret &= WriteFile(hFile, prefix, prefixLen, &written, NULL) != FALSE && written == (DWORD)prefixLen;
+        if (!ret)
+            break;
+
+        int utf8Len = WideCharToMultiByte(CP_UTF8, 0, OutLines[i].Text, -1, NULL, 0, NULL, NULL);
+        if (utf8Len <= 0)
+        {
+            ret = FALSE;
+            break;
+        }
+
+        char* utf8Text = (char*)malloc(utf8Len);
+        if (utf8Text == NULL)
+        {
+            ret = FALSE;
+            break;
+        }
+
+        if (WideCharToMultiByte(CP_UTF8, 0, OutLines[i].Text, -1, utf8Text, utf8Len, NULL, NULL) == 0)
+            ret = FALSE;
+        else
+        {
+            int textLen = utf8Len - 1;
+            ret &= WriteFile(hFile, utf8Text, textLen, &written, NULL) != FALSE && written == (DWORD)textLen;
+        }
+
+        free(utf8Text);
+        if (!ret)
+            break;
+
+        static const char lineEnd[] = "\r\n";
+        ret &= WriteFile(hFile, lineEnd, 2, &written, NULL) != FALSE && written == 2;
+    }
+
+    HANDLES(CloseHandle(hFile));
+    return ret;
+}
+
 void COutWindow::FocusLastItem()
 {
     int index = ListView_GetItemCount(HListView);

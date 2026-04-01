@@ -34,5 +34,5 @@ COMMENT,"Nederlandse versie"
 10104,1,"Informatie weergeven over de Portable Executable bestanden zoals EXE, DLL, etc."
 
 [STRINGTABLE 2]
-10118,1,"Geen geselecteerde Portable Executable sectie werd in plugin configuratie gevonden.\nGebruik menu Opties > Plugin Configuratie > Portable Executable Viewer\nin Open Salamander hoofdvenster om zichtbare secties te installeren."
+10118,1,"Geen geselecteerde Portable Executable sectie werd in plugin configuratie gevonden.\nGebruik menu Opties > Plugin Configuratie > Portable Executable Viewer\nin Sally hoofdvenster om zichtbare secties te installeren."
 

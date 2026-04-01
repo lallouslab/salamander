@@ -38,6 +38,24 @@ jobs:
       - name: Build RelWithDebInfo
         run: cmake --build build --config RelWithDebInfo --target populate -j
 
+      - name: Build host translator (cross-architecture language pack support)
+        if: matrix.arch == 'ARM64'
+        run: |
+          cmake -B build-host -A x64 -DSAL_UNDER_CI=ON -DSAL_BUILD_DEMOPLUG=OFF
+          cmake --build build-host --config RelWithDebInfo --target translator -j
+
+      - name: Build language packs
+        run: |
+          $outputRoot = "build/out/sally/RelWithDebInfo_${{ matrix.arch }}"
+          $args = @(
+            '-BuildRoot', $outputRoot,
+            '-SkipValidation'
+          )
+          if ('${{ matrix.arch }}' -eq 'ARM64') {
+            $args += '-TranslatorExe', 'build-host/out/sally/RelWithDebInfo_x64/utils/translator.exe'
+          }
+          & .\tools\localization\build_language_packs.ps1 @args
+
       - name: Create runtime zip and collect symbols
         run: |
           $version = "${{ github.ref_name }}"
@@ -64,6 +82,39 @@ jobs:
           Write-Host "Created runtime package: $runtimeZip"
           Write-Host "Collected symbols in: $pdbDir"
 
+      - name: Create translator workspace zip
+        if: matrix.arch == 'x64'
+        run: |
+          $version = "${{ github.ref_name }}"
+          $outputRoot = "build/out/sally/RelWithDebInfo_${{ matrix.arch }}"
+          $workspaceDir = Join-Path $env:RUNNER_TEMP "sally-translator-workspace"
+          $workspaceToolsDir = Join-Path $workspaceDir "tools\localization"
+          $workspaceDocDir = Join-Path $workspaceDir "doc"
+
+          Remove-Item -Recurse -Force $workspaceDir -ErrorAction SilentlyContinue
+
+          & .\tools\localization\prepare_translation_workspace.ps1 `
+            -BuildRoot $outputRoot `
+            -OutputDir $workspaceDir `
+            -ImportArchives `
+            -Force
+
+          New-Item -ItemType Directory -Path $workspaceToolsDir,$workspaceDocDir -Force | Out-Null
+          Copy-Item -Path .\tools\localization\*.ps1 -Destination $workspaceToolsDir -Force
+          Copy-Item -Path .\doc\LOCALIZATION.md -Destination $workspaceDocDir -Force
+
+          $workspaceZip = "Sally-$version-translator-workspace.zip"
+          Compress-Archive -Path "$workspaceDir\*" -DestinationPath $workspaceZip
+          Write-Host "Created translator workspace package: $workspaceZip"
+
+      - name: Upload translator workspace failure artifact
+        if: failure() && matrix.arch == 'x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sally-translator-workspace-failure
+          path: ${{ runner.temp }}/sally-translator-workspace/
+          if-no-files-found: ignore
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -71,6 +122,13 @@ jobs:
           path: |
             Sally-${{ github.ref_name }}-${{ matrix.arch }}.zip
             pdb-${{ matrix.arch }}/
+
+      - name: Upload translator workspace artifact
+        if: matrix.arch == 'x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sally-translator-workspace
+          path: Sally-${{ github.ref_name }}-translator-workspace.zip
 
   release:
     name: Create Release

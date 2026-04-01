@@ -4,7 +4,7 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/0xeb/sally/pr-msbuild.yml?label=build)](https://github.com/0xeb/sally/actions)
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 
-A fast, modern dual-panel file manager for Windows — fork of Open Salamander with Unicode, long paths, and ARM64 support.
+A fast, modern dual-panel file manager for Windows — fork of [Open Salamander](https://github.com/OpenSalamander/salamander) with Unicode, long paths, and ARM64 support.
 
 <!-- Screenshot: this is the classic annotated UI image from the help docs. Replace with a fresh Windows 11 screenshot when available. -->
 <p align="center">
@@ -82,6 +82,8 @@ ctest --test-dir build -C Debug --output-on-failure
 ## Contributing
 
 Contributions are welcome! See the [Developer Guide](doc/DEV.md) for repository structure and internals.
+
+If you want to help with UI translations and language packs, see the [Localization Guide](doc/LOCALIZATION.md).
 
 ## License
 

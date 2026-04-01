@@ -1536,7 +1536,7 @@ COMMENT,"Česká verze"
 10674,1,"Neplatný řetězec s textem měsíců (formát: 12 měsíců se odděluje mezerou)."
 10680,1,"Stav automatické detekce obsahuje chybu.\n\nChyba: %s"
 10685,1,"Neznámý typ serveru, nelze analyzovat text výpisu...\r\n"
-10686,1,"Nelze analyzovat výpis souborů a adresářů ze serveru. V panelu bude zobrazen jen čistý text výpisu.\n\nProsím zkontrolujte naše web stránky pro novější verzi Open Salamanderu. Pokud používáte poslední verzi, prosím zašlete nám raw výpis (pokud není důvěrný; pravý klik v panelu > Zobrazit Raw výpis > Uložit jako) na e-mail support@altap.cz. Prosím pomozte nám s podporou dalších typů serverů, pokud je to možné."
+10686,1,"Nelze analyzovat výpis souborů a adresářů ze serveru. V panelu bude zobrazen jen čistý text výpisu.\n\nProsím zkontrolujte naše web stránky pro novější verzi Sally. Pokud používáte poslední verzi, prosím zašlete nám raw výpis (pokud není důvěrný; pravý klik v panelu > Zobrazit Raw výpis > Uložit jako) na e-mail support@altap.cz. Prosím pomozte nám s podporou dalších typů serverů, pokud je to možné."
 10687,1,"Nelze analyzovat text výpisu používající vybraný typ serveru...\r\n"
 
 [STRINGTABLE 42]
@@ -1974,7 +1974,7 @@ COMMENT,"Česká verze"
 11337,1,"Nelze získat velikost (v bajtech) již zkopírované/přesunuté části cílového souboru.\r\n"
 11338,1,"Nelze pokračovat v přenosu souboru (neočekávaná chyba).\r\n"
 11339,1,"Byl odeslán celý soubor, ale server nepotvrdil jeho přijetí.\r\nChystám se získat velikost souboru (v bajtech), pro test úspěšného kopírování/přesunutí souboru.\r\n"
-11340,1,"Nelze najít nebo zavést OpenSSL knihovny potřebné pro šifrování.\r\nPotřebné soubory jsou ssleay32.dll a libeay32.dll.\r\nJsou součástí instalace Open Salamandera."
+11340,1,"Nelze najít nebo zavést OpenSSL knihovny potřebné pro šifrování.\r\nPotřebné soubory jsou ssleay32.dll a libeay32.dll.\r\nJsou součástí instalace Sally."
 11342,1,"Nelze přiřadit OpenSSL řídící strukturu. Mimo paměť."
 11343,1,"SSL CHYBA: Nelze přiřadit OpenSSL řídící strukturu. Mimo paměť.\r\n"
 

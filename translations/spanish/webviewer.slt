@@ -11,7 +11,7 @@ COMMENT,"Versión en español"
 
 [STRINGTABLE 0]
 10100,1,"Visor de Internet Explorer"
-10101,0,"Unable to open Internet Explorer Viewer.\nPlease report this problem to support@altap.cz."
+10101,1,"No se puede abrir el Visor de Internet Explorer.\nPor favor, informe de este problema a support@altap.cz."
 10102,1,"Error"
 10103,1,"Visor ligero para HTML y XML basado en Internet Explorer."
 10105,1,"Acerca del Plugin"

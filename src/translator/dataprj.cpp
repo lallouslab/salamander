@@ -303,9 +303,10 @@ BOOL GetFileCRC(const char* fileName, DWORD* crc)
                                         OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
     if (hFile == INVALID_HANDLE_VALUE)
     {
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error reading file %s.\n%s", fileName, GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         swprintf_s(outputBuff, L"Getting CRC32 of existing SLT file FAILED.");
         OutWindow.AddLine(outputBuff, mteError);
         return FALSE;
@@ -314,8 +315,9 @@ BOOL GetFileCRC(const char* fileName, DWORD* crc)
     DWORD size = GetFileSize(hFile, NULL);
     if (size == 0xFFFFFFFF || size == 0)
     {
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         sprintf_s(buf, "Error reading file %s.", fileName);
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         HANDLES(CloseHandle(hFile));
         swprintf_s(outputBuff, L"Getting CRC32 of existing SLT file FAILED.");
         OutWindow.AddLine(outputBuff, mteError);
@@ -325,6 +327,7 @@ BOOL GetFileCRC(const char* fileName, DWORD* crc)
     char* data = (char*)malloc(size + 2);
     if (data == NULL)
     {
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         TRACE_E("Nedostatek pameti");
         HANDLES(CloseHandle(hFile));
         swprintf_s(outputBuff, L"Getting CRC32 of existing SLT file FAILED.");
@@ -335,9 +338,10 @@ BOOL GetFileCRC(const char* fileName, DWORD* crc)
     DWORD read;
     if (!ReadFile(hFile, data, size, &read, NULL) || read != size)
     {
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error reading file %s.\n%s", fileName, GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         free(data);
         HANDLES(CloseHandle(hFile));
         swprintf_s(outputBuff, L"Getting CRC32 of existing SLT file FAILED.");
@@ -387,7 +391,7 @@ BOOL CData::ProcessProjectLine(CProjectSectionEnum* section, const char* line, i
         {
             char errbuf[MAX_PATH + 100];
             sprintf_s(errbuf, "Error reading Project.\nSyntax error on line %d", row);
-            MessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+            TranslatorMessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
         return TRUE;
@@ -402,7 +406,7 @@ BOOL CData::ProcessProjectLine(CProjectSectionEnum* section, const char* line, i
     {
         char errbuf[MAX_PATH + 100];
         sprintf_s(errbuf, "Error reading Project.\nSyntax error on line %d", row);
-        MessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
 
@@ -556,7 +560,7 @@ BOOL CData::ProcessProjectLine(CProjectSectionEnum* section, const char* line, i
             {
                 char errbuf[MAX_PATH + 100];
                 sprintf_s(errbuf, "Error reading Project.\nSyntax error on line %d", row);
-                MessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+                TranslatorMessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
                 return FALSE;
             }
             int state = atoi(p);
@@ -583,7 +587,7 @@ BOOL CData::ProcessProjectLine(CProjectSectionEnum* section, const char* line, i
             {
                 char errbuf[MAX_PATH + 100];
                 sprintf_s(errbuf, "Error reading Project.\nSyntax error on line %d", row);
-                MessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+                TranslatorMessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
                 return FALSE;
             }
             AddRelayout(LOWORD(id));
@@ -593,7 +597,7 @@ BOOL CData::ProcessProjectLine(CProjectSectionEnum* section, const char* line, i
 
     char errbuf[MAX_PATH + 100];
     sprintf_s(errbuf, "Error reading Project.\nSyntax error on line %d", row);
-    MessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+    TranslatorMessageBox(GetMsgParent(), errbuf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
     return FALSE;
 }
 
@@ -606,9 +610,10 @@ BOOL CData::LoadProject(const char* fileName)
     if (hFile == INVALID_HANDLE_VALUE)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error opening file %s.\n%s", fileName, GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
 
@@ -616,8 +621,9 @@ BOOL CData::LoadProject(const char* fileName)
     if (size == 0xFFFFFFFF || size == 0)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         sprintf_s(buf, "Error reading file %s.", fileName);
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         HANDLES(CloseHandle(hFile));
         return FALSE;
     }
@@ -625,6 +631,7 @@ BOOL CData::LoadProject(const char* fileName)
     char* data = (char*)malloc(size + 1);
     if (data == NULL)
     {
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         TRACE_E("Nedostatek pameti");
         HANDLES(CloseHandle(hFile));
         return FALSE;
@@ -634,9 +641,10 @@ BOOL CData::LoadProject(const char* fileName)
     if (!ReadFile(hFile, data, size, &read, NULL) || read != size)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error reading file %s.\n%s", fileName, GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         free(data);
         HANDLES(CloseHandle(hFile));
         return FALSE;
@@ -695,9 +703,10 @@ BOOL CData::WriteProjectLine(HANDLE hFile, const char* line)
     if (!WriteFile(hFile, line, len, &written, NULL) || written != len)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing project file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     const char* buff = "\r\n";
@@ -705,9 +714,10 @@ BOOL CData::WriteProjectLine(HANDLE hFile, const char* line)
     if (!WriteFile(hFile, buff, len, &written, NULL) || written != len)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing project file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     return TRUE;
@@ -722,9 +732,10 @@ BOOL CData::WriteUnicodeBOM(HANDLE hFile)
     if (!WriteFile(hFile, &data, len, &written, NULL) || written != len)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing unicode text file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     return TRUE;
@@ -739,9 +750,10 @@ BOOL CData::WriteUTF8BOM(HANDLE hFile, DWORD* fileCRC32)
     if (!WriteFile(hFile, data, len, &written, NULL) || written != len)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing UTF-8 BOM file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     *fileCRC32 = UpdateCrc32(data, len, *fileCRC32);
@@ -757,7 +769,7 @@ CData::VerifyBOM(WORD bom)
     char buf[MAX_PATH + 100];
     DWORD err = GetLastError();
     sprintf_s(buf, "Wrong BOM in the unicode text file.\n%s", GetErrorText(err));
-    MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+    TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
     return FALSE;
   }
   return TRUE;
@@ -770,9 +782,10 @@ BOOL CData::WriteUnicodeTextLine(HANDLE hFile, const wchar_t* line)
     if (!WriteFile(hFile, line, len * 2, &written, NULL) || written != len * 2)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing unicode text file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     const wchar_t* buff = L"\r\n";
@@ -780,9 +793,10 @@ BOOL CData::WriteUnicodeTextLine(HANDLE hFile, const wchar_t* line)
     if (!WriteFile(hFile, buff, len * 2, &written, NULL) || written != len * 2)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing unicode text file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     return TRUE;
@@ -798,9 +812,10 @@ BOOL CData::WriteUTF8TextLine(HANDLE hFile, const wchar_t* line, DWORD* fileCRC3
     if (!WriteFile(hFile, utf8Line, len, &written, NULL) || written != len)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing unicode text file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     *fileCRC32 = UpdateCrc32(utf8Line, len, *fileCRC32);
@@ -809,9 +824,10 @@ BOOL CData::WriteUTF8TextLine(HANDLE hFile, const wchar_t* line, DWORD* fileCRC3
     if (!WriteFile(hFile, buff, len, &written, NULL) || written != len)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing unicode text file.\n%s", GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     *fileCRC32 = UpdateCrc32(buff, len, *fileCRC32);
@@ -825,9 +841,10 @@ BOOL CData::SaveProject()
     if (hFile == INVALID_HANDLE_VALUE)
     {
         char buf[MAX_PATH + 100];
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
         DWORD err = GetLastError();
         sprintf_s(buf, "Error writing file %s.\n%s", ProjectFile, GetErrorText(err));
-        MessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        TranslatorMessageBox(GetMsgParent(), buf, ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
 
@@ -1040,7 +1057,8 @@ BOOL CData::AddTranslationState(CTranslationTypeEnum type, WORD id1, WORD id2, W
     states->Insert(index + offset, item);
     if (!states->IsGood())
     {
-        MessageBox(GetMsgParent(), "Out of memory", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
+        SetQuietAutomationFailureExitCode(qaecRuntimeFailure);
+        TranslatorMessageBox(GetMsgParent(), "Out of memory", ERROR_TITLE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
     return TRUE;
