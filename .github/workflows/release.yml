@@ -46,15 +46,14 @@ jobs:
 
       - name: Build language packs
         run: |
-          $outputRoot = "build/out/sally/RelWithDebInfo_${{ matrix.arch }}"
-          $args = @(
-            '-BuildRoot', $outputRoot,
-            '-SkipValidation'
-          )
-          if ('${{ matrix.arch }}' -eq 'ARM64') {
-            $args += '-TranslatorExe', 'build-host/out/sally/RelWithDebInfo_x64/utils/translator.exe'
+          $splat = @{
+            BuildRoot = "build/out/sally/RelWithDebInfo_${{ matrix.arch }}"
+            SkipValidation = $true
           }
-          & .\tools\localization\build_language_packs.ps1 @args
+          if ('${{ matrix.arch }}' -eq 'ARM64') {
+            $splat['TranslatorExe'] = 'build-host/out/sally/RelWithDebInfo_x64/utils/translator.exe'
+          }
+          & .\tools\localization\build_language_packs.ps1 @splat
 
       - name: Create runtime zip and collect symbols
         run: |
