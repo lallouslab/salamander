@@ -12,7 +12,9 @@ param(
 
     [switch]$ImportArchives,
 
-    [switch]$Force
+    [switch]$Force,
+
+    [string]$TranslatorExe
 )
 
 Set-StrictMode -Version Latest
@@ -547,12 +549,14 @@ if (-not (Test-Path -LiteralPath (Join-Path $buildRootPath "sally.exe")))
     throw "Build root '$buildRootPath' does not look like a populated Sally output directory."
 }
 
-if (-not (Test-Path -LiteralPath (Join-Path $buildRootPath "utils\\translator.exe")))
+if (-not $TranslatorExe)
 {
-    throw "Build root '$buildRootPath' is missing utils\\translator.exe."
+    $buildTranslator = Join-Path $buildRootPath "utils\\translator.exe"
+    if (-not (Test-Path -LiteralPath $buildTranslator))
+    {
+        throw "Build root '$buildRootPath' is missing utils\\translator.exe."
+    }
 }
-
-$translatorMachine = Get-PortableExecutableMachine -Path (Join-Path $buildRootPath "utils\\translator.exe")
 
 if (Test-Path -LiteralPath $outputDirPath)
 {
@@ -640,7 +644,11 @@ foreach ($module in $selectedModules)
     }
 }
 
-$translatorExe = Join-Path $runtimeRoot "utils\\translator.exe"
+if ($TranslatorExe) {
+    $translatorExe = $TranslatorExe
+} else {
+    $translatorExe = Join-Path $runtimeRoot "utils\\translator.exe"
+}
 $generatedProjects = 0
 $importedArchives = 0
 $importFailures = New-Object System.Collections.Generic.List[string]

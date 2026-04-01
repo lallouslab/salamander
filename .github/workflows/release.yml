@@ -49,6 +49,7 @@ jobs:
           $splat = @{
             BuildRoot = "build/out/sally/RelWithDebInfo_${{ matrix.arch }}"
             SkipValidation = $true
+            AllowSeedRejections = $true
           }
           if ('${{ matrix.arch }}' -eq 'ARM64') {
             $splat['TranslatorExe'] = 'build-host/out/sally/RelWithDebInfo_x64/utils/translator.exe'

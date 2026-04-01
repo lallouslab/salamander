@@ -124,12 +124,18 @@ if (Test-Path -LiteralPath $WorkspaceDir)
 # Generate workspace with archive import
 Write-Host ""
 Write-Host "Generating translator workspace..."
-& $prepareScript `
-    -BuildRoot $buildRootFull `
-    -OutputDir $WorkspaceDir `
-    -Languages ($requestedLanguages -join ",") `
-    -ImportArchives `
-    -Force
+$prepareArgs = @{
+    BuildRoot = $buildRootFull
+    OutputDir = $WorkspaceDir
+    Languages = ($requestedLanguages -join ",")
+    ImportArchives = $true
+    Force = $true
+}
+if ($TranslatorExe)
+{
+    $prepareArgs['TranslatorExe'] = (Resolve-Path -LiteralPath $TranslatorExe).Path
+}
+& $prepareScript @prepareArgs
 
 if ((Test-Path variable:LASTEXITCODE) -and $LASTEXITCODE -ne 0)
 {
