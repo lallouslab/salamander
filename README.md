@@ -18,20 +18,17 @@ Sally is an independent fork of [Open Salamander](https://github.com/OpenSalaman
 ## What's New
 
 **Unicode & Long Path Support**
-- Wide-primary Win32 API wrappers (`W`-suffix) for all file operations
-- `CPathBuffer` replaces `char[MAX_PATH]` buffers — supports up to 32,767-character paths
-- 100+ unit and integration tests covering long paths, Unicode filenames, and edge cases
+- Full Unicode filename support for all file operations
+- Long path support — up to 32,767 characters
 
 **Modern Build System**
 - Complete CMake port — all 25+ plugins, trace server, translator, and shell extension
-- Native x64, x86, and ARM64 targets; clang-cl cross-compilation support
+- Native x64, x86, and ARM64 targets
 - GitHub Actions CI/CD with automated releases
 
 **Architecture Improvements**
-- `IPrompter` interface decouples UI dialogs from file operation logic
-- `IWorkerObserver` enables headless I/O testing without a GUI
+- Decoupled UI dialogs from file operation logic for better testability
 - WebView2 markdown viewer replaces the legacy IE WebBrowser control
-- Plugin naming standardized: `ieviewer` renamed to `webviewer` to match its WebView2 implementation
 
 **Localization**
 - 10 languages included: Chinese (Simplified), Czech, Dutch, French, German, Hungarian, Romanian, Russian, Slovak, Spanish
@@ -40,7 +37,7 @@ Sally is an independent fork of [Open Salamander](https://github.com/OpenSalaman
 
 **Platform & Compatibility**
 - ARM64 native build for Windows on ARM
-- Runs under Wine on Linux (`imageres.dll` dependency made optional)
+- Runs under Wine on Linux
 - Consent-based loading of legacy Altap Salamander 4.0 plugins
 
 ## Downloads
@@ -68,21 +65,6 @@ cmake --build build --config RelWithDebInfo --target populate
 Output: `build/out/sally/<Config>_<Arch>/`
 
 When you run Sally from `build/out`, rebuild and repopulate that exact configuration first. For example, use `cmake --build build --config Release --target populate` before launching `build/out/sally/Release_x64/` so plugin DLLs and `.slg` language files stay in sync.
-
-### Other Architectures
-
-| Preset | Description |
-|--------|-------------|
-| `cmake --preset msvc` | Native MSVC x64 (default) |
-| `cmake --preset msvc-arm64` | Native MSVC ARM64 |
-| `cmake --preset x64` | clang-cl x64 cross-compile |
-| `cmake --preset arm64` | clang-cl ARM64 cross-compile |
-
-### Running Tests
-
-```bash
-ctest --test-dir build -C Debug --output-on-failure
-```
 
 ## Contributing
 
