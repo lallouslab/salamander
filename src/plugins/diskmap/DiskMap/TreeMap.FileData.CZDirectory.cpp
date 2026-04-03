@@ -284,7 +284,8 @@ INT64 CZDirectory::PopulateDir(CWorkerThread* mythread, TCHAR* path, int pos, si
                     this->_datasize += datasize;
                     this->_realsize += realsize;
                     this->_disksize += disksize;
-                    tsize += f->GetSizeEx(sortorder);
+                    if (!f->IsDirectory())
+                        tsize += f->GetSizeEx(sortorder);
 
                     while (fre > 0)
                     {
