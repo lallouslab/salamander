@@ -105,10 +105,11 @@
 // 185 - 1.0.6
 // 186 - 1.0.7
 // 187 - 1.0.8
+// 188 - 1.0.9
 
 // ! IMPORTANT: new build numbers must be written to the "default" branch first,
 //              and only then to the side branch (complete list is only in "default" branch)
-#define VERSINFO_BUILDNUMBER 187
+#define VERSINFO_BUILDNUMBER 188
 
 // VERSINFO_BETAVERSION_TXT:
 //
