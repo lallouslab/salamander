@@ -1533,6 +1533,49 @@ struct CWorkerState
         lstrcpyn(OpStrChangingAttrs, LoadStr(IDS_CHANGINGATTRS), 50);
     }
 
+    // Headless initialization — no LoadStr(), no Configuration global.
+    // Uses hardcoded English strings and safe defaults.
+    // For use by RunWorkerDirect in test/CLI/headless contexts.
+    void InitHeadless()
+    {
+        OverwriteAll = OverwriteHiddenAll = DeleteHiddenAll =
+            SkipAllFileWrite = SkipAllFileRead =
+                SkipAllOverwrite = SkipAllSystemOrHidden =
+                    SkipAllFileOpenIn = SkipAllFileOpenOut =
+                        SkipAllOverwriteErr = SkipAllMoveErrors =
+                            SkipAllDeleteErr = SkipAllDirCreate =
+                                SkipAllDirCreateErr = SkipAllChangeAttrs =
+                                    EncryptSystemAll = SkipAllEncryptSystem =
+                                        IgnoreAllADSReadErr = SkipAllFileADSOpenIn =
+                                            SkipAllFileADSOpenOut = SkipAllFileADSRead =
+                                                SkipAllFileADSWrite = DirOverwriteAll =
+                                                    SkipAllDirOver = IgnoreAllADSOpenOutErr =
+                                                        IgnoreAllSetAttrsErr = IgnoreAllCopyPermErr =
+                                                            IgnoreAllCopyDirTimeErr = SkipAllFileOutLossEncr =
+                                                                FileOutLossEncrAll = SkipAllDirCrLossEncr =
+                                                                    DirCrLossEncrAll = IgnoreAllGetFileTimeErr =
+                                                                        IgnoreAllSetFileTimeErr = SkipAllGetFileTime =
+                                                                            SkipAllSetFileTime = FALSE;
+
+        // Always consult observer for confirmation decisions (1 = ask)
+        CnfrmFileOver = 1;
+        CnfrmDirOver = 1;
+        CnfrmSHFileOver = 1;
+        CnfrmSHFileDel = 1;
+        UseRecycleBin = 0;
+        UseAsyncCopyAlg = FALSE;
+
+        // Hardcoded English operation strings (no resource DLL needed)
+        lstrcpynA(OpStrCopying, "Copying", 50);
+        lstrcpynA(OpStrCopyingPrep, "to", 50);
+        lstrcpynA(OpStrMoving, "Moving", 50);
+        lstrcpynA(OpStrMovingPrep, "to", 50);
+        lstrcpynA(OpStrCreatingDir, "Creating directory", 50);
+        lstrcpynA(OpStrDeleting, "Deleting", 50);
+        lstrcpynA(OpStrConverting, "Converting", 50);
+        lstrcpynA(OpStrChangingAttrs, "Changing attributes", 50);
+    }
+
     BOOL PrepareRecycleMasks(int& errorPos)
     {
         return RecycleMasks.PrepareMasks(errorPos);
@@ -8474,10 +8517,14 @@ unsigned ThreadWorkerBody(void* parameter)
 }
 
 BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
-                     CChangeAttrsData* attrsData, CConvertData* convertData)
+                     CChangeAttrsData* attrsData, CConvertData* convertData,
+                     bool headless)
 {
     CWorkerState workerState;
-    workerState.Init();
+    if (headless)
+        workerState.InitHeadless();
+    else
+        workerState.Init();
 
     if (script->TotalSize == CQuadWord(0, 0))
         script->TotalSize = CQuadWord(1, 0);

@@ -12,6 +12,7 @@
 #include "filesbox.h"
 #include "shiconov.h"
 #include "common/unicode/NameRenderPolicy.h"
+#include "darkmode.h"
 
 //****************************************************************************
 //
@@ -83,7 +84,26 @@ void CFilesWindow::SetFontAndColors(HDC hDC, CHighlightMasksItem* highlightMasks
             else
                 fgColor = &highlightMasksItem->FocSelFg;
         }
-        SetTextColor(hDC, GetCOLORREF(*fgColor));
+        COLORREF fg = GetCOLORREF(*fgColor);
+        // In dark mode, mask text that is too dark for the dark background
+        // must fall back to the panel foreground. We adjust at render time
+        // (not in UpdateDefaultColors) to avoid corrupting saved mask data.
+        if (DarkMode_ShouldUseDark() && highlightMasksItem != NULL)
+        {
+            BYTE gray = GetGrayscaleFromRGB(GetRValue(fg), GetGValue(fg), GetBValue(fg));
+            if (gray < 96)
+            {
+                if (colorMode == cmeNormal)
+                    fg = GetCOLORREF(CurrentColors[ITEM_FG_NORMAL]);
+                else if (colorMode == cmeFocused)
+                    fg = GetCOLORREF(CurrentColors[ITEM_FG_FOCUSED]);
+                else if (colorMode == cmeSelected)
+                    fg = GetCOLORREF(CurrentColors[ITEM_FG_SELECTED]);
+                else
+                    fg = GetCOLORREF(CurrentColors[ITEM_FG_FOCSEL]);
+            }
+        }
+        SetTextColor(hDC, fg);
     }
 
     // set background color
@@ -120,7 +140,25 @@ void CFilesWindow::SetFontAndColors(HDC hDC, CHighlightMasksItem* highlightMasks
         else
             bkColor = &CurrentColors[ITEM_BK_FOCUSED];
     }
-    SetBkColor(hDC, GetCOLORREF(*bkColor));
+    COLORREF bk = GetCOLORREF(*bkColor);
+    // In dark mode, mask backgrounds that are too light look wrong on the dark panel.
+    // Normalize to the panel background for the current state.
+    if (DarkMode_ShouldUseDark() && highlightMasksItem != NULL && itemIndex != DropTargetIndex)
+    {
+        BYTE gray = GetGrayscaleFromRGB(GetRValue(bk), GetGValue(bk), GetBValue(bk));
+        if (gray > 160)
+        {
+            if (colorMode == cmeNormal)
+                bk = GetCOLORREF(CurrentColors[ITEM_BK_NORMAL]);
+            else if (colorMode == cmeFocused)
+                bk = GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]);
+            else if (colorMode == cmeSelected)
+                bk = GetCOLORREF(CurrentColors[ITEM_BK_SELECTED]);
+            else
+                bk = GetCOLORREF(CurrentColors[ITEM_BK_FOCSEL]);
+        }
+    }
+    SetBkColor(hDC, bk);
 }
 
 //****************************************************************************
@@ -821,7 +859,14 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                     SALCOLOR* bkColor = (highlightMasksItem == NULL) ? &CurrentColors[ITEM_BK_NORMAL] : &highlightMasksItem->NormalBk;
                     if (fullRowHighlight && isItemFocusedOrEditMode)
                         bkColor = (highlightMasksItem == NULL) ? &CurrentColors[ITEM_BK_HIGHLIGHT] : &highlightMasksItem->HighlightBk;
-                    SetBkColor(hDC, GetCOLORREF(*bkColor));
+                    COLORREF bkClr = GetCOLORREF(*bkColor);
+                    if (DarkMode_ShouldUseDark() && highlightMasksItem != NULL)
+                    {
+                        BYTE gray = GetGrayscaleFromRGB(GetRValue(bkClr), GetGValue(bkClr), GetBValue(bkClr));
+                        if (gray > 160)
+                            bkClr = GetCOLORREF((fullRowHighlight && isItemFocusedOrEditMode) ? CurrentColors[ITEM_BK_HIGHLIGHT] : CurrentColors[ITEM_BK_NORMAL]);
+                    }
+                    SetBkColor(hDC, bkClr);
                     if (drawFlags & DRAWFLAG_MASK) // mask is b&w; we must not paint a colored background into it
                         SetBkColor(hDC, RGB(255, 255, 255));
                     ExtTextOut(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
@@ -854,8 +899,19 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                     fgColor = (highlightMasksItem == NULL) ? &CurrentColors[ITEM_FG_HIGHLIGHT] : &highlightMasksItem->HighlightFg;
                     bkColor = (highlightMasksItem == NULL) ? &CurrentColors[ITEM_BK_HIGHLIGHT] : &highlightMasksItem->HighlightBk;
                 }
-                SetTextColor(hDC, GetCOLORREF(*fgColor));
-                SetBkColor(hDC, GetCOLORREF(*bkColor));
+                COLORREF fgClr = GetCOLORREF(*fgColor);
+                COLORREF bkClr = GetCOLORREF(*bkColor);
+                if (DarkMode_ShouldUseDark() && highlightMasksItem != NULL)
+                {
+                    BYTE fgGray = GetGrayscaleFromRGB(GetRValue(fgClr), GetGValue(fgClr), GetBValue(fgClr));
+                    if (fgGray < 96)
+                        fgClr = GetCOLORREF((fullRowHighlight && isItemFocusedOrEditMode) ? CurrentColors[ITEM_FG_HIGHLIGHT] : CurrentColors[ITEM_FG_NORMAL]);
+                    BYTE bkGray = GetGrayscaleFromRGB(GetRValue(bkClr), GetGValue(bkClr), GetBValue(bkClr));
+                    if (bkGray > 160)
+                        bkClr = GetCOLORREF((fullRowHighlight && isItemFocusedOrEditMode) ? CurrentColors[ITEM_BK_HIGHLIGHT] : CurrentColors[ITEM_BK_NORMAL]);
+                }
+                SetTextColor(hDC, fgClr);
+                SetBkColor(hDC, bkClr);
                 if (drawFlags & DRAWFLAG_MASK) // mask is b&w; we must not paint a colored background into it
                     SetBkColor(hDC, RGB(255, 255, 255));
             }

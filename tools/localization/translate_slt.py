@@ -341,7 +341,7 @@ def process_file(
     Returns a stats dict.
     """
     language_name = LANGUAGES[language_key]["name"]
-    module_name = filepath.stem  # e.g., "automation", "salamand"
+    module_name = filepath.stem  # e.g., "automation", "sally"
 
     # Read file
     content = filepath.read_text(encoding="utf-8-sig")  # Handle BOM

@@ -16,7 +16,7 @@ protected:
 
     void PreparePixMap(int width, int height, BOOL clear)
     {
-        size_t size = width * height * 4;
+        size_t size = (size_t)width * height * 4;
         if (size > this->_pixsize)
         {
             if (this->_pixmap)

@@ -1877,15 +1877,6 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
     {
         // colors dependent on file name+attributes
         int i;
-#define ENSURE_DARK_MASK_TEXT(maskColor, fallbackColor)                                                                     \
-    do                                                                                                                       \
-    {                                                                                                                        \
-        COLORREF __clr = GetCOLORREF(maskColor);                                                                            \
-        BYTE __gray = GetGrayscaleFromRGB(GetRValue(__clr), GetGValue(__clr), GetBValue(__clr));                          \
-        if (__gray < 96)                                                                                                    \
-            SetRGBPart(&(maskColor), fallbackColor);                                                                        \
-    } while (0)
-
         for (i = 0; i < highlightMasks->Count; i++)
         {
             CHighlightMasksItem* item = highlightMasks->At(i);
@@ -1909,25 +1900,7 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
                 SetRGBPart(&item->HighlightFg, GetCOLORREF(item->NormalFg));
             if (GetFValue(item->HighlightBk) & SCF_DEFAULT) // FULL ROW HIGHLIGHT based on _NORMAL
                 SetRGBPart(&item->HighlightBk, GetFullRowHighlight(GetCOLORREF(item->NormalBk)));
-
-            if (darkDefaults)
-            {
-                // Existing configs can contain explicit light backgrounds in masks.
-                // Normalize mask backgrounds to dark palette so panel rows stay coherent.
-                SetRGBPart(&item->NormalBk, GetCOLORREF(colors[ITEM_BK_NORMAL]));
-                SetRGBPart(&item->FocusedBk, GetCOLORREF(colors[ITEM_BK_FOCUSED]));
-                SetRGBPart(&item->SelectedBk, GetCOLORREF(colors[ITEM_BK_SELECTED]));
-                SetRGBPart(&item->FocSelBk, GetCOLORREF(colors[ITEM_BK_FOCSEL]));
-                SetRGBPart(&item->HighlightBk, GetCOLORREF(colors[ITEM_BK_HIGHLIGHT]));
-
-                ENSURE_DARK_MASK_TEXT(item->NormalFg, GetCOLORREF(colors[ITEM_FG_NORMAL]));
-                ENSURE_DARK_MASK_TEXT(item->FocusedFg, GetCOLORREF(colors[ITEM_FG_FOCUSED]));
-                ENSURE_DARK_MASK_TEXT(item->SelectedFg, GetCOLORREF(colors[ITEM_FG_SELECTED]));
-                ENSURE_DARK_MASK_TEXT(item->FocSelFg, GetCOLORREF(colors[ITEM_FG_FOCSEL]));
-                ENSURE_DARK_MASK_TEXT(item->HighlightFg, GetCOLORREF(colors[ITEM_FG_HIGHLIGHT]));
-            }
         }
-#undef ENSURE_DARK_MASK_TEXT
     }
 }
 

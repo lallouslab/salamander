@@ -63,7 +63,7 @@ BEGIN
             VALUE "SLGWeb", VERSINFO_SLG_WEB "\0"
             VALUE "SLGComment", VERSINFO_SLG_COMMENT "\0"
             VALUE "SLGCRCofImpSLT", "none\0"
-#ifdef _LANG_SALAMANDER
+#ifdef _LANG_SALLY
             VALUE "SLGHelpDir", "ENGLISH\0"
             VALUE "SLGIncomplete", "\0" // pri nekompletnim prekladu davat: "https://forum.altap.cz/viewforum.php?f=23\0"
 #endif

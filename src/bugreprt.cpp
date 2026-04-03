@@ -135,6 +135,15 @@ struct VS_VERSIONINFO_HEADER
 // which might be more reliable after a crash
 BOOL GetModuleVersion(HINSTANCE hModule, char* buffer, int bufferLen)
 {
+    // Validate module memory is committed before probing PE headers — modules
+    // may be partially mapped during concurrent load/unload
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery(hModule, &mbi, sizeof(mbi)) == 0 || mbi.State != MEM_COMMIT)
+    {
+        lstrcpyn(buffer, "unknown", bufferLen);
+        return FALSE;
+    }
+
     HRSRC hRes = FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
     if (hRes == NULL)
     {

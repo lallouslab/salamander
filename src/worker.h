@@ -564,7 +564,8 @@ HANDLE StartWorker(COperations* script, HWND hDlg, CChangeAttrsData* attrsData,
 // Uses the provided IWorkerObserver instead of the progress dialog.
 // Returns TRUE if all operations completed without error, FALSE on error/cancel.
 BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
-                     CChangeAttrsData* attrsData = NULL, CConvertData* convertData = NULL);
+                     CChangeAttrsData* attrsData = NULL, CConvertData* convertData = NULL,
+                     bool headless = false);
 
 void FreeScript(COperations* script);
 

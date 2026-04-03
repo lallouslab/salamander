@@ -156,7 +156,7 @@ public:
     DATA_TYPE*& At(int index)
     {
 #ifdef _DEBUG
-        if (index < 0 && index > _count)
+        if (index < 0 || index >= _count)
             Beep(1000, 100);
 #endif
         return (DATA_TYPE*&)(CAutoIndirectArrayBase::operator[](index));
@@ -165,7 +165,7 @@ public:
     DATA_TYPE*& operator[](int index)
     {
 #ifdef _DEBUG
-        if (index < 0 && index > _count)
+        if (index < 0 || index >= _count)
             Beep(1000, 100);
 #endif
         return (DATA_TYPE*&)(CAutoIndirectArrayBase::operator[](index));

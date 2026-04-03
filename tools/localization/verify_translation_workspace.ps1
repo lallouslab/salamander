@@ -132,13 +132,13 @@ if (-not (Test-Path -LiteralPath $translatorExe))
 $validations = @(
     @{
         Language = "czech"
-        Module = "salamand"
+        Module = "sally"
         ExpectedExitCodes = @(0, 1)
         RequiredLogText = @("[SUMMARY]")
     },
     @{
         Language = "slovak"
-        Module = "salamand"
+        Module = "sally"
         ExpectedExitCodes = @(0, 1)
         RequiredLogText = @("[SUMMARY]")
     },
@@ -157,7 +157,7 @@ $validations = @(
 )
 
 $exports = @(
-    @{ Language = "czech"; Module = "salamand" },
+    @{ Language = "czech"; Module = "sally" },
     @{ Language = "slovak"; Module = "automation" },
     @{ Language = "czech"; Module = "webviewer" }
 )

@@ -603,8 +603,8 @@ $coreSlg = Join-Path $runtimeRoot "lang\\english.slg"
 $coreInclude = Join-Path $repoRoot "src\\lang\\lang.rh"
 if (Test-Path -LiteralPath $coreSlg)
 {
-    $moduleSpecs["salamand"] = [pscustomobject]@{
-        Name = "salamand"
+    $moduleSpecs["sally"] = [pscustomobject]@{
+        Name = "sally"
         SourceSlg = $coreSlg
         IncludeFile = $coreInclude
         RcFile = Get-RcFileForInclude -IncludePath $coreInclude

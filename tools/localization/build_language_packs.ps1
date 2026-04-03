@@ -175,7 +175,7 @@ foreach ($language in $requestedLanguages)
         # Reject untouched English seeds — if import failed, the .slg is
         # still an identical copy of english.slg and must not be shipped
         # under a translated filename.
-        $englishSlgPath = if ($moduleName -eq "salamand") {
+        $englishSlgPath = if ($moduleName -eq "sally") {
             Join-Path $workspaceRuntimeRoot "lang\english.slg"
         } else {
             Join-Path $workspaceRuntimeRoot "plugins\$moduleName\lang\english.slg"
@@ -222,7 +222,7 @@ foreach ($language in $requestedLanguages)
         }
 
         # Determine destination in runtime tree
-        if ($moduleName -eq "salamand")
+        if ($moduleName -eq "sally")
         {
             $destDir = Join-Path $buildRootFull "lang"
         }

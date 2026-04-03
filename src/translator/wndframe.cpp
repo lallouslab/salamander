@@ -1062,7 +1062,7 @@ CFrameWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 #ifdef _DEBUG
             // FIXME - for debugging
-            strcpy_s(project, "C:\\TRANSLATOR\\Salamand 2.53 beta 1\\projects\\czech\\salamand.atp");
+            strcpy_s(project, "C:\\TRANSLATOR\\Sally\\projects\\czech\\sally.atp");
 #endif
 
             CImportDialog dlg(HWindow, project);
@@ -1115,7 +1115,7 @@ CFrameWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             memset(&ofn, 0, sizeof(OPENFILENAME));
             ofn.lStructSize = sizeof(OPENFILENAME);
             ofn.hwndOwner = HWindow;
-            ofn.lpstrFilter = "Salamander Language Translation (*.slt)\0*.slt\0";
+            ofn.lpstrFilter = "Sally Language Translation (*.slt)\0*.slt\0";
             ofn.lpstrDefExt = "slt";
             ofn.lpstrFile = fileName;
             ofn.nMaxFile = MAX_PATH;
@@ -1145,7 +1145,7 @@ CFrameWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             memset(&ofn, 0, sizeof(OPENFILENAME));
             ofn.lStructSize = sizeof(OPENFILENAME);
             ofn.hwndOwner = HWindow;
-            ofn.lpstrFilter = "Salamander Language Translation (*.slt)\0*.slt\0";
+            ofn.lpstrFilter = "Sally Language Translation (*.slt)\0*.slt\0";
             ofn.lpstrFile = fileName;
             ofn.nMaxFile = MAX_PATH;
             ofn.nFilterIndex = 1;

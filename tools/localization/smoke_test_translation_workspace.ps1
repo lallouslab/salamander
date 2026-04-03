@@ -90,8 +90,8 @@ if (-not (Test-Path -LiteralPath $translatorExe))
 $translatorMachine = Get-PortableExecutableMachine -Path $translatorExe
 
 $samples = @(
-    @{ Language = "czech"; Module = "salamand" },
-    @{ Language = "slovak"; Module = "salamand" },
+    @{ Language = "czech"; Module = "sally" },
+    @{ Language = "slovak"; Module = "sally" },
     @{ Language = "czech"; Module = "webviewer" }
 )
 

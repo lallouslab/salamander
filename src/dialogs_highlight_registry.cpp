@@ -21,6 +21,7 @@
 #include "viewer.h"
 #include "find.h"
 #include "gui.h"
+#include "darkmode.h"
 
 //****************************************************************************
 //
@@ -3438,11 +3439,39 @@ void CCfgPageColors::LoadColors()
     if (itemID != -1)
     {
         CHighlightMasksItem* item = (CHighlightMasksItem*)itemID;
-        Masks[0]->SetColor(GetCOLORREF(item->NormalFg), GetCOLORREF(item->NormalBk));
-        Masks[1]->SetColor(GetCOLORREF(item->FocusedFg), GetCOLORREF(item->FocusedBk));
-        Masks[2]->SetColor(GetCOLORREF(item->SelectedFg), GetCOLORREF(item->SelectedBk));
-        Masks[3]->SetColor(GetCOLORREF(item->FocSelFg), GetCOLORREF(item->FocSelBk));
-        Masks[4]->SetColor(GetCOLORREF(item->HighlightFg), GetCOLORREF(item->HighlightBk));
+
+        // In dark mode, mirror the render-time adjustments from SetFontAndColors
+        // so the preview swatches match what the panel actually shows.
+        // Read-only — does not touch stored mask data.
+        BOOL isDark = DarkMode_ShouldUseDark();
+        struct
+        {
+            SALCOLOR fg;
+            SALCOLOR bk;
+            int panelFg;
+            int panelBk;
+        } maskSwatches[] = {
+            {item->NormalFg, item->NormalBk, ITEM_FG_NORMAL, ITEM_BK_NORMAL},
+            {item->FocusedFg, item->FocusedBk, ITEM_FG_FOCUSED, ITEM_BK_FOCUSED},
+            {item->SelectedFg, item->SelectedBk, ITEM_FG_SELECTED, ITEM_BK_SELECTED},
+            {item->FocSelFg, item->FocSelBk, ITEM_FG_FOCSEL, ITEM_BK_FOCSEL},
+            {item->HighlightFg, item->HighlightBk, ITEM_FG_HIGHLIGHT, ITEM_BK_HIGHLIGHT},
+        };
+        for (int m = 0; m < 5; m++)
+        {
+            COLORREF fg = GetCOLORREF(maskSwatches[m].fg);
+            COLORREF bk = GetCOLORREF(maskSwatches[m].bk);
+            if (isDark)
+            {
+                BYTE fgGray = GetGrayscaleFromRGB(GetRValue(fg), GetGValue(fg), GetBValue(fg));
+                if (fgGray < 96)
+                    fg = GetCOLORREF(tmpColors[maskSwatches[m].panelFg]);
+                BYTE bkGray = GetGrayscaleFromRGB(GetRValue(bk), GetGValue(bk), GetBValue(bk));
+                if (bkGray > 160)
+                    bk = GetCOLORREF(tmpColors[maskSwatches[m].panelBk]);
+            }
+            Masks[m]->SetColor(fg, bk);
+        }
     }
 }
 

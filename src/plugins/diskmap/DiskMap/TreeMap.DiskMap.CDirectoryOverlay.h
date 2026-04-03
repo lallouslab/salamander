@@ -32,10 +32,14 @@ protected:
 
     BOOL DrawMinorDirectory(BYTE* p, int pw, int ph, int cshx, int cshy, int cshw, int cshh, int txt_heigth)
     {
-        if (cshx >= pw)
+        if (cshx < 0 || cshx >= pw)
             return FALSE;
-        if (cshy >= ph)
+        if (cshy < 0 || cshy >= ph)
             return FALSE;
+        if (cshx + cshw > pw)
+            cshw = pw - cshx;
+        if (cshy + cshh > ph)
+            cshh = ph - cshy;
         if (cshw < 6)
             return FALSE;
         if (cshh < 6)
@@ -177,10 +181,14 @@ protected:
 
     BOOL DrawMajorDirectory(BYTE* p, int pw, int ph, int cshx, int cshy, int cshw, int cshh, BYTE* txt_data, int txt_width, int txt_heigth)
     {
-        if (cshx >= pw)
+        if (cshx < 0 || cshx >= pw)
             return FALSE;
-        if (cshy >= ph)
+        if (cshy < 0 || cshy >= ph)
             return FALSE;
+        if (cshx + cshw > pw)
+            cshw = pw - cshx;
+        if (cshy + cshh > ph)
+            cshh = ph - cshy;
         if (cshw < 6)
             return FALSE;
         if (cshh < 6)

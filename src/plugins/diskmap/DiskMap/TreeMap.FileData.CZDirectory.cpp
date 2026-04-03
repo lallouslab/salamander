@@ -267,32 +267,40 @@ INT64 CZDirectory::PopulateDir(CWorkerThread* mythread, TCHAR* path, int pos, si
                     disksize = this->_root->GetDiskSize(realsize);
 
                     f = new CZFile(this, FindFileData.cFileName, datasize, realsize, disksize, &FindFileData.ftCreationTime, &FindFileData.ftLastWriteTime);
-                    tsize += f->GetSizeEx(sortorder);
                 }
             }
             if (datasize > 0)
             {
-                this->_datasize += datasize;
-                this->_realsize += realsize;
-                this->_disksize += disksize;
-
                 INT64 sortsize = f->GetSizeEx(sortorder);
 
                 int fre = this->_files->Add(f);
-                while (fre > 0)
+                if (fre < 0)
                 {
-                    int parent = (fre - 1) / 2;
-                    if (this->_files->At(parent)->GetSizeEx(sortorder) > sortsize) //if the parent is larger, it violates the MIN-HEAP
-                    {
-                        this->_files->Copy(fre, parent);
-                        fre = parent;
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    delete f;
+                    f = NULL;
                 }
-                this->_files->At(fre) = f;
+                else
+                {
+                    this->_datasize += datasize;
+                    this->_realsize += realsize;
+                    this->_disksize += disksize;
+                    tsize += f->GetSizeEx(sortorder);
+
+                    while (fre > 0)
+                    {
+                        int parent = (fre - 1) / 2;
+                        if (this->_files->At(parent)->GetSizeEx(sortorder) > sortsize) //if the parent is larger, it violates the MIN-HEAP
+                        {
+                            this->_files->Copy(fre, parent);
+                            fre = parent;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    this->_files->At(fre) = f;
+                }
             }
             //if (((filecount + dircount) > MAXREPORTEDFILES) || (GetTickCount() - lastTime > 500)) //either many files or 0.5 sec elapsed
             if ((GetTickCount() - lastTime > 250) && (filecount + dircount) > 0) //if 0.25 sec elapsed and at least something new was found

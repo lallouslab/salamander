@@ -61,7 +61,7 @@ The translation file formats are the same on x86 and x64. The difference today i
 - x86 Translator remains a useful fallback for manual/local work, but it is not the release-gated automation path.
 - Supported quiet commands now exit with `0` on success, `1` on validation/content failure, and `2` on usage/runtime failure.
 - Each supported quiet run overwrites `<project-dir>\<module>.quiet.log` with the Output window contents for that run.
-- Today, strict validation still finds real legacy/content issues in the preserved Czech and Slovak core `salamand` archives. That is translation debt, not an x64 automation failure.
+- Today, strict validation still finds real legacy/content issues in the preserved Czech and Slovak core `sally` archives. That is translation debt, not an x64 automation failure.
 
 ## Generate a Translation Workspace
 
@@ -99,9 +99,9 @@ If a preserved archive needs to be rebased onto a newer Sally export, use:
 
 ```powershell
 pwsh -File .\tools\localization\rebase_text_archive.ps1 `
-  -CurrentArchive .\build-x64\slt-export-full\salamand.slt `
-  -LegacyArchive .\translations\czech\salamand.slt `
-  -OutputArchive .\build-x64\rebased\czech-salamand.slt
+  -CurrentArchive .\build-x64\slt-export-full\sally.slt `
+  -LegacyArchive .\translations\czech\sally.slt `
+  -OutputArchive .\build-x64\rebased\czech-sally.slt
 ```
 
 ## Workspace Layout
@@ -125,10 +125,10 @@ Example:
 
 ```powershell
 .\out\translation-workspace\runtime\utils\translator.exe `
-  .\out\translation-workspace\projects\czech\salamand\salamand.atp
+  .\out\translation-workspace\projects\czech\sally\sally.atp
 ```
 
-Project basenames match the module name on purpose. Translator quiet-mode import/export derives `salamand.slt`, `webviewer.slt`, and similar names from the project filename.
+Project basenames match the module name on purpose. Translator quiet-mode import/export derives `sally.slt`, `webviewer.slt`, and similar names from the project filename.
 
 ## Quiet Automation
 
@@ -152,7 +152,7 @@ Validate a project:
 ```powershell
 .\out\translation-workspace\runtime\utils\translator.exe `
   -quiet-validate-all `
-  .\out\translation-workspace\projects\czech\salamand\salamand.atp
+  .\out\translation-workspace\projects\czech\sally\sally.atp
 ```
 
 Export a diff-friendly archive:
@@ -161,7 +161,7 @@ Export a diff-friendly archive:
 .\out\translation-workspace\runtime\utils\translator.exe `
   -quiet-export-slt-for-diff `
   .\out\translation-workspace\exports `
-  .\out\translation-workspace\projects\czech\salamand\salamand.atp
+  .\out\translation-workspace\projects\czech\sally\sally.atp
 ```
 
 The export directory is created automatically when it does not exist.
@@ -177,13 +177,13 @@ pwsh -File .\tools\localization\verify_translation_workspace.ps1 `
 
 The verifier checks:
 
-- `-quiet-validate-all` for `czech/salamand` and accepts either:
+- `-quiet-validate-all` for `czech/sally` and accepts either:
   - exit code `0` if the core translation is eventually cleaned up
   - exit code `1` if validation still reports known content issues, as long as the quiet log contains a validation summary
-- `-quiet-validate-all` for `slovak/salamand` with the same baseline contract
+- `-quiet-validate-all` for `slovak/sally` with the same baseline contract
 - `-quiet-validate-all` for `czech/webviewer` and requires a clean success summary
 - `-quiet-validate-all` for `slovak/automation` and requires a clean success summary
-- `-quiet-export-slt` for `czech/salamand`
+- `-quiet-export-slt` for `czech/sally`
 - `-quiet-export-slt` for `slovak/automation`
 - `-quiet-export-slt` for `czech/webviewer`
 
@@ -210,9 +210,9 @@ pwsh -File .\tools\localization\smoke_test_translation_workspace.ps1 `
 - The preserved core archives originally drifted at dialog `270`, where the old Open Salamander about box no longer matched current Sally's GitHub/license controls.
 - The preserved `checkver.slt` archives also drifted and needed rebasing onto the current Sally CheckVer structure.
 - `tools/localization/rebase_text_archive.ps1` now rebases a legacy archive onto a current exported skeleton by preserving translated text/state for matching dialog control IDs, menu item IDs, and string IDs.
-- After rebasing, `translations/czech/salamand.slt`, `translations/slovak/salamand.slt`, `translations/czech/checkver.slt`, and `translations/slovak/checkver.slt` all import cleanly in the generated workspace flow.
+- After rebasing, `translations/czech/sally.slt`, `translations/slovak/sally.slt`, `translations/czech/checkver.slt`, and `translations/slovak/checkver.slt` all import cleanly in the generated workspace flow.
 - Quiet validation now exits headlessly on x64 with deterministic logs for the verified Czech/Slovak sample projects.
-- The current preserved Czech and Slovak core `salamand` archives still fail strict validation with real menu/layout/text findings, so the verifier treats those two core validations as a known-content baseline rather than a release-blocking clean pass.
+- The current preserved Czech and Slovak core `sally` archives still fail strict validation with real menu/layout/text findings, so the verifier treats those two core validations as a known-content baseline rather than a release-blocking clean pass.
 - The audited plugin samples `czech/webviewer` and `slovak/automation` validate cleanly on x64.
 - Quiet `.slt` export produces current archives on x64 for the tested Czech core plus `webviewer` and `automation` plugin projects, and on x86 for the tested Czech core project.
 
@@ -220,7 +220,7 @@ pwsh -File .\tools\localization\smoke_test_translation_workspace.ps1 `
 
 - The old Translator "New Project" GUI path is commented out, so generated workspaces are the supported path.
 - Generated `.atp` files are machine-local because they currently use absolute paths.
-- Quiet archive import is now validated on x64 for the current Czech/Slovak preserved set, including the rebased core `salamand.slt` and `checkver.slt` files.
+- Quiet archive import is now validated on x64 for the current Czech/Slovak preserved set, including the rebased core `sally.slt` and `checkver.slt` files.
 - Translator project files must use CRLF line endings, and symbol files must be BOM-free. The generator handles both quirks for you.
 - Legacy validation sidecars such as `SalMenu`, `IgnoreList`, and `CheckList` are not wired into the generated projects unless a canonical source file is added later.
 - The current required smoke-tested languages are Czech and Slovak. Other preserved language folders can still be generated, but the public readiness bar for this slice is based on Czech/Slovak plus one plugin path.
