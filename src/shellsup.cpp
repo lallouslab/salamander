@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -9,6 +9,7 @@
 #include "common/unicode/helpers.h"
 #include "common/clipboard/ClipboardOwnershipPolicy.h"
 #include "common/clipboard/HDropWideBuilder.h"
+#include "common/clipboard/HDropWideDataObject.h"
 #include "common/widepath.h"
 #include "common/IEnvironment.h"
 #include "cfgdlg.h"
@@ -1942,12 +1943,35 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
         CALL_STACK_MESSAGE1("ShellAction::drag_files");
         if (useSelection)
         {
+            int idxCount = (count == 0) ? 1 : count;
+            int* idxs = (count == 0) ? &index : indexes.get();
+
+            IDataObject* dataObject = NULL;
+            if (panel->Is(ptDisk))
+            {
+                std::vector<std::wstring> selectedPathsW;
+                BOOL hasWideName = FALSE;
+                if (CollectSelectedPathsW(panel, idxs, idxCount, selectedPathsW, hasWideName) && hasWideName)
+                {
+                    sally::clipboard::HDropWideDataObject* wideDataObject = new sally::clipboard::HDropWideDataObject(selectedPathsW);
+                    if (wideDataObject != NULL)
+                    {
+                        if (wideDataObject->IsValid())
+                            dataObject = wideDataObject;
+                        else
+                            wideDataObject->Release();
+                    }
+                }
+            }
+
             CTmpEnumData data;
-            data.Indexes = (count == 0) ? &index : indexes.get();
-            data.Panel = panel;
-            IDataObject* dataObject = CreateIDataObject(MainWindow->HWindow, panel->GetPath(),
-                                                        (count == 0) ? 1 : count,
-                                                        EnumFileNames, &data);
+            if (dataObject == NULL)
+            {
+                data.Indexes = idxs;
+                data.Panel = panel;
+                dataObject = CreateIDataObject(MainWindow->HWindow, panel->GetPath(),
+                                               idxCount, EnumFileNames, &data);
+            }
             CImpIDropSource* dropSource = new CImpIDropSource(FALSE);
 
             if (dataObject != NULL && dropSource != NULL)
