@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "plugindarkmode.h"
+
 class CWindow
 {
 private:
@@ -49,6 +51,16 @@ protected:
             pWindow = (CWindow*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
         }
         LRESULT res = pWindow ? pWindow->MyWndProc(hwnd, uMsg, wParam, lParam) : DefWindowProc(hwnd, uMsg, wParam, lParam);
+
+        if (pWindow != NULL &&
+            (uMsg == WM_CREATE ||
+             (uMsg == WM_SETTINGCHANGE && PluginDarkMode_OnSettingChange(lParam)) ||
+             uMsg == WM_THEMECHANGED))
+        {
+            PluginDarkMode_ApplyTitleBar(hwnd);
+            PluginDarkMode_ApplyListTreeThemeRecursive(hwnd);
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
 
         if (pWindow != NULL && uMsg == WM_NCDESTROY)
         {

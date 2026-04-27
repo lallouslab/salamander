@@ -1863,6 +1863,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         BOOL oldStatusArea = Configuration.StatusArea;
         BOOL oldPanelCaption = Configuration.ShowPanelCaption;
         BOOL oldPanelZoom = Configuration.ShowPanelZoom;
+        int oldThemeMode = Configuration.ThemeMode;
 
         UserMenuIconBkgndReader.ResetSysColorsChanged(); // now, we start watching system color changes (icon reload required)
         BOOL readingUMIcons = UserMenuIconBkgndReader.IsReadingIcons();
@@ -1938,6 +1939,13 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
                     LeftPanel->DirectoryLine->Repaint();
                 if (RightPanel->DirectoryLine != NULL && RightPanel->DirectoryLine->HWindow != NULL)
                     RightPanel->DirectoryLine->Repaint();
+            }
+
+            if (oldThemeMode != Configuration.ThemeMode)
+            {
+                DarkMode_SetThemeMode(Configuration.ThemeMode);
+                DarkMode_ApplyToThreadTopLevelWindows(GetCurrentThreadId());
+                ColorsChanged(TRUE, FALSE, TRUE);
             }
 
             // main window icon
@@ -4964,6 +4972,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
 
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORLISTBOX:
     {

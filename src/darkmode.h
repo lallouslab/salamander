@@ -21,10 +21,30 @@ struct DarkModeMainFramePalette
     COLORREF Border;
 };
 
+struct DarkModeColors
+{
+    COLORREF DialogBackground;
+    COLORREF DialogText;
+    COLORREF InputBackground;
+    COLORREF InputText;
+    COLORREF DisabledText;
+    COLORREF Border;
+    COLORREF Highlight;
+    COLORREF HighlightText;
+    COLORREF InactiveSelection;
+    COLORREF ToolTipBackground;
+    COLORREF ToolTipText;
+    COLORREF ViewerBackground;
+    COLORREF ViewerText;
+    COLORREF ViewerSelectionBackground;
+    COLORREF ViewerSelectionText;
+};
+
 void DarkMode_Initialize();
 BOOL DarkMode_IsSupported();
 void DarkMode_SetThemeMode(int themeMode);
 BOOL DarkMode_ShouldUseDark();
+BOOL DarkMode_GetColors(DarkModeColors* colors);
 BOOL DarkMode_GetMainFramePalette(DarkModeMainFramePalette* palette);
 HBRUSH DarkMode_GetDialogCtlColorBrush(UINT msg, HDC hdc, HWND hCtrl);
 BOOL DarkMode_OnSettingChange(LPARAM lParam);

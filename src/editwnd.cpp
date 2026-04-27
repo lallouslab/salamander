@@ -1764,6 +1764,7 @@ CEditWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORLISTBOX:
     case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
     {
         HBRUSH hBrush = DarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
         if (hBrush != NULL)

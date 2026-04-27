@@ -11,6 +11,17 @@
 #include "mainwnd.h"
 #include "gui.h"
 #include "logo.h"
+#include "darkmode.h"
+
+static void FillRectWithColor(HDC hDC, const RECT* rect, COLORREF color)
+{
+    HBRUSH hBrush = CreateSolidBrush(color);
+    if (hBrush != NULL)
+    {
+        FillRect(hDC, rect, hBrush);
+        DeleteObject(hBrush);
+    }
+}
 
 // helper object for sending Ctrl+C to the parent via the WM_COPY message
 class CKeyForwarderWindow : public CWindow
@@ -991,6 +1002,20 @@ CMessageBox::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             GetClientRect(HWindow, &r);
             RECT rOrig = r;
             int ySeparator = BackgroundSeparator;
+            DarkModeColors colors;
+            if (DarkMode_GetColors(&colors))
+            {
+                r.bottom = ySeparator;
+                FillRectWithColor(hDC, &r, colors.DialogBackground);
+                r = rOrig;
+                r.top = ySeparator;
+                r.bottom = r.top + 1;
+                FillRectWithColor(hDC, &r, colors.Border);
+                r = rOrig;
+                r.top = ySeparator + 1;
+                FillRectWithColor(hDC, &r, colors.DialogBackground);
+                return TRUE;
+            }
             r.bottom = ySeparator;
             FillRect(hDC, &r, (HBRUSH)(COLOR_WINDOW + 1));
             r = rOrig;
@@ -1016,6 +1041,9 @@ CMessageBox::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (resID == IDI_MSGBOX_ICON || resID == IDS_MSGBOX_TEXT || resID == IDS_MSGBOX_URL)
             {
                 COLORREF textClr = GetSysColor(COLOR_WINDOWTEXT);
+                HBRUSH hDarkBrush = DarkMode_GetDialogCtlColorBrush(uMsg, hdcStatic, hwndStatic);
+                if (hDarkBrush != NULL)
+                    return (INT_PTR)hDarkBrush;
                 SetTextColor(hdcStatic, textClr);
                 SetBkColor(hdcStatic, GetSysColor(COLOR_WINDOW));
                 return (INT_PTR)(HBRUSH)(COLOR_WINDOW + 1);
@@ -1024,6 +1052,14 @@ CMessageBox::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         else
             break;
+    }
+
+    case WM_CTLCOLORBTN:
+    {
+        HBRUSH hDarkBrush = DarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hDarkBrush != NULL)
+            return (INT_PTR)hDarkBrush;
+        break;
     }
 
     case WM_HELP:

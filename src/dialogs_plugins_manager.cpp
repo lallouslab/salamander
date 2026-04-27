@@ -18,8 +18,19 @@
 #include "gui.h"
 #include "menu.h"
 #include "shellib.h"
+#include "darkmode.h"
 
 static CPathBuffer LastSelectedPluginDLLName; // Heap-allocated for long path support // after reopening Plugins Manager, select the last chosen plugin
+
+static void FillRectWithColor(HDC hDC, const RECT* rect, COLORREF color)
+{
+    HBRUSH hBrush = CreateSolidBrush(color);
+    if (hBrush != NULL)
+    {
+        FillRect(hDC, rect, hBrush);
+        DeleteObject(hBrush);
+    }
+}
 
 //
 // ****************************************************************************
@@ -901,7 +912,7 @@ CPluginsDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOLORCHANGE:
     {
-        ListView_SetBkColor(HListView, GetSysColor(COLOR_WINDOW));
+        DarkMode_ApplyListTreeThemeRecursive(HListView);
         break;
     }
     }
@@ -1253,7 +1264,7 @@ CPluginKeys::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOLORCHANGE:
     {
-        ListView_SetBkColor(HListView, GetSysColor(COLOR_WINDOW));
+        DarkMode_ApplyListTreeThemeRecursive(HListView);
         break;
     }
 
@@ -2896,6 +2907,15 @@ void CCfgPageAppearance::Transfer(CTransferInfo& ti)
 {
     CALL_STACK_MESSAGE1("CCfgPageAppearance::Transfer()");
 
+    if (ti.Type == ttDataToWindow)
+    {
+        int resIDs[3] = {IDS_THEME_MODE_LIGHT, IDS_THEME_MODE_DARK, IDS_THEME_MODE_SYSTEM}; // must match THEME_MODE_*
+        SendDlgItemMessage(HWindow, IDC_THEME_MODE, CB_RESETCONTENT, 0, 0);
+        for (int i = 0; i < 3; i++)
+            SendDlgItemMessage(HWindow, IDC_THEME_MODE, CB_ADDSTRING, 0, (LPARAM)LoadStr(resIDs[i]));
+        SendDlgItemMessage(HWindow, IDC_THEME_MODE, CB_SETCURSEL, Configuration.ThemeMode, 0);
+    }
+
     ti.CheckBox(IDC_FULLROWSELECT, Configuration.FullRowSelect);       // mutually exclusive with FullRowHighlight
     ti.CheckBox(IDC_FULLROWHIGHLIGHT, Configuration.FullRowHighlight); // mutually exclusive with FullRowSelect
     ti.CheckBox(IDC_ICONTINCTURE, Configuration.UseIconTincture);
@@ -2906,7 +2926,13 @@ void CCfgPageAppearance::Transfer(CTransferInfo& ti)
     ti.EditLine(IDC_INFOLINECONTENT, Configuration.InfoLineContent, 200);
     ti.EditLine(IDC_THUMBNAILSIZE, Configuration.ThumbnailSize);
     if (ti.Type == ttDataFromWindow)
+    {
         Configuration.ThumbnailSize = min(THUMBNAIL_SIZE_MAX, max(THUMBNAIL_SIZE_MIN, Configuration.ThumbnailSize));
+        int themeMode = (int)SendDlgItemMessage(HWindow, IDC_THEME_MODE, CB_GETCURSEL, 0, 0);
+        if (themeMode < THEME_MODE_LIGHT || themeMode > THEME_MODE_SYSTEM)
+            themeMode = THEME_MODE_LIGHT;
+        Configuration.ThemeMode = themeMode;
+    }
     else
         SendDlgItemMessage(HWindow, IDC_THUMBNAILSIZE, EM_LIMITTEXT, 4, 0);
 
@@ -3243,21 +3269,39 @@ CCfgPageChangeDrive::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             BOOL selected = (lpdis->itemState & ODS_SELECTED) != 0;
             BOOL focused = (GetFocus() == lpdis->hwndItem);
 
-            FillRect(hDC, &r, (HBRUSH)(COLOR_WINDOW + 1));
-            if (selected)
+            DarkModeColors colors;
+            BOOL useDark = DarkMode_GetColors(&colors);
+            if (useDark)
             {
-                RECT rr = r;
-                InflateRect(&rr, -1, -1);
-                FillRect(hDC, &rr, (HBRUSH)(UINT_PTR)((focused ? COLOR_HIGHLIGHT : COLOR_3DFACE) + 1));
+                FillRectWithColor(hDC, &r, colors.InputBackground);
+                if (selected)
+                {
+                    RECT rr = r;
+                    InflateRect(&rr, -1, -1);
+                    FillRectWithColor(hDC, &rr, focused ? colors.Highlight : colors.InactiveSelection);
+                }
+
+                COLORREF textColor = selected ? (focused ? colors.HighlightText : colors.InputText) : colors.DisabledText;
+                SetTextColor(hDC, textColor);
             }
-
-            int textColor;
-            if (selected)
-                textColor = focused ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT;
             else
-                textColor = focused ? COLOR_GRAYTEXT : COLOR_GRAYTEXT;
+            {
+                FillRect(hDC, &r, (HBRUSH)(COLOR_WINDOW + 1));
+                if (selected)
+                {
+                    RECT rr = r;
+                    InflateRect(&rr, -1, -1);
+                    FillRect(hDC, &rr, (HBRUSH)(UINT_PTR)((focused ? COLOR_HIGHLIGHT : COLOR_3DFACE) + 1));
+                }
 
-            SetTextColor(hDC, GetSysColor(textColor));
+                int textColor;
+                if (selected)
+                    textColor = focused ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT;
+                else
+                    textColor = focused ? COLOR_GRAYTEXT : COLOR_GRAYTEXT;
+
+                SetTextColor(hDC, GetSysColor(textColor));
+            }
             SetBkMode(hDC, TRANSPARENT);
             RECT dr = r;
             char text[] = " :";
@@ -3266,7 +3310,7 @@ CCfgPageChangeDrive::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
             if (lpdis->itemState & ODS_FOCUS)
             {
-                SetTextColor(hDC, GetSysColor(COLOR_WINDOWTEXT));
+                SetTextColor(hDC, useDark ? colors.InputText : GetSysColor(COLOR_WINDOWTEXT));
                 DrawFocusRect(hDC, &r);
             }
         }

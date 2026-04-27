@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "plugindarkmode.h"
 
 #include "dbviewer.rh"
 #include "dbviewer.rh2"
@@ -655,10 +656,12 @@ void CRendererWindow::CreateGraphics()
     SelectObject(hDC, oldFont);
     ReleaseDC(NULL, hDC);
 
-    HGrayPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNSHADOW));
-    HLtGrayPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNFACE));
-    HSelectionPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_ACTIVECAPTION));
-    HBlackPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNTEXT));
+    PluginDarkModeColors colors;
+    PluginDarkMode_GetColors(&colors);
+    HGrayPen = CreatePen(PS_SOLID, 0, colors.Border);
+    HLtGrayPen = CreatePen(PS_SOLID, 0, colors.DialogBackground);
+    HSelectionPen = CreatePen(PS_SOLID, 0, colors.Highlight);
+    HBlackPen = CreatePen(PS_SOLID, 0, colors.DialogText);
 }
 
 void CRendererWindow::ReleaseGraphics()

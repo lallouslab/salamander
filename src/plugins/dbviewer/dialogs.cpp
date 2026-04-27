@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "plugindarkmode.h"
 
 #include "data.h"
 #include "renderer.h"
@@ -781,7 +782,7 @@ CColumnsDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_SYSCOLORCHANGE:
-        ListView_SetBkColor(HListView, GetSysColor(COLOR_WINDOW));
+        PluginDarkMode_ApplyListTreeThemeRecursive(HWindow);
         break;
 
     case WM_SIZE:

@@ -5,6 +5,7 @@ sal_add_plugin(NAME dbviewer
   SOURCES
     "${SAL_SHARED}/auxtools.cpp"
     "${SAL_SHARED}/dbg.cpp"
+    "${SAL_SHARED}/plugindarkmode.cpp"
     "${SAL_SHARED}/winliblt.cpp"
     "${SAL_PLUGINS}/dbviewer/csvlib/csvlib.cpp"
     "${SAL_PLUGINS}/dbviewer/dbflib/dbflib.cpp"

@@ -15,6 +15,7 @@
 #include "usermenu.h"
 #include "execute.h"
 #include "gui.h"
+#include "darkmode.h"
 
 const char* CVIEWERWINDOW_CLASSNAME = "Salamander's Viewer Window";
 
@@ -1925,14 +1926,17 @@ BOOL CViewerWindow::CreateViewerBrushs()
 
 void UpdateViewerColors(SALCOLOR* colors)
 {
+    DarkModeColors darkModeColors;
+    DarkMode_GetColors(&darkModeColors);
+
     if (GetFValue(colors[VIEWER_FG_NORMAL]) & SCF_DEFAULT)
-        SetRGBPart(&colors[VIEWER_FG_NORMAL], GetSysColor(COLOR_WINDOWTEXT));
+        SetRGBPart(&colors[VIEWER_FG_NORMAL], darkModeColors.ViewerText);
     if (GetFValue(colors[VIEWER_BK_NORMAL]) & SCF_DEFAULT)
-        SetRGBPart(&colors[VIEWER_BK_NORMAL], GetSysColor(COLOR_WINDOW));
+        SetRGBPart(&colors[VIEWER_BK_NORMAL], darkModeColors.ViewerBackground);
     if (GetFValue(colors[VIEWER_FG_SELECTED]) & SCF_DEFAULT)
-        SetRGBPart(&colors[VIEWER_FG_SELECTED], GetSysColor(COLOR_WINDOW));
+        SetRGBPart(&colors[VIEWER_FG_SELECTED], darkModeColors.ViewerSelectionText);
     if (GetFValue(colors[VIEWER_BK_SELECTED]) & SCF_DEFAULT)
-        SetRGBPart(&colors[VIEWER_BK_SELECTED], GetSysColor(COLOR_WINDOWTEXT));
+        SetRGBPart(&colors[VIEWER_BK_SELECTED], darkModeColors.ViewerSelectionBackground);
 }
 
 BOOL InitializeViewer()

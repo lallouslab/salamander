@@ -11,6 +11,7 @@
 #include "renderer.h"
 #include "dialogs.h"
 #include "dbviewer.h"
+#include "plugindarkmode.h"
 
 //****************************************************************************
 //
@@ -25,9 +26,11 @@ void CRendererWindow::PaintTopMargin(HDC hDC, HRGN hUpdateRgn, const RECT* clipR
 
     char textBuffer[10000];
 
-    COLORREF oldTextColor = SetTextColor(hDC, GetSysColor(COLOR_BTNTEXT));
-    COLORREF normalBkColor = GetSysColor(COLOR_BTNFACE);
-    COLORREF selectionBkColor = RGB(182, 190, 210);
+    PluginDarkModeColors colors;
+    PluginDarkMode_GetColors(&colors);
+    COLORREF oldTextColor = SetTextColor(hDC, colors.DialogText);
+    COLORREF normalBkColor = colors.DialogBackground;
+    COLORREF selectionBkColor = colors.InactiveSelection;
     COLORREF oldBkColor = SetBkColor(hDC, normalBkColor);
     HPEN hOldPen = (HPEN)SelectObject(hDC, HGrayPen);
 
@@ -130,7 +133,7 @@ void CRendererWindow::PaintTopMargin(HDC hDC, HRGN hUpdateRgn, const RECT* clipR
         r.left = x;
         r.right = Width;
         r.bottom++;
-        SetBkColor(hDC, GetSysColor(COLOR_WINDOW));
+        SetBkColor(hDC, colors.InputBackground);
         ExtTextOut(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
     }
 
@@ -141,9 +144,11 @@ void CRendererWindow::PaintTopMargin(HDC hDC, HRGN hUpdateRgn, const RECT* clipR
 
 void CRendererWindow::PaintBody(HDC hDC, HRGN hUpdateRgn, const RECT* clipRect, BOOL selChangeOnly)
 {
-    COLORREF oldTextColor = SetTextColor(hDC, GetSysColor(COLOR_BTNTEXT));
-    COLORREF normalBkColor = GetSysColor(COLOR_WINDOW);
-    COLORREF selectionBkColor = RGB(182, 190, 210);
+    PluginDarkModeColors colors;
+    PluginDarkMode_GetColors(&colors);
+    COLORREF oldTextColor = SetTextColor(hDC, colors.InputText);
+    COLORREF normalBkColor = colors.InputBackground;
+    COLORREF selectionBkColor = colors.InactiveSelection;
     COLORREF oldBkColor = SetBkColor(hDC, normalBkColor);
     HPEN hOldPen = (HPEN)GetCurrentObject(hDC, OBJ_PEN);
 
@@ -178,7 +183,7 @@ void CRendererWindow::PaintBody(HDC hDC, HRGN hUpdateRgn, const RECT* clipRect, 
                     }
                     else
                     {
-                        oldBkColor2 = SetBkColor(hDC, GetSysColor(COLOR_BTNFACE));
+                        oldBkColor2 = SetBkColor(hDC, colors.DialogBackground);
                         SelectObject(hDC, HGrayPen);
                     }
                     SelectClipRgn(hDC, hUpdateRgn);

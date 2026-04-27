@@ -20,6 +20,7 @@
 #include "codetbl.h"
 #include "worker.h"
 #include "menu.h"
+#include "darkmode.h"
 
 #include <vector>
 
@@ -2652,8 +2653,15 @@ CChangeIconDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             RECT r = lpdis->rcItem;
 
             // draw the background
-            DWORD bkColor = (lpdis->itemState & ODS_SELECTED) ? COLOR_HIGHLIGHT : COLOR_WINDOW;
-            FillRect(lpdis->hDC, &r, (HBRUSH)(DWORD_PTR)(bkColor + 1));
+            DarkModeColors colors;
+            DarkMode_GetColors(&colors);
+            COLORREF bkColor = (lpdis->itemState & ODS_SELECTED) ? colors.Highlight : colors.InputBackground;
+            HBRUSH hBrush = HANDLES(CreateSolidBrush(bkColor));
+            if (hBrush != NULL)
+            {
+                FillRect(lpdis->hDC, &r, hBrush);
+                HANDLES(DeleteObject(hBrush));
+            }
 
             // draw the icon
             DrawIconEx(lpdis->hDC, r.left + 4, r.top + 4, Icons[lpdis->itemID], 32, 32, 0, NULL, DI_NORMAL);
@@ -2921,15 +2929,27 @@ void CWaitWindow::PaintProgressBar(HDC dc)
             done = ((width - 1) * BarPos) / BarMax;
         if (done > width - 1)
             done = width - 1;
+        DarkModeColors colors;
+        DarkMode_GetColors(&colors);
         RECT r = BarRect;
         r.left++;
         r.top++;
         RECT r2 = r;
         r2.right = r2.left + done;
-        FillRect(dc, &r2, (HBRUSH)(COLOR_HIGHLIGHT + 1));
+        HBRUSH hDoneBrush = HANDLES(CreateSolidBrush(colors.Highlight));
+        if (hDoneBrush != NULL)
+        {
+            FillRect(dc, &r2, hDoneBrush);
+            HANDLES(DeleteObject(hDoneBrush));
+        }
         r2 = r;
         r2.left = r2.left + done;
-        FillRect(dc, &r2, (HBRUSH)(COLOR_WINDOW + 1));
+        HBRUSH hTodoBrush = HANDLES(CreateSolidBrush(colors.InputBackground));
+        if (hTodoBrush != NULL)
+        {
+            FillRect(dc, &r2, hTodoBrush);
+            HANDLES(DeleteObject(hTodoBrush));
+        }
     }
     if (releaseDC)
         ReleaseDC(HWindow, dc);
@@ -2959,11 +2979,18 @@ void CWaitWindow::PaintText(HDC hDC)
         if (CacheBitmap != NULL && CacheBitmap->HMemDC != NULL)
             hDestDC = CacheBitmap->HMemDC;
 
-        FillRect(hDestDC, &r, (HBRUSH)(COLOR_BTNFACE + 1));
+        DarkModeColors colors;
+        DarkMode_GetColors(&colors);
+        HBRUSH hBrush = HANDLES(CreateSolidBrush(colors.DialogBackground));
+        if (hBrush != NULL)
+        {
+            FillRect(hDestDC, &r, hBrush);
+            HANDLES(DeleteObject(hBrush));
+        }
 
         HFONT hOldFont = (HFONT)SelectObject(hDestDC, EnvFont);
         int prevBkMode = SetBkMode(hDestDC, TRANSPARENT);
-        SetTextColor(hDestDC, GetSysColor(COLOR_BTNTEXT));
+        SetTextColor(hDestDC, colors.DialogText);
         // we won't clip so that we survive minor text extension
         // that may occur during a SetText call
         DrawText(hDestDC, Text.c_str(), (int)Text.length(), &r, DT_LEFT | DT_NOPREFIX | DT_NOCLIP | (NeedWrap ? DT_WORDBREAK : 0));
@@ -2990,7 +3017,14 @@ CWaitWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         RECT r;
         GetClientRect(HWindow, &r);
-        FillRect(hDC, &r, (HBRUSH)(COLOR_BTNFACE + 1));
+        DarkModeColors colors;
+        DarkMode_GetColors(&colors);
+        HBRUSH hBrush = HANDLES(CreateSolidBrush(colors.DialogBackground));
+        if (hBrush != NULL)
+        {
+            FillRect(hDC, &r, hBrush);
+            HANDLES(DeleteObject(hBrush));
+        }
 
         PaintText(hDC);
 
@@ -3169,7 +3203,7 @@ CConversionTablesDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
     case WM_SYSCOLORCHANGE:
     {
-        ListView_SetBkColor(GetDlgItem(HWindow, IDC_CT_LIST), GetSysColor(COLOR_WINDOW));
+        DarkMode_ApplyListTreeThemeRecursive(GetDlgItem(HWindow, IDC_CT_LIST));
         break;
     }
     }

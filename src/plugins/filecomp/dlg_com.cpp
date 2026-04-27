@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "plugindarkmode.h"
 
 SALCOLOR Colors[NUMBER_OF_COLORS]; // current colors
 
@@ -200,9 +201,12 @@ CreateColorPallete()
 void UpdateDefaultColors(SALCOLOR* colors, HPALETTE& palette)
 {
     CALL_STACK_MESSAGE1("UpdateDefaultColors(, )");
+    PluginDarkModeColors dmColors;
+    BOOL useDark = PluginDarkMode_GetColors(&dmColors);
+
     // text colors in the column with line numbers
     if (GetFValue(colors[LINENUM_FG_NORMAL]) & SCF_DEFAULT)
-        SetRGBPart(&colors[LINENUM_FG_NORMAL], GetSysColor(COLOR_WINDOWTEXT));
+        SetRGBPart(&colors[LINENUM_FG_NORMAL], dmColors.InputText);
     //if (GetFValue(colors[LINENUM_FG_FOCUSED]) & SCF_DEFAULT)
     //  SetRGBPart(&colors[LINENUM_FG_FOCUSED], GetCOLORREF(colors[LINENUM_FG_NORMAL]));
 
@@ -217,7 +221,7 @@ void UpdateDefaultColors(SALCOLOR* colors, HPALETTE& palette)
 
     // background colors in the column with line numbers
     if (GetFValue(colors[LINENUM_BK_NORMAL]) & SCF_DEFAULT)
-        SetRGBPart(&colors[LINENUM_BK_NORMAL], GetScrollbarColor());
+        SetRGBPart(&colors[LINENUM_BK_NORMAL], useDark ? dmColors.DialogBackground : GetScrollbarColor());
     //if (GetFValue(colors[LINENUM_BK_FOCUSED]) & SCF_DEFAULT)
     //  SetRGBPart(&colors[LINENUM_BK_FOCUSED], GetCOLORREF(colors[LINENUM_BK_NORMAL]));
     if (GetFValue(colors[LINENUM_BK_LEFT_CHANGE]) & SCF_DEFAULT)
@@ -225,19 +229,19 @@ void UpdateDefaultColors(SALCOLOR* colors, HPALETTE& palette)
     if (GetFValue(colors[LINENUM_BK_RIGHT_CHANGE]) & SCF_DEFAULT)
         SetRGBPart(&colors[LINENUM_BK_RIGHT_CHANGE], GetCOLORREF(colors[LINENUM_BK_NORMAL]));
     if (GetFValue(colors[LINENUM_BK_LEFT_CHANGE_FOCUSED]) & SCF_DEFAULT)
-        SetRGBPart(&colors[LINENUM_BK_LEFT_CHANGE_FOCUSED], GetSysColor(COLOR_BTNFACE));
+        SetRGBPart(&colors[LINENUM_BK_LEFT_CHANGE_FOCUSED], useDark ? dmColors.InactiveSelection : GetSysColor(COLOR_BTNFACE));
     //GetAverageColor(GetCOLORREF(colors[LINENUM_BK_LEFT_CHANGE]), 9,
     //                GetCOLORREF(colors[LINENUM_FG_LEFT_CHANGE]), 1));
     if (GetFValue(colors[LINENUM_BK_RIGHT_CHANGE_FOCUSED]) & SCF_DEFAULT)
-        SetRGBPart(&colors[LINENUM_BK_RIGHT_CHANGE_FOCUSED], GetSysColor(COLOR_BTNFACE));
+        SetRGBPart(&colors[LINENUM_BK_RIGHT_CHANGE_FOCUSED], useDark ? dmColors.InactiveSelection : GetSysColor(COLOR_BTNFACE));
     //GetAverageColor(GetCOLORREF(colors[LINENUM_BK_RIGHT_CHANGE]), 9,
     //                GetCOLORREF(colors[LINENUM_FG_RIGHT_CHANGE]), 1));
 
     // frame color around the selected change in the column with line numbers
     if (GetFValue(colors[LINENUM_LEFT_BORDER]) & SCF_DEFAULT)
-        SetRGBPart(&colors[LINENUM_LEFT_BORDER], GetSysColor(COLOR_BTNSHADOW));
+        SetRGBPart(&colors[LINENUM_LEFT_BORDER], dmColors.Border);
     if (GetFValue(colors[LINENUM_RIGHT_BORDER]) & SCF_DEFAULT)
-        SetRGBPart(&colors[LINENUM_RIGHT_BORDER], GetSysColor(COLOR_BTNSHADOW));
+        SetRGBPart(&colors[LINENUM_RIGHT_BORDER], dmColors.Border);
 
     // text colors of the displayed file contents
     if (GetFValue(colors[TEXT_FG_NORMAL]) & SCF_DEFAULT)
@@ -341,9 +345,9 @@ void UpdateDefaultColors(SALCOLOR* colors, HPALETTE& palette)
 
     // frame color around the selected change
     if (GetFValue(colors[TEXT_LEFT_BORDER]) & SCF_DEFAULT)
-        SetRGBPart(&colors[TEXT_LEFT_BORDER], GetSysColor(COLOR_BTNSHADOW));
+        SetRGBPart(&colors[TEXT_LEFT_BORDER], dmColors.Border);
     if (GetFValue(colors[TEXT_RIGHT_BORDER]) & SCF_DEFAULT)
-        SetRGBPart(&colors[TEXT_RIGHT_BORDER], GetSysColor(COLOR_BTNSHADOW));
+        SetRGBPart(&colors[TEXT_RIGHT_BORDER], dmColors.Border);
 
     // color of the selected text block
     if (GetFValue(colors[TEXT_FG_SELECTION]) & SCF_DEFAULT)

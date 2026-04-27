@@ -10,6 +10,7 @@
 #include "dialogs.h"
 #include "split.h"
 #include "combine.h"
+#include "plugindarkmode.h"
 
 // *****************************************************************************
 //
@@ -735,16 +736,13 @@ namespace combine
             BOOL selected = (dis->itemState & ODS_SELECTED);
             BOOL focused = selected && GetFocus() == GetDlgItem(hWnd, dis->CtlID);
 
-            if (selected)
-                FillRect(hDC, &r, (HBRUSH)(COLOR_HIGHLIGHT + 1));
-            else
-                FillRect(hDC, &r, (HBRUSH)(COLOR_WINDOW + 1));
+            PluginDarkMode_FillOwnerDrawBackground(hDC, &r, selected, focused);
 
             if (pid->index != -1)
             {
                 DrawIconEx(hDC, r.left + 2, r.top + 1, /*pid->hIcon*/ hFileIcon, 16, 16, 0, NULL, DI_NORMAL);
                 r.left += 21;
-                SetTextColor(hDC, GetSysColor(selected ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT));
+                SetTextColor(hDC, PluginDarkMode_GetOwnerDrawTextColor(selected, TRUE));
                 SetBkMode(hDC, TRANSPARENT);
                 DrawText(hDC, pid->text, -1, &r, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
                 r.left -= 21;

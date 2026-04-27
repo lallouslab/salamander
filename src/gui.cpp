@@ -10,6 +10,7 @@
 #include "toolbar.h"
 #include "menu.h"
 #include "tooltip.h"
+#include "darkmode.h"
 #include <uxtheme.h>
 #include <vssym32.h>
 
@@ -868,8 +869,10 @@ void CStaticText::DrawFocus(HDC hDC)
     r.right = xOffset + TextWidth;
     r.bottom = TextHeight;
 
-    int oldColor = SetTextColor(hDC, GetSysColor(COLOR_BTNFACE));
-    int oldBkColor = SetBkColor(hDC, GetSysColor(COLOR_BTNTEXT));
+    DarkModeColors colors;
+    DarkMode_GetColors(&colors);
+    int oldColor = SetTextColor(hDC, colors.DialogBackground);
+    int oldBkColor = SetBkColor(hDC, colors.DialogText);
     POINT oldBrushPoint;
     SetBrushOrgEx(hDC, 0, 0, &oldBrushPoint); // under XP with the Normal skin the paint misbehaved if the static was placed on a gradient background (FTP configuration)
     DrawFocusRect(hDC, &r);
@@ -1060,7 +1063,19 @@ CStaticText::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             // under XPTheme we have to let Windows erase the background
             BOOL bkErased = FALSE;
-            if (IsAppThemed())
+            DarkModeColors colors;
+            BOOL useDark = DarkMode_GetColors(&colors);
+            if (useDark)
+            {
+                HBRUSH hBrush = HANDLES(CreateSolidBrush(colors.DialogBackground));
+                if (hBrush != NULL)
+                {
+                    FillRect(hDC, &r, hBrush);
+                    HANDLES(DeleteObject(hBrush));
+                }
+                bkErased = TRUE;
+            }
+            else if (IsAppThemed())
             {
                 DrawThemeParentBackground(HWindow, hDC, &r);
                 bkErased = TRUE;
@@ -1073,10 +1088,10 @@ CStaticText::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (hParent != NULL)
                 SendMessage(hParent, WM_CTLCOLORSTATIC, (WPARAM)hDC, (LPARAM)HWindow);
             if (Flags & STF_HYPERLINK_COLOR)
-                SetTextColor(hDC, RGB(0, 0, 255));
+                SetTextColor(hDC, useDark ? RGB(88, 166, 255) : RGB(0, 0, 255));
             BOOL enabled = IsWindowEnabled(HWindow);
             if (!enabled)
-                SetTextColor(hDC, GetSysColor(COLOR_GRAYTEXT));
+                SetTextColor(hDC, colors.DisabledText);
 
             //        COLORREF textClr;
             //        if (Flags & STF_HYPERLINK_COLOR)
@@ -1157,7 +1172,16 @@ CStaticText::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 DrawThemeParentBackground(HWindow, hDC, &r);
             }
             else
-                FillRect(hDC, &r, (HBRUSH)(COLOR_BTNFACE + 1));
+            {
+                DarkModeColors colors;
+                DarkMode_GetColors(&colors);
+                HBRUSH hBrush = HANDLES(CreateSolidBrush(colors.DialogBackground));
+                if (hBrush != NULL)
+                {
+                    FillRect(hDC, &r, hBrush);
+                    HANDLES(DeleteObject(hBrush));
+                }
+            }
         }
 
         if ((GetWindowLongPtr(HWindow, GWL_STYLE) & WS_TABSTOP) && GetFocus() == HWindow)

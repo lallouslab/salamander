@@ -1,7 +1,7 @@
 # Sally
 
 [![Release](https://img.shields.io/github/v/release/0xeb/sally)](https://github.com/0xeb/sally/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/0xeb/sally/pr-msbuild.yml?label=build)](https://github.com/0xeb/sally/actions)
+[![Build](https://img.shields.io/github/actions/workflow/status/0xeb/sally/pr-cmake.yml?label=build)](https://github.com/0xeb/sally/actions)
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 
 A fast, modern dual-panel file manager for Windows — fork of [Open Salamander](https://github.com/OpenSalamander/salamander) with Unicode, long paths, and ARM64 support.
@@ -17,14 +17,23 @@ Sally is an independent fork of [Open Salamander](https://github.com/OpenSalaman
 
 ## What's New
 
+**Pre-Alpha Dark Mode Support**
+- Early dark-mode support for Sally core UI and bundled first-party plugins
+- Choose `Options` > `Configuration...` > `Appearance` > `Theme` > `Mode`
+- Modes: `Light` (default), `Dark`, and `System` (follows the Windows app theme)
+- Windows High Contrast remains authoritative and disables custom dark painting
+
 **Unicode & Long Path Support**
 - Full Unicode filename support for all file operations
 - Long path support — up to 32,767 characters
+- Viewer support for BOM-marked Unicode text files in Auto/Text mode
+- Unicode filename preservation during disk drag operations
 
 **Modern Build System**
 - Complete CMake port — all 25+ plugins, trace server, translator, and shell extension
 - Native x64, x86, and ARM64 targets
 - GitHub Actions CI/CD with automated releases
+- Release packages include runtime zips, symbols, and a translator workspace
 
 **Architecture Improvements**
 - Decoupled UI dialogs from file operation logic for better testability

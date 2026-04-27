@@ -5,6 +5,7 @@ sal_add_plugin(NAME portables
   SOURCES
     "${SAL_SHARED}/dbg.cpp"
     "${SAL_SHARED}/mhandles.cpp"
+    "${SAL_SHARED}/plugindarkmode.cpp"
     "${SAL_SHARED}/winliblt.cpp"
     "${SAL_PLUGINS}/portables/device.cpp"
     "${SAL_PLUGINS}/portables/entry.cpp"

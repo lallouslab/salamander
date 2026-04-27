@@ -349,7 +349,16 @@ protected:
 
     void CalcColors(BOOL isActive)
     {
-        if (this->_isActive)
+        PluginDarkModeColors colors;
+        BOOL useDark = PluginDarkMode_GetColors(&colors);
+        if (useDark)
+        {
+            this->_backColor = this->_isActive ? colors.CaptionBackground : colors.InactiveCaptionBackground;
+            this->_textColor = this->_isActive ? colors.CaptionText : colors.InactiveCaptionText;
+            this->_rootColorHot = colors.Highlight;
+            this->_textColorHot = colors.HighlightText;
+        }
+        else if (this->_isActive)
         {
             this->_backColor = GetSysColor(COLOR_ACTIVECAPTION);
             //this->_rootColor = RGB(0,0,128);
@@ -366,7 +375,7 @@ protected:
             this->_textColorHot = RGB(128, 128, 128);
         }
 
-        COLORREF ch = GetSysColor(COLOR_HIGHLIGHT);
+        COLORREF ch = colors.Highlight;
         this->_rootColor = CZColors::Grey(CZColors::Mix34(this->_textColor, this->_backColor));
 
         this->_textColorHot = CZColors::Mix(this->_textColor, ch);
@@ -393,7 +402,9 @@ protected:
 
         //background painting
         RECT trct;
-        SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
+        PluginDarkModeColors colors;
+        PluginDarkMode_GetColors(&colors);
+        SetBkColor(hdc, colors.DialogBackground);
 
         //top part
         trct.top = rct.top + 1;
@@ -421,7 +432,12 @@ protected:
         ExtTextOut(hdc, 0, 0, ETO_OPAQUE, &trct, NULL, 0, NULL);
 
         if (this->_hicon)
-            DrawIconEx(hdc, rct.left + 1 + 3, rct.top + 1 + 3 + this->_iconTop, this->_hicon, 0, 0, 0, GetSysColorBrush(COLOR_BTNFACE), DI_NORMAL);
+        {
+            HBRUSH hIconBrush = CreateSolidBrush(colors.DialogBackground);
+            DrawIconEx(hdc, rct.left + 1 + 3, rct.top + 1 + 3 + this->_iconTop, this->_hicon, 0, 0, 0, hIconBrush, DI_NORMAL);
+            if (hIconBrush != NULL)
+                DeleteObject(hIconBrush);
+        }
 
         /*RECT xrc;
 		xrc.left = rct.left;

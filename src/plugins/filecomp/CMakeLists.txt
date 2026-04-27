@@ -6,6 +6,7 @@ sal_add_plugin(NAME filecomp
     # Shared sources (filecomp doesn't use mhandles.cpp)
     "${SAL_SHARED}/auxtools.cpp"
     "${SAL_SHARED}/dbg.cpp"
+    "${SAL_SHARED}/plugindarkmode.cpp"
     "${SAL_SHARED}/winliblt.cpp"
     "${SAL_SHARED}/plugcore/messages.cpp"
     "${SAL_SHARED}/plugcore/str.cpp"

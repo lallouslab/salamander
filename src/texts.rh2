@@ -2713,6 +2713,11 @@
 // shutdown: wait window: Closing Find windows, please wait...
 #define IDS_CLOSINGFINDWINDOWS          14195
 
+// Configuration / Appearance: app theme mode
+#define IDS_THEME_MODE_LIGHT            14200
+#define IDS_THEME_MODE_DARK             14201
+#define IDS_THEME_MODE_SYSTEM           14202
+
 //#define CM_TEXTS_MAX                  18000    // maximal texts id
 
 #endif // __TEXTS_RH2

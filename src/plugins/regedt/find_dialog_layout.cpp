@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "plugindarkmode.h"
 
 int DialogWidth;
 int DialogHeight;
@@ -1039,7 +1040,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOLORCHANGE:
     {
-        ListView_SetBkColor(List->HWindow, GetSysColor(COLOR_WINDOW));
+        PluginDarkMode_ApplyListTreeThemeRecursive(HWindow);
         break;
     }
 

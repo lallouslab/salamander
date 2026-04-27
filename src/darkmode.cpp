@@ -35,6 +35,10 @@ const COLORREF DIALOG_DARK_BG = RGB(45, 45, 48);
 const COLORREF DIALOG_DARK_TEXT = RGB(232, 232, 232);
 const COLORREF DIALOG_DARK_INPUT_BG = RGB(30, 30, 30);
 const COLORREF DIALOG_DARK_INPUT_TEXT = RGB(245, 245, 245);
+const COLORREF DIALOG_DARK_DISABLED_TEXT = RGB(160, 160, 160);
+const COLORREF DIALOG_DARK_HIGHLIGHT = RGB(0, 120, 215);
+const COLORREF DIALOG_DARK_INACTIVE_SELECTION = RGB(75, 75, 78);
+const COLORREF DIALOG_DARK_TOOLTIP_BG = RGB(43, 43, 43);
 const TCHAR* IMMERSIVE_COLOR_SET_PARAM = TEXT("ImmersiveColorSet");
 const TCHAR* WINDOWS_THEME_ELEMENT_PARAM = TEXT("WindowsThemeElement");
 const TCHAR* SCROLLBAR_CLASS_NAME = TEXT("ScrollBar");
@@ -186,8 +190,10 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
 
     if (_tcsicmp(className, WC_LISTVIEW) == 0)
     {
-        COLORREF bgColor = useDark ? DIALOG_DARK_INPUT_BG : GetSysColor(COLOR_WINDOW);
-        COLORREF textColor = useDark ? DIALOG_DARK_INPUT_TEXT : GetSysColor(COLOR_WINDOWTEXT);
+        DarkModeColors colors;
+        DarkMode_GetColors(&colors);
+        COLORREF bgColor = colors.InputBackground;
+        COLORREF textColor = colors.InputText;
         ListView_SetBkColor(hwnd, bgColor);
         ListView_SetTextBkColor(hwnd, bgColor);
         ListView_SetTextColor(hwnd, textColor);
@@ -197,8 +203,10 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
 
     if (_tcsicmp(className, WC_TREEVIEW) == 0)
     {
-        COLORREF bgColor = useDark ? DIALOG_DARK_INPUT_BG : GetSysColor(COLOR_WINDOW);
-        COLORREF textColor = useDark ? DIALOG_DARK_TEXT : GetSysColor(COLOR_WINDOWTEXT);
+        DarkModeColors colors;
+        DarkMode_GetColors(&colors);
+        COLORREF bgColor = colors.InputBackground;
+        COLORREF textColor = colors.InputText;
         TreeView_SetBkColor(hwnd, bgColor);
         TreeView_SetTextColor(hwnd, textColor);
         InvalidateRect(hwnd, NULL, FALSE);
@@ -246,6 +254,51 @@ BOOL DarkMode_ShouldUseDark()
     return ShouldUseDarkColorsInternal();
 }
 
+BOOL DarkMode_GetColors(DarkModeColors* colors)
+{
+    if (colors == NULL)
+        return FALSE;
+
+    BOOL useDark = DarkMode_ShouldUseDark();
+    if (useDark)
+    {
+        colors->DialogBackground = DIALOG_DARK_BG;
+        colors->DialogText = DIALOG_DARK_TEXT;
+        colors->InputBackground = DIALOG_DARK_INPUT_BG;
+        colors->InputText = DIALOG_DARK_INPUT_TEXT;
+        colors->DisabledText = DIALOG_DARK_DISABLED_TEXT;
+        colors->Border = MAINFRAME_DARK_BORDER;
+        colors->Highlight = DIALOG_DARK_HIGHLIGHT;
+        colors->HighlightText = RGB(255, 255, 255);
+        colors->InactiveSelection = DIALOG_DARK_INACTIVE_SELECTION;
+        colors->ToolTipBackground = DIALOG_DARK_TOOLTIP_BG;
+        colors->ToolTipText = DIALOG_DARK_INPUT_TEXT;
+        colors->ViewerBackground = DIALOG_DARK_INPUT_BG;
+        colors->ViewerText = DIALOG_DARK_INPUT_TEXT;
+        colors->ViewerSelectionBackground = DIALOG_DARK_HIGHLIGHT;
+        colors->ViewerSelectionText = RGB(255, 255, 255);
+    }
+    else
+    {
+        colors->DialogBackground = GetSysColor(COLOR_BTNFACE);
+        colors->DialogText = GetSysColor(COLOR_WINDOWTEXT);
+        colors->InputBackground = GetSysColor(COLOR_WINDOW);
+        colors->InputText = GetSysColor(COLOR_WINDOWTEXT);
+        colors->DisabledText = GetSysColor(COLOR_GRAYTEXT);
+        colors->Border = GetSysColor(COLOR_3DLIGHT);
+        colors->Highlight = GetSysColor(COLOR_HIGHLIGHT);
+        colors->HighlightText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+        colors->InactiveSelection = GetSysColor(COLOR_3DFACE);
+        colors->ToolTipBackground = GetSysColor(COLOR_INFOBK);
+        colors->ToolTipText = GetSysColor(COLOR_INFOTEXT);
+        colors->ViewerBackground = GetSysColor(COLOR_WINDOW);
+        colors->ViewerText = GetSysColor(COLOR_WINDOWTEXT);
+        colors->ViewerSelectionBackground = GetSysColor(COLOR_WINDOWTEXT);
+        colors->ViewerSelectionText = GetSysColor(COLOR_WINDOW);
+    }
+    return useDark;
+}
+
 BOOL DarkMode_GetMainFramePalette(DarkModeMainFramePalette* palette)
 {
     if (palette == NULL)
@@ -287,6 +340,12 @@ HBRUSH DarkMode_GetDialogCtlColorBrush(UINT msg, HDC hdc, HWND hCtrl)
         return DialogDarkBrush;
 
     case WM_CTLCOLORSTATIC:
+        SetTextColor(hdc, DIALOG_DARK_TEXT);
+        SetBkColor(hdc, DIALOG_DARK_BG);
+        SetBkMode(hdc, TRANSPARENT);
+        return DialogDarkBrush;
+
+    case WM_CTLCOLORBTN:
         SetTextColor(hdc, DIALOG_DARK_TEXT);
         SetBkColor(hdc, DIALOG_DARK_BG);
         SetBkMode(hdc, TRANSPARENT);

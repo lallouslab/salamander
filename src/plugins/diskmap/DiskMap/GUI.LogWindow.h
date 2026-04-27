@@ -64,6 +64,7 @@ protected:
             this->_hWnd, NULL, CWindow::s_hInstance, NULL);
         if (this->_hWndListView)
         {
+            PluginDarkMode_ApplyListTreeThemeRecursive(this->_hWndListView);
             DWORD exStyle = LVS_EX_FULLROWSELECT;
             //if (DllGetVersion())
             //if (Shell >= 5.80) exStyle |= LVS_EX_LABELTIP;

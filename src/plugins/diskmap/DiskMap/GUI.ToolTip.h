@@ -553,8 +553,10 @@ public:
         GetClientRect(this->_hWnd, &oR);
 
         HFONT hfold;
-        SetBkColor(hdc, GetSysColor(COLOR_INFOBK));
-        SetTextColor(hdc, GetSysColor(COLOR_INFOTEXT));
+        PluginDarkModeColors colors;
+        PluginDarkMode_GetColors(&colors);
+        SetBkColor(hdc, colors.ToolTipBackground);
+        SetTextColor(hdc, colors.ToolTipText);
 
         //File Name
         hfold = SelectFont(hdc, this->_hftitle);
@@ -610,7 +612,12 @@ public:
         //TODO: Detect icon size
         //HACK: Force 32x32 icon - auto size looks awful on high DPI system
         if (this->_hicon)
-            DrawIconEx(hdc, TT_MARGIN_X + 0, TT_MARGIN_Y + iy, this->_hicon, 32, 32, 0, GetSysColorBrush(COLOR_INFOBK), DI_NORMAL);
+        {
+            HBRUSH hIconBrush = CreateSolidBrush(colors.ToolTipBackground);
+            DrawIconEx(hdc, TT_MARGIN_X + 0, TT_MARGIN_Y + iy, this->_hicon, 32, 32, 0, hIconBrush, DI_NORMAL);
+            if (hIconBrush != NULL)
+                DeleteObject(hIconBrush);
+        }
         SelectObject(hdc, hfold);
     }
 

@@ -18,6 +18,7 @@
 #include "gui.h"
 #include "drivelst.h"
 #include "shiconov.h"
+#include "darkmode.h"
 
 /*
 //****************************************************************************
@@ -712,7 +713,7 @@ CSharesDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOLORCHANGE:
     {
-        ListView_SetBkColor(HListView, GetSysColor(COLOR_WINDOW));
+        DarkMode_ApplyListTreeThemeRecursive(HListView);
         break;
     }
     }
@@ -1383,7 +1384,7 @@ CDisconnectDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOLORCHANGE:
     {
-        ListView_SetBkColor(HListView, GetSysColor(COLOR_WINDOW));
+        DarkMode_ApplyListTreeThemeRecursive(HListView);
         break;
     }
     }
@@ -2600,7 +2601,7 @@ CCfgPageIconOvrls::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOLORCHANGE:
     {
-        ListView_SetBkColor(HListView, GetSysColor(COLOR_WINDOW));
+        DarkMode_ApplyListTreeThemeRecursive(HListView);
         break;
     }
 

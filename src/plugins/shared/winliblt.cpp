@@ -29,6 +29,7 @@
 
 #include "spl_base.h"
 #include "dbg.h"
+#include "plugindarkmode.h"
 
 #ifdef ENABLE_PROPERTYDIALOG
 #include "arraylt.h"
@@ -70,6 +71,8 @@ void SetupWinLibHelp(FWinLibLTHelpCallback helpCallback)
 
 BOOL InitializeWinLib(const char* pluginName, HINSTANCE dllInstance)
 {
+    PluginDarkMode_Initialize();
+
     lstrcpyn(CWINDOW_CLASSNAME, pluginName, 50);
     strcat(CWINDOW_CLASSNAME, " - WinLib Universal Window");
     lstrcpyn(CWINDOW_CLASSNAME2, pluginName, 50);
@@ -287,6 +290,8 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 TRACE_E("Error during creating of window.");
                 return FALSE;
             }
+            PluginDarkMode_ApplyTitleBar(hwnd);
+            PluginDarkMode_ApplyListTreeThemeRecursive(hwnd);
         }
         break;
     }
@@ -334,6 +339,15 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 #endif
     }
     }
+
+    if ((uMsg == WM_SETTINGCHANGE && PluginDarkMode_OnSettingChange(lParam)) ||
+        uMsg == WM_THEMECHANGED)
+    {
+        PluginDarkMode_ApplyTitleBar(hwnd);
+        PluginDarkMode_ApplyListTreeThemeRecursive(hwnd);
+        InvalidateRect(hwnd, NULL, TRUE);
+    }
+
     //--- call WindowProc(...) of the corresponding window object
     if (wnd != NULL)
         return wnd->WindowProc(uMsg, wParam, lParam);
@@ -457,6 +471,18 @@ CDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return TRUE; // do not let F1 fall through to the parent even if we do not call WinLibLTHelpCallback()
     }
 
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    {
+        HBRUSH hBrush = PluginDarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (INT_PTR)hBrush;
+        break;
+    }
+
     case WM_COMMAND:
     {
         switch (LOWORD(wParam))
@@ -488,6 +514,25 @@ CDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
+
+    case WM_SETTINGCHANGE:
+    {
+        if (PluginDarkMode_OnSettingChange(lParam))
+        {
+            PluginDarkMode_ApplyTitleBar(HWindow);
+            PluginDarkMode_ApplyListTreeThemeRecursive(HWindow);
+            InvalidateRect(HWindow, NULL, TRUE);
+        }
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    {
+        PluginDarkMode_ApplyTitleBar(HWindow);
+        PluginDarkMode_ApplyListTreeThemeRecursive(HWindow);
+        InvalidateRect(HWindow, NULL, TRUE);
+        break;
+    }
     }
     return FALSE;
 }
@@ -515,6 +560,7 @@ CDialog::CDialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 TRACE_E("Error during creating of dialog.");
                 return TRUE;
             }
+            PluginDarkMode_ApplyTitleBar(hwndDlg);
             dlg->NotifDlgJustCreated(); // introduced as a place to adjust dialog layout
         }
         break;
@@ -554,10 +600,16 @@ CDialog::CDialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     }
     }
     //--- call DialogProc(...) of the corresponding dialog object
+    INT_PTR dlgRes;
     if (dlg != NULL)
-        return dlg->DialogProc(uMsg, wParam, lParam);
+        dlgRes = dlg->DialogProc(uMsg, wParam, lParam);
     else
-        return FALSE; // error or message did not arrive between WM_INITDIALOG and WM_DESTROY
+        dlgRes = FALSE; // error or message did not arrive between WM_INITDIALOG and WM_DESTROY
+
+    if (dlg != NULL && uMsg == WM_INITDIALOG)
+        PluginDarkMode_ApplyListTreeThemeRecursive(hwndDlg);
+
+    return dlgRes;
 }
 
 //
@@ -679,6 +731,18 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         break; // F1 nechame propadnout do parenta
     }
 
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    {
+        HBRUSH hBrush = PluginDarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (INT_PTR)hBrush;
+        break;
+    }
+
     case WM_NOTIFY:
     {
         if (((NMHDR*)lParam)->code == PSN_KILLACTIVE) // deaktivace stranky
@@ -741,6 +805,25 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
+
+    case WM_SETTINGCHANGE:
+    {
+        if (PluginDarkMode_OnSettingChange(lParam))
+        {
+            PluginDarkMode_ApplyTitleBar(HWindow);
+            PluginDarkMode_ApplyListTreeThemeRecursive(HWindow);
+            InvalidateRect(HWindow, NULL, TRUE);
+        }
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    {
+        PluginDarkMode_ApplyTitleBar(HWindow);
+        PluginDarkMode_ApplyListTreeThemeRecursive(HWindow);
+        InvalidateRect(HWindow, NULL, TRUE);
+        break;
+    }
     }
     return FALSE;
 }
@@ -770,6 +853,7 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
                 TRACE_E("Error during creating of dialog.");
                 return TRUE;
             }
+            PluginDarkMode_ApplyTitleBar(hwndDlg);
             dlg->NotifDlgJustCreated(); // introduced as a place to adjust dialog layout
         }
         break;
@@ -809,10 +893,16 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
     }
     }
     //--- call DialogProc(...) of the corresponding dialog object
+    INT_PTR dlgRes;
     if (dlg != NULL)
-        return dlg->DialogProc(uMsg, wParam, lParam);
+        dlgRes = dlg->DialogProc(uMsg, wParam, lParam);
     else
-        return FALSE; // error or message did not arrive between WM_INITDIALOG and WM_DESTROY
+        dlgRes = FALSE; // error or message did not arrive between WM_INITDIALOG and WM_DESTROY
+
+    if (dlg != NULL && uMsg == WM_INITDIALOG)
+        PluginDarkMode_ApplyListTreeThemeRecursive(hwndDlg);
+
+    return dlgRes;
 }
 
 //

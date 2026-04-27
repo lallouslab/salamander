@@ -6,6 +6,7 @@
 
 #include "cfgdlg.h"
 #include "toolbar.h"
+#include "darkmode.h"
 
 //*****************************************************************************
 //
@@ -470,10 +471,15 @@ CTBCustomizeDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         //      BOOL focused = (dis->itemState & ODS_FOCUS);
         BOOL focused = selected && GetFocus() == GetDlgItem(HWindow, dis->CtlID);
 
-        if (selected && focused)
-            FillRect(hDC, &r, (HBRUSH)(COLOR_HIGHLIGHT + 1));
-        else
-            FillRect(hDC, &r, (HBRUSH)(COLOR_WINDOW + 1));
+        DarkModeColors colors;
+        BOOL useDark = DarkMode_GetColors(&colors);
+        COLORREF bkColor = selected ? (focused || !useDark ? colors.Highlight : colors.InactiveSelection) : colors.InputBackground;
+        HBRUSH hBkBrush = HANDLES(CreateSolidBrush(bkColor));
+        if (hBkBrush != NULL)
+        {
+            FillRect(hDC, &r, hBkBrush);
+            HANDLES(DeleteObject(hBkBrush));
+        }
 
         const char* text;
         if (separator)
@@ -493,15 +499,15 @@ CTBCustomizeDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
 
         r.left += imageWidth;
-        int normalColor = index == -1 ? COLOR_GRAYTEXT : COLOR_WINDOWTEXT;
-        SetTextColor(hDC, GetSysColor(selected && focused ? COLOR_HIGHLIGHTTEXT : normalColor));
+        COLORREF normalColor = index == -1 ? colors.DisabledText : colors.InputText;
+        SetTextColor(hDC, selected && (focused || !useDark) ? colors.HighlightText : normalColor);
         SetBkMode(hDC, TRANSPARENT);
         DrawText(hDC, text, -1, &r, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
         r.left -= imageWidth;
         if (selected && !focused)
         {
             SelectObject(hDC, HANDLES(GetStockObject(NULL_BRUSH)));
-            HPEN hPen = HANDLES(CreatePen(PS_SOLID, 0, GetSysColor(COLOR_HIGHLIGHT)));
+            HPEN hPen = HANDLES(CreatePen(PS_SOLID, 0, colors.Highlight));
             HPEN hOldPen = (HPEN)SelectObject(hDC, hPen);
             Rectangle(hDC, r.left, r.top, r.right, r.bottom);
             SelectObject(hDC, hOldPen);

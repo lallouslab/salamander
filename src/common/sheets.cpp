@@ -22,8 +22,21 @@
 #include "winlib.h"
 #include "multimon.h"
 #include "sheets.h"
+#ifndef __TRACESERVER
+#include "darkmode.h"
+#endif
 
 extern CWinLibHelp* WinLibHelp;
+
+static void FillRectWithColor(HDC hDC, const RECT* rect, COLORREF color)
+{
+    HBRUSH hBrush = CreateSolidBrush(color);
+    if (hBrush != NULL)
+    {
+        FillRect(hDC, rect, hBrush);
+        DeleteObject(hBrush);
+    }
+}
 
 //
 // ****************************************************************************
@@ -569,7 +582,18 @@ CTPHCaptionWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         GetClientRect(HWindow, &r);
 
         int devCaps = GetDeviceCaps(hdc, NUMCOLORS);
-        if (devCaps == -1) // use gradient only with more than 256 colors
+        COLORREF darkDialogBackground = 0;
+        COLORREF darkDialogText = 0;
+        BOOL useDark = FALSE;
+#ifndef __TRACESERVER
+        DarkModeColors colors;
+        useDark = DarkMode_GetColors(&colors);
+        darkDialogBackground = colors.DialogBackground;
+        darkDialogText = colors.DialogText;
+#endif
+        if (useDark)
+            FillRectWithColor(hdc, &r, darkDialogBackground);
+        else if (devCaps == -1) // use gradient only with more than 256 colors
         {
             HBRUSH hOldBrush = (HBRUSH)GetCurrentObject(hdc, OBJ_BRUSH);
 #define TPH_STEPS 100
@@ -615,7 +639,9 @@ CTPHCaptionWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             hOldFont = (HFONT)SelectObject(hdc, hFont);
 
             int oldColor;
-            if (devCaps == -1)
+            if (useDark)
+                oldColor = SetTextColor(hdc, darkDialogText);
+            else if (devCaps == -1)
                 oldColor = SetTextColor(hdc, GetSysColor(COLOR_BTNTEXT));
             else
                 oldColor = SetTextColor(hdc, GetSysColor(COLOR_CAPTIONTEXT));
@@ -691,6 +717,9 @@ CTreePropHolderDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         BOOL appIsThemed = IsAppThemed();
         if (appIsThemed)
             SetWindowTheme(HTreeView, L"explorer", NULL);
+#ifndef __TRACESERVER
+        DarkMode_ApplyListTreeThemeRecursive(HWindow);
+#endif
 
         int treeIndent = 0;
         if (appIsThemed)
@@ -930,7 +959,9 @@ CTreePropHolderDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOLORCHANGE:
     {
-        TreeView_SetBkColor(HTreeView, GetSysColor(COLOR_WINDOW));
+#ifndef __TRACESERVER
+        DarkMode_ApplyListTreeThemeRecursive(HWindow);
+#endif
         break;
     }
     }

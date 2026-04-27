@@ -7,6 +7,7 @@
 #include <uxtheme.h>
 
 #include <shlwapi.h>
+#include "plugindarkmode.h"
 
 //#pragma comment(lib, "Shlwapi.lib")  // Petr: this does not work for me in VC2008, so I add it to the project
 
@@ -328,16 +329,18 @@ CSplitBarWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         HDC dc = BeginPaint(HWindow, &ps);
         RECT r;
         GetClientRect(HWindow, &r);
+        PluginDarkModeColors colors;
+        PluginDarkMode_GetColors(&colors);
         if (Tracking && HDitheredBrush)
         {
-            COLORREF oldBk = SetBkColor(dc, GetSysColor(COLOR_BTNFACE));
-            COLORREF oldText = SetTextColor(dc, GetSysColor(COLOR_3DDKSHADOW));
+            COLORREF oldBk = SetBkColor(dc, colors.DialogBackground);
+            COLORREF oldText = SetTextColor(dc, colors.Border);
             FillRect(dc, &r, HDitheredBrush);
             SetBkColor(dc, oldBk);
             SetTextColor(dc, oldText);
         }
         else
-            FillRect(dc, &r, (HBRUSH)(COLOR_BTNFACE + 1));
+            PluginDarkMode_FillRect(dc, &r, colors.DialogBackground);
         EndPaint(HWindow, &ps);
         return 0;
     }
@@ -392,10 +395,12 @@ CToolTipWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         HDC hDC = (HDC)wParam;
         RECT r;
         GetClientRect(HWindow, &r);
-        FillRect(hDC, &r, (HBRUSH)(COLOR_INFOBK + 1));
+        PluginDarkModeColors colors;
+        PluginDarkMode_GetColors(&colors);
+        PluginDarkMode_FillRect(hDC, &r, colors.ToolTipBackground);
         HFONT hOldFont = (HFONT)SelectObject(hDC, EnvFont);
-        COLORREF oldTextColor = SetTextColor(hDC, GetSysColor(COLOR_INFOTEXT));
-        COLORREF oldBkColor = SetBkColor(hDC, GetSysColor(COLOR_INFOBK));
+        COLORREF oldTextColor = SetTextColor(hDC, colors.ToolTipText);
+        COLORREF oldBkColor = SetBkColor(hDC, colors.ToolTipBackground);
         ExtTextOut(hDC, 2, 1, ETO_OPAQUE, &r, Text, TextLen, NULL);
         SetBkColor(hDC, oldBkColor);
         SetTextColor(hDC, oldTextColor);
@@ -509,9 +514,11 @@ CComboBoxEdit::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 CComboBox::CComboBox()
 {
     CALL_STACK_MESSAGE1("CComboBox::CComboBox()");
-    BtnFacePen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNFACE));
-    BtnShadowPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNSHADOW));
-    BtnHilightPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNHIGHLIGHT));
+    PluginDarkModeColors colors;
+    PluginDarkMode_GetColors(&colors);
+    BtnFacePen = CreatePen(PS_SOLID, 0, colors.DialogBackground);
+    BtnShadowPen = CreatePen(PS_SOLID, 0, colors.Border);
+    BtnHilightPen = CreatePen(PS_SOLID, 0, colors.InputBackground);
     Tracking = FALSE;
 }
 
@@ -535,9 +542,11 @@ void CComboBox::ChangeColors()
         DeleteObject(BtnShadowPen);
     if (BtnHilightPen)
         DeleteObject(BtnHilightPen);
-    BtnFacePen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNFACE));
-    BtnShadowPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNSHADOW));
-    BtnHilightPen = CreatePen(PS_SOLID, 0, GetSysColor(COLOR_BTNHIGHLIGHT));
+    PluginDarkModeColors colors;
+    PluginDarkMode_GetColors(&colors);
+    BtnFacePen = CreatePen(PS_SOLID, 0, colors.DialogBackground);
+    BtnShadowPen = CreatePen(PS_SOLID, 0, colors.Border);
+    BtnHilightPen = CreatePen(PS_SOLID, 0, colors.InputBackground);
 }
 
 LRESULT
@@ -573,6 +582,9 @@ CComboBox::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_CTLCOLORSTATIC:
     {
+        HBRUSH hBrush = PluginDarkMode_GetDialogCtlColorBrush(WM_CTLCOLOREDIT, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (LRESULT)hBrush;
         SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW));
         SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
         return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
@@ -826,18 +838,21 @@ CRebar::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 // draw our own text
                 HDC hdc = GetDC(HWindow);
                 HFONT oldFont = (HFONT)SelectObject(hdc, (HFONT)EnvFont);
-                SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
+                PluginDarkModeColors colors;
+                PluginDarkMode_GetColors(&colors);
+                SetBkColor(hdc, colors.DialogBackground);
+                SetTextColor(hdc, colors.DialogText);
                 DrawText(hdc, text, -1, &r, DT_SINGLELINE | DT_TOP);
 
                 // line under the text
                 r.top += EnvFontHeight;
-                FillRect(hdc, &r, (HBRUSH)(COLOR_BTNFACE + 1));
+                PluginDarkMode_FillRect(hdc, &r, colors.DialogBackground);
                 r.top -= EnvFontHeight;
 
                 // area behind the text
                 r.left = r.right;
                 r.right += 13;
-                FillRect(hdc, &r, (HBRUSH)(COLOR_BTNFACE + 1));
+                PluginDarkMode_FillRect(hdc, &r, colors.DialogBackground);
 
                 SelectObject(hdc, oldFont);
                 ReleaseDC(HWindow, hdc);
@@ -849,7 +864,9 @@ CRebar::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_CTLCOLORSTATIC:
     {
-        //SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW));
+        HBRUSH hBrush = PluginDarkMode_GetDialogCtlColorBrush(WM_CTLCOLOREDIT, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (LRESULT)hBrush;
         SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
         //return 0;
         return (LRESULT)GetSysColorBrush(COLOR_WINDOW);

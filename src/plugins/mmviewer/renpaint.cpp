@@ -10,6 +10,7 @@
 #include "output.h"
 #include "renderer.h"
 #include "mmviewer.h"
+#include "plugindarkmode.h"
 
 #ifdef RESPECT_WINDOWS_COLORS
 // Background color
@@ -129,6 +130,13 @@ void CRendererWindow::Paint(HDC hDC, BOOL moveEditBoxes, DWORD deferFlg)
     startH -= xPos;
     startV -= yPos;
 
+    PluginDarkModeColors colors;
+    PluginDarkMode_GetColors(&colors);
+    COLORREF valueBk = colors.InactiveSelection;
+    COLORREF headerBk = colors.DialogBackground;
+    COLORREF valueText = colors.InputText;
+    COLORREF headerText = colors.DialogText;
+
     int y = startV;
 
     int i;
@@ -142,8 +150,8 @@ void CRendererWindow::Paint(HDC hDC, BOOL moveEditBoxes, DWORD deferFlg)
             {
                 RECT rct = {startH, y, ((item->Flags & OIF_HEADER) == 0) ? startH + sLeft.cx : startH + width, y + FontHeight};
 
-                SetTextColor(hDC, ((item->Flags & OIF_HEADER) == 0) ? rgbTC : rgbHeaderTC);
-                SetBkColor(hDC, ((item->Flags & OIF_HEADER) == 0) ? rgbBC : rgbHeaderBC);
+                SetTextColor(hDC, ((item->Flags & OIF_HEADER) == 0) ? valueText : headerText);
+                SetBkColor(hDC, ((item->Flags & OIF_HEADER) == 0) ? valueBk : headerBk);
                 SelectObject(hDC, ((item->Flags & OIF_HEADER) == 0) ? HNormalFont : HBoldFont);
                 ExtTextOut(hDC, startH + 5, y + 1, ETO_CLIPPED | ETO_OPAQUE, &rct, item->Name, lstrlen(item->Name), NULL);
 
@@ -179,7 +187,7 @@ void CRendererWindow::Paint(HDC hDC, BOOL moveEditBoxes, DWORD deferFlg)
 
     if (!moveEditBoxes)
     {
-        SetBkColor(hDC, GetSysColor(COLOR_WINDOW));
+        SetBkColor(hDC, colors.InputBackground);
         ExtTextOut(hDC, 0, 0, ETO_OPAQUE, &r, NULL, 0, NULL);
 
         SelectObject(hDC, hOldFont);

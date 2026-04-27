@@ -6,8 +6,19 @@
 
 #include "tooltip.h"
 #include "mainwnd.h"
+#include "darkmode.h"
 
 #define WC_TOOLTIP "SalamanderToolTip"
+
+static void FillRectWithColor(HDC hDC, const RECT* rect, COLORREF color)
+{
+    HBRUSH hBrush = CreateSolidBrush(color);
+    if (hBrush != NULL)
+    {
+        FillRect(hDC, rect, hBrush);
+        DeleteObject(hBrush);
+    }
+}
 
 //*****************************************************************************
 //
@@ -632,9 +643,14 @@ CToolTip::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         HDC hDC = (HDC)wParam;
         RECT r;
         GetClientRect(HWindow, &r);
-        FillRect(hDC, &r, (HBRUSH)(COLOR_INFOBK + 1));
+        DarkModeColors colors;
+        BOOL useDark = DarkMode_GetColors(&colors);
+        if (useDark)
+            FillRectWithColor(hDC, &r, colors.ToolTipBackground);
+        else
+            FillRect(hDC, &r, (HBRUSH)(COLOR_INFOBK + 1));
         HFONT hOldFont = (HFONT)SelectObject(hDC, TooltipFont);
-        COLORREF oldTextColor = SetTextColor(hDC, GetSysColor(COLOR_INFOTEXT));
+        COLORREF oldTextColor = SetTextColor(hDC, useDark ? colors.ToolTipText : GetSysColor(COLOR_INFOTEXT));
         int oldBkMode = SetBkMode(hDC, TRANSPARENT);
         r.left += 2;
         r.top += 1;

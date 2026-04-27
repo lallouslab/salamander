@@ -705,6 +705,7 @@ CDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORLISTBOX:
     {
