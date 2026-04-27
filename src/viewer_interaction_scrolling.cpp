@@ -1026,7 +1026,13 @@ CViewerWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
             BOOL fatalErr = FALSE;
             FindingSoDonotSwitchToHex = TRUE; // during searching disable switching to "hex" when a line has more than 10000 characters
-            if (FindDialog.Regular)
+            if (HasDecodedTextMode() && !FindDialog.Regular && !FindDialog.HexMode)
+            {
+                BOOL foundMatch = FALSE;
+                if (FindDecodedLiteral(&hFile, forward, flags, foundMatch, fatalErr) && foundMatch)
+                    found = 0;
+            }
+            else if (FindDialog.Regular)
             {
                 if (RegExp.SetFlags(flags))
                 {
@@ -1494,15 +1500,25 @@ CViewerWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 CheckSelectionIsNotTooBig(HWindow))
             {
                 BOOL fatalErr = FALSE;
-                HGLOBAL h = GetSelectedText(fatalErr);
-                if (h != NULL)
+                if (HasDecodedTextMode())
                 {
-                    __int64 startSel = min(StartSelection, EndSelection);
-                    // if (startSel == -1) startSel = 0; // cannot happen (-1 can only be both at once and we do not get here)
-                    __int64 endSel = max(StartSelection, EndSelection);
-                    // if (endSel == -1) endSel = 0; // cannot happen (-1 can only be both at once and we do not get here)
-                    if (fatalErr || !CopyHTextToClipboard(h, (int)(endSel - startSel)))
+                    int textLen = 0;
+                    HGLOBAL h = GetSelectedTextW(fatalErr, &textLen);
+                    if (h != NULL && (fatalErr || !CopyHTextToClipboardW(h, textLen)))
                         NOHANDLES(GlobalFree(h));
+                }
+                else
+                {
+                    HGLOBAL h = GetSelectedText(fatalErr);
+                    if (h != NULL)
+                    {
+                        __int64 startSel = min(StartSelection, EndSelection);
+                        // if (startSel == -1) startSel = 0; // cannot happen (-1 can only be both at once and we do not get here)
+                        __int64 endSel = max(StartSelection, EndSelection);
+                        // if (endSel == -1) endSel = 0; // cannot happen (-1 can only be both at once and we do not get here)
+                        if (fatalErr || !CopyHTextToClipboard(h, (int)(endSel - startSel)))
+                            NOHANDLES(GlobalFree(h));
+                    }
                 }
                 if (fatalErr)
                     FatalFileErrorOccured();
@@ -1682,7 +1698,7 @@ CViewerWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             if (MouseDrag)
                 return 0;
-            StartSelection = 0;
+            StartSelection = HasDecodedTextMode() ? TextStartOffset() : 0;
             EndSelection = FileSize;
             SelectionIsFindResult = FALSE;
             InvalidateRect(HWindow, NULL, FALSE);
@@ -2710,11 +2726,11 @@ CViewerWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     POINT p1;
                     GetCursorPos(&p1);
 
-                    HGLOBAL h = GetSelectedText(fatalErr);
+                    HGLOBAL h = HasDecodedTextMode() ? GetSelectedTextW(fatalErr, NULL) : GetSelectedText(fatalErr);
                     if (!fatalErr && h != NULL)
                     {
                         CImpIDropSource* dropSource = new CImpIDropSource(FALSE);
-                        IDataObject* dataObject = new CTextDataObject(h);
+                        IDataObject* dataObject = HasDecodedTextMode() ? new CTextDataObject(h, TRUE) : new CTextDataObject(h);
                         if (dataObject != NULL && dropSource != NULL)
                         {
                             DWORD dwEffect;

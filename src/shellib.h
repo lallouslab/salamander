@@ -422,18 +422,29 @@ class CTextDataObject : public IDataObject
 private:
     long RefCount;
     HGLOBAL Data;
+    HGLOBAL UnicodeData;
 
 public:
     CTextDataObject(HGLOBAL data)
     {
         RefCount = 1;
         Data = data;
+        UnicodeData = NULL;
+    }
+    CTextDataObject(HGLOBAL data, BOOL unicodeText)
+    {
+        RefCount = 1;
+        Data = unicodeText ? NULL : data;
+        UnicodeData = unicodeText ? data : NULL;
     }
     virtual ~CTextDataObject()
     {
         if (RefCount != 0)
             TRACE_E("Preliminary destruction of this object.");
-        NOHANDLES(GlobalFree(Data));
+        if (Data != NULL)
+            NOHANDLES(GlobalFree(Data));
+        if (UnicodeData != NULL)
+            NOHANDLES(GlobalFree(UnicodeData));
     }
 
     STDMETHOD(QueryInterface)

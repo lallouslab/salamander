@@ -765,6 +765,7 @@ DWORD AddUnicodeToClipboard(const char* str, int len);
 BOOL CopyTextToClipboard(const char* text, int textLen = -1, BOOL showEcho = FALSE, HWND hEchoParent = NULL);
 BOOL CopyTextToClipboardW(const wchar_t* text, int textLen = -1, BOOL showEcho = FALSE, HWND hEchoParent = NULL);
 BOOL CopyHTextToClipboard(HGLOBAL hGlobalText, int textLen = -1, BOOL showEcho = FALSE, HWND hEchoParent = NULL);
+BOOL CopyHTextToClipboardW(HGLOBAL hGlobalText, int textLen = -1);
 
 // Determines from buffer 'pattern' of length 'patternLen' if it's text (there's a code page
 // in which it contains only allowed chars - displayable and control) and if it's text, also

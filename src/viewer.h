@@ -14,6 +14,8 @@
 #define TEXT_MAX_LINE_LEN 10000              // when a line is longer we ask about switching to hex mode; must be <= FIND_LINE_LEN
 #define RECOGNIZE_FILE_TYPE_BUFFER_LEN 10000 // how many characters from the start of the file to use to recognize the file type (RecognizeFileType())
 
+#include "common/unicode/ViewerBomText.h"
+
 #define VIEWER_HISTORY_SIZE 30 // number of remembered strings
 
 // menu positions - redo when the menu changes!
@@ -202,6 +204,10 @@ protected:
                          __int64& previousLineEnd, BOOL allowWrap,
                          BOOL takeLineBegin, BOOL& fatalErr, int* lines, __int64* firstLineEndOff = NULL,
                          __int64* firstLineCharLen = NULL, BOOL addLineIfSeekIsWrap = FALSE);
+    BOOL FindPreviousDecodedEOL(HANDLE* hFile, __int64 seek, __int64 minSeek, __int64& lineBegin,
+                                __int64& previousLineEnd, BOOL allowWrap,
+                                BOOL takeLineBegin, BOOL& fatalErr, int* lines, __int64* firstLineEndOff = NULL,
+                                __int64* firstLineCharLen = NULL, BOOL addLineIfSeekIsWrap = FALSE);
 
     // if a read error occurs, fatalErr == TRUE; ExitTextMode is TRUE when switching to hex mode
     __int64 FindBegin(__int64 seek, BOOL& fatalErr);
@@ -280,6 +286,22 @@ protected:
 
     // if a read error occurs, fatalErr == TRUE; ExitTextMode does not arise here (it does not become TRUE)
     HGLOBAL GetSelectedText(BOOL& fatalErr); // text for clipboard and drag & drop operations
+    HGLOBAL GetSelectedTextW(BOOL& fatalErr, int* textLen); // decoded Unicode text for clipboard and drag & drop operations
+
+    BOOL HasDecodedTextMode() const { return Type == vtText && Sally::Unicode::IsDecodedEncoding(TextEncoding); }
+    BOOL HasDecodedTextEncoding() const { return Sally::Unicode::IsDecodedEncoding(TextEncoding); }
+    __int64 TextStartOffset() const { return HasDecodedTextEncoding() ? TextContentOffset : 0; }
+    __int64 ClampToTextStart(__int64 offset) const { return max(offset, TextStartOffset()); }
+    BOOL DecodeTextRange(HANDLE* hFile, __int64 start, __int64 end, Sally::Unicode::DecodedRun& run,
+                         BOOL& fatalErr, bool flush = true);
+    BOOL ReadDecodedScalar(HANDLE* hFile, __int64 offset, Sally::Unicode::DecodedRun& scalar, BOOL& fatalErr);
+    BOOL ReadDecodedTextLine(HANDLE* hFile, __int64 lineOffset, __int64 maxCells,
+                             Sally::Unicode::DecodedRun& visualLine, __int64& lineEnd,
+                             __int64& nextLineBegin, BOOL& eol, BOOL& wrapped,
+                             int& eolBytes, BOOL& fatalErr);
+    void PaintDecodedText(HDC dc, const RECT& fullLine, int lines, int columns, int clipFirstRow,
+                          int clipLastRow, BOOL& fatalErr, BOOL& setFindOffset);
+    BOOL FindDecodedLiteral(HANDLE* hFile, BOOL forward, WORD flags, BOOL& foundMatch, BOOL& fatalErr);
 
     void SetToolTipOffset(__int64 offset);
 
@@ -371,6 +393,8 @@ protected:
     int CodeType;        // numeric encoding identifier; CodeTables memory for this viewer window
     BOOL UseCodeTable;   // should CodeTable be used for recoding?
     char CodeTable[256]; // code table
+    Sally::Unicode::BomEncoding TextEncoding; // BOM-marked text decoding mode
+    __int64 TextContentOffset;                // first raw byte after the BOM in decoded text mode
 
     char CurrentDir[SAL_MAX_LONG_PATH]; // path for the open dialog
 

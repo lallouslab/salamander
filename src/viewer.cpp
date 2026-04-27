@@ -4,6 +4,8 @@
 
 #include "precomp.h"
 
+#include <cstdint>
+
 #include "ui/IPrompter.h"
 #include "viewer.h"
 
@@ -550,6 +552,8 @@ CViewerWindow::CViewerWindow(const char* fileName, CViewType type, const char* c
     CodeType = 0;
     CodeTables.Init(MainWindow->HWindow);
     UseCodeTable = FALSE;
+    TextEncoding = Sally::Unicode::BomEncoding::LegacyBytes;
+    TextContentOffset = 0;
     if (fileName == NULL)
         FileName.clear(); // error
     else
@@ -750,6 +754,456 @@ void MyTextOut(HDC hdc, int nXStart, int nYStart, LPCTSTR lpString, int cbString
     }
     else
         TextOut(hdc, nXStart, nYStart, lpString, cbString);
+}
+
+void MyTextOutW(HDC hdc, int nXStart, int nYStart, const wchar_t* lpString, int cchString)
+{
+#ifdef _DEBUG
+    if (!ViewerFontMeasured)
+        TRACE_E("MyTextOutW(): ViewerFontMeasured is FALSE!");
+#endif // _DEBUG
+    TextOutW(hdc, nXStart, nYStart, lpString, cchString);
+}
+
+namespace
+{
+
+bool IsViewerDecodedEOL(std::uint32_t scalar)
+{
+    return scalar == L'\r' || scalar == L'\n' || scalar == 0;
+}
+
+void AppendVisualCell(Sally::Unicode::DecodedRun& visual, std::uint32_t scalar,
+                      __int64 rawStart, __int64 rawEnd, int tabSize)
+{
+    if (scalar == L'\t')
+    {
+        int tab = (int)(tabSize - (visual.CellCount() % tabSize));
+        if (tab <= 0)
+            tab = 1;
+        while (tab-- > 0)
+            visual.AppendCell(L' ', rawStart, rawEnd);
+    }
+    else
+        visual.AppendCell(scalar, rawStart, rawEnd);
+}
+
+std::size_t DecodedSelectionStartCell(const Sally::Unicode::DecodedRun& visual, __int64 offset)
+{
+    for (std::size_t i = 0; i < visual.CellCount(); ++i)
+    {
+        if (offset <= visual.RawStart[i])
+            return i;
+        if (offset < visual.RawEnd[i])
+            return i;
+    }
+    return visual.CellCount();
+}
+
+std::size_t DecodedSelectionEndCell(const Sally::Unicode::DecodedRun& visual, __int64 offset)
+{
+    for (std::size_t i = 0; i < visual.CellCount(); ++i)
+    {
+        if (offset <= visual.RawStart[i])
+            return i;
+        if (offset <= visual.RawEnd[i])
+            return i + 1;
+    }
+    return visual.CellCount();
+}
+
+void DrawDecodedCells(HDC dc, const Sally::Unicode::DecodedRun& visual, std::size_t cellStart,
+                      std::size_t cellEnd, int xCell)
+{
+    if (cellStart >= cellEnd)
+        return;
+    std::size_t textStart = visual.TextIndexForCellEnd(cellStart);
+    std::size_t textEnd = visual.TextIndexForCellEnd(cellEnd);
+    if (textEnd > textStart)
+        MyTextOutW(dc, xCell * CharWidth, 0, visual.Text.c_str() + textStart, (int)(textEnd - textStart));
+}
+
+} // namespace
+
+BOOL CViewerWindow::DecodeTextRange(HANDLE* hFile, __int64 start, __int64 end,
+                                    Sally::Unicode::DecodedRun& run, BOOL& fatalErr, bool flush)
+{
+    run.Clear();
+    fatalErr = FALSE;
+    if (!HasDecodedTextEncoding())
+        return FALSE;
+
+    start = max(start, TextContentOffset);
+    end = min(end, FileSize);
+    start = Sally::Unicode::AlignToCodeUnit(TextEncoding, start, TextContentOffset);
+    if (end <= start)
+        return TRUE;
+
+    __int64 off = start;
+    while (off < end)
+    {
+        __int64 want = min((__int64)APROX_LINE_LEN + 8, end - off);
+        __int64 len = Prepare(hFile, off, want, fatalErr);
+        if (fatalErr)
+            return FALSE;
+        if (len <= 0)
+            break;
+
+        bool finalChunk = flush && off + len >= end;
+        Sally::Unicode::DecodedRun part = Sally::Unicode::DecodeBytes(TextEncoding, Buffer + (off - Seek), (std::size_t)len, off, finalChunk);
+        if (part.RawBytesConsumed == 0 && part.CellCount() == 0)
+        {
+            if (finalChunk)
+                break;
+            len = min((__int64)APROX_LINE_LEN + 16, FileSize - off);
+            len = Prepare(hFile, off, len, fatalErr);
+            if (fatalErr || len <= 0)
+                return !fatalErr;
+            part = Sally::Unicode::DecodeBytes(TextEncoding, Buffer + (off - Seek), (std::size_t)len, off, off + len >= FileSize);
+            if (part.RawBytesConsumed == 0)
+                break;
+        }
+        run.AppendRun(part);
+        off += (__int64)part.RawBytesConsumed;
+    }
+    return TRUE;
+}
+
+BOOL CViewerWindow::ReadDecodedScalar(HANDLE* hFile, __int64 offset, Sally::Unicode::DecodedRun& scalar, BOOL& fatalErr)
+{
+    scalar.Clear();
+    fatalErr = FALSE;
+    if (!HasDecodedTextEncoding())
+        return FALSE;
+    offset = max(offset, TextContentOffset);
+    offset = Sally::Unicode::AlignToCodeUnit(TextEncoding, offset, TextContentOffset);
+    if (offset >= FileSize)
+        return TRUE;
+
+    __int64 len = Prepare(hFile, offset, min((__int64)8, FileSize - offset), fatalErr);
+    if (fatalErr || len <= 0)
+        return !fatalErr;
+    scalar = Sally::Unicode::DecodeBytes(TextEncoding, Buffer + (offset - Seek), (std::size_t)len, offset, TRUE);
+    return TRUE;
+}
+
+BOOL CViewerWindow::ReadDecodedTextLine(HANDLE* hFile, __int64 lineOffset, __int64 maxCells,
+                                        Sally::Unicode::DecodedRun& visualLine, __int64& lineEnd,
+                                        __int64& nextLineBegin, BOOL& eol, BOOL& wrapped,
+                                        int& eolBytes, BOOL& fatalErr)
+{
+    visualLine.Clear();
+    fatalErr = FALSE;
+    eol = FALSE;
+    wrapped = FALSE;
+    eolBytes = 0;
+
+    if (!HasDecodedTextEncoding())
+        return FALSE;
+
+    __int64 off = max(lineOffset, TextContentOffset);
+    off = Sally::Unicode::AlignToCodeUnit(TextEncoding, off, TextContentOffset);
+    lineEnd = off;
+    nextLineBegin = off;
+    if (off >= FileSize)
+        return TRUE;
+
+    while (off < FileSize)
+    {
+        __int64 readEnd = min(FileSize, off + APROX_LINE_LEN + 8);
+        Sally::Unicode::DecodedRun decoded;
+        if (!DecodeTextRange(hFile, off, readEnd, decoded, fatalErr, readEnd >= FileSize))
+            return FALSE;
+        if (fatalErr)
+            return FALSE;
+        if (decoded.CellCount() == 0)
+        {
+            lineEnd = nextLineBegin = off;
+            return TRUE;
+        }
+
+        for (std::size_t i = 0; i < decoded.CellCount(); ++i)
+        {
+            std::uint32_t scalar = decoded.Scalars[i];
+            if (IsViewerDecodedEOL(scalar))
+            {
+                if (scalar == L'\r')
+                {
+                    if (Configuration.EOL_CRLF)
+                    {
+                        Sally::Unicode::DecodedRun nextScalar;
+                        bool haveNext = false;
+                        if (i + 1 < decoded.CellCount())
+                        {
+                            nextScalar.AppendCell(decoded.Scalars[i + 1], decoded.RawStart[i + 1], decoded.RawEnd[i + 1]);
+                            haveNext = true;
+                        }
+                        else if (ReadDecodedScalar(hFile, decoded.RawEnd[i], nextScalar, fatalErr) && !fatalErr &&
+                                 nextScalar.CellCount() > 0)
+                            haveNext = true;
+                        if (fatalErr)
+                            return FALSE;
+                        if (haveNext && nextScalar.Scalars[0] == L'\n')
+                        {
+                            lineEnd = decoded.RawStart[i];
+                            nextLineBegin = nextScalar.RawEnd[0];
+                            eol = TRUE;
+                            eolBytes = (int)(nextLineBegin - lineEnd);
+                            return TRUE;
+                        }
+                    }
+                    if (Configuration.EOL_CR)
+                    {
+                        lineEnd = decoded.RawStart[i];
+                        nextLineBegin = decoded.RawEnd[i];
+                        eol = TRUE;
+                        eolBytes = (int)(nextLineBegin - lineEnd);
+                        return TRUE;
+                    }
+                }
+                else if (scalar == L'\n')
+                {
+                    if (Configuration.EOL_LF)
+                    {
+                        lineEnd = decoded.RawStart[i];
+                        nextLineBegin = decoded.RawEnd[i];
+                        eol = TRUE;
+                        eolBytes = (int)(nextLineBegin - lineEnd);
+                        return TRUE;
+                    }
+                }
+                else if (Configuration.EOL_NULL)
+                {
+                    lineEnd = decoded.RawStart[i];
+                    nextLineBegin = decoded.RawEnd[i];
+                    eol = TRUE;
+                    eolBytes = (int)(nextLineBegin - lineEnd);
+                    return TRUE;
+                }
+            }
+
+            AppendVisualCell(visualLine, scalar, decoded.RawStart[i], decoded.RawEnd[i], Configuration.TabSize);
+            lineEnd = decoded.RawEnd[i];
+            nextLineBegin = lineEnd;
+            if (WrapText && maxCells > 0 && (__int64)visualLine.CellCount() >= maxCells)
+            {
+                wrapped = TRUE;
+                return TRUE;
+            }
+        }
+        off += (__int64)decoded.RawBytesConsumed;
+        if (decoded.RawBytesConsumed == 0)
+            break;
+    }
+    lineEnd = nextLineBegin = max(lineEnd, off);
+    return TRUE;
+}
+
+void CViewerWindow::PaintDecodedText(HDC dc, const RECT& fullLine, int lines, int columns,
+                                     int clipFirstRow, int clipLastRow, BOOL& fatalErr,
+                                     BOOL& setFindOffset)
+{
+    __int64 xRollLimit = (Width - BORDER_WIDTH) / CharWidth / 6;
+    FirstLineSize = LastLineSize = 0;
+    WrapIsBeforeFirstLine = FALSE;
+
+    RECT r;
+    RECT endRect = fullLine;
+    __int64 lineOffset = max(SeekY, TextContentOffset);
+    BOOL previousEOL = FALSE;
+    for (int i = 0; i < lines; i++)
+    {
+        Sally::Unicode::DecodedRun visual;
+        __int64 lineEnd = lineOffset;
+        __int64 nextLineBegin = lineOffset;
+        BOOL EOL = FALSE;
+        BOOL lineEndIsWrapped = FALSE;
+        int lineEOLSize = 0;
+
+        if (lineOffset >= FileSize)
+        {
+            int redrI = i;
+            if (redrI < clipFirstRow)
+                redrI = clipFirstRow;
+            r.left = BORDER_WIDTH;
+            r.top = CharHeight * redrI;
+            r.bottom = CharHeight * clipLastRow;
+            if (r.bottom > Height)
+                r.bottom = Height;
+            if (r.top <= r.bottom)
+                FillRect(dc, &r, BkgndBrush);
+
+            if (previousEOL)
+            {
+                LineOffset.Add(lineOffset);
+                LineOffset.Add(lineOffset);
+                LineOffset.Add(0);
+            }
+            break;
+        }
+
+        __int64 maxCells = WrapText ? max(1, columns) : TEXT_MAX_LINE_LEN + 1;
+        if (!ReadDecodedTextLine(NULL, lineOffset, maxCells, visual, lineEnd, nextLineBegin,
+                                 EOL, lineEndIsWrapped, lineEOLSize, fatalErr))
+            break;
+        if (fatalErr)
+            break;
+
+        __int64 fullLineLen = max((__int64)0, nextLineBegin - lineOffset);
+        __int64 lineLen = (__int64)visual.CellCount();
+        LineOffset.Add(lineOffset);
+        LineOffset.Add(lineEnd);
+        LineOffset.Add(lineLen);
+
+        __int64 startSel = min(StartSelection, EndSelection);
+        if (startSel == -1)
+            startSel = 0;
+        __int64 endSel = max(StartSelection, EndSelection);
+        if (endSel == -1)
+            endSel = 0;
+        if (startSel == endSel)
+            startSel = endSel = 0;
+
+        std::size_t selStartCell = DecodedSelectionStartCell(visual, startSel);
+        std::size_t selEndCell = DecodedSelectionEndCell(visual, endSel);
+
+        if (ScrollToSelection)
+        {
+            int len2 = (Width - BORDER_WIDTH) / CharWidth;
+            if (len2 - 2 * xRollLimit < (__int64)selEndCell - (__int64)selStartCell)
+            {
+                xRollLimit = (len2 - ((__int64)selEndCell - (__int64)selStartCell)) / 2;
+                if (xRollLimit < 0)
+                    xRollLimit = 0;
+            }
+            __int64 left = OriginX;
+            __int64 right = OriginX + len2;
+            if ((__int64)selStartCell < lineLen)
+            {
+                __int64 originX = OriginX;
+                if ((__int64)selStartCell < left)
+                {
+                    originX = (__int64)selStartCell - xRollLimit;
+                    if (originX < 0)
+                        originX = 0;
+                }
+                else if ((__int64)selStartCell >= right ||
+                         ((__int64)selEndCell < lineLen && (__int64)selEndCell >= right))
+                {
+                    originX = (__int64)selStartCell - xRollLimit;
+                    if (originX < 0)
+                        originX = 0;
+                    __int64 originX2 = (__int64)selEndCell - len2 + 1 + xRollLimit;
+                    if (originX2 < 0)
+                        originX2 = 0;
+                    originX = min(originX, originX2);
+                }
+                if (originX != OriginX)
+                {
+                    setFindOffset = FALSE;
+                    OriginX = originX;
+                    InvalidateRect(HWindow, NULL, FALSE);
+                    break;
+                }
+                else
+                    ScrollToSelection = FALSE;
+            }
+        }
+
+        if (i == 0)
+            FirstLineSize = fullLineLen;
+        if (i + 1 < lines)
+        {
+            ViewSize += fullLineLen;
+            if (i + 2 == lines)
+                LastLineSize = fullLineLen;
+        }
+
+        BOOL blackEnd = (lineEndIsWrapped ? startSel < lineEnd : startSel <= lineEnd) && endSel > lineEnd;
+        if (OriginX < lineLen)
+        {
+            __int64 len2 = min((Width - BORDER_WIDTH) / CharWidth + 1, lineLen - OriginX);
+            std::size_t left = (std::size_t)OriginX;
+            std::size_t right = (std::size_t)(OriginX + len2);
+            std::size_t u1 = len2, u2 = 0, u3 = 0;
+            if (selStartCell <= left)
+            {
+                if (selEndCell > left)
+                {
+                    u1 = 0;
+                    u2 = min(right, selEndCell) - left;
+                    u3 = (std::size_t)len2 - u2;
+                }
+            }
+            else if (selStartCell < right)
+            {
+                if (selEndCell > selStartCell)
+                {
+                    u1 = selStartCell - left;
+                    u2 = min(right, selEndCell) - left - u1;
+                    u3 = (std::size_t)len2 - u2 - u1;
+                }
+            }
+
+            if (i >= clipFirstRow && i <= clipLastRow)
+            {
+                RECT myLine = fullLine;
+                myLine.right = min(myLine.right, (int)(len2 + 1) * CharWidth);
+
+                if (blackEnd)
+                {
+                    endRect.left = 0;
+                    endRect.right = (int)((u1 + u2 + u3) * CharWidth);
+                    FillRect(Bitmap.HMemDC, &endRect, BkgndBrush);
+                    endRect.left = endRect.right;
+                    endRect.right = Width - BORDER_WIDTH;
+                    FillRect(Bitmap.HMemDC, &endRect, BkgndBrushSel);
+                }
+                else
+                    FillRect(Bitmap.HMemDC, &myLine, BkgndBrush);
+
+                if (u3 > 0)
+                    DrawDecodedCells(Bitmap.HMemDC, visual, left + u1 + u2, left + u1 + u2 + u3, (int)(u1 + u2));
+                if (u2 > 0)
+                {
+                    SetBkColor(Bitmap.HMemDC, GetCOLORREF(ViewerColors[VIEWER_BK_SELECTED]));
+                    SetTextColor(Bitmap.HMemDC, GetCOLORREF(ViewerColors[VIEWER_FG_SELECTED]));
+                    SetBkMode(Bitmap.HMemDC, OPAQUE);
+                    DrawDecodedCells(Bitmap.HMemDC, visual, left + u1, left + u1 + u2, (int)u1);
+                    SetBkMode(Bitmap.HMemDC, TRANSPARENT);
+                    SetTextColor(Bitmap.HMemDC, GetCOLORREF(ViewerColors[VIEWER_FG_NORMAL]));
+                    SetBkColor(Bitmap.HMemDC, GetCOLORREF(ViewerColors[VIEWER_BK_NORMAL]));
+                }
+                if (u1 > 0)
+                    DrawDecodedCells(Bitmap.HMemDC, visual, left, left + u1, 0);
+
+                BitBlt(dc, BORDER_WIDTH, CharHeight * i, myLine.right,
+                       CharHeight, Bitmap.HMemDC, 0, 0, SRCCOPY);
+
+                if (myLine.right < fullLine.right)
+                {
+                    myLine.top = CharHeight * i;
+                    myLine.bottom = myLine.top + CharHeight;
+                    myLine.left = BORDER_WIDTH + myLine.right;
+                    myLine.right = BORDER_WIDTH + fullLine.right;
+                    FillRect(dc, &myLine, blackEnd ? BkgndBrushSel : BkgndBrush);
+                }
+            }
+        }
+        else if (i >= clipFirstRow && i <= clipLastRow)
+        {
+            r.left = BORDER_WIDTH;
+            r.top = CharHeight * i;
+            r.right = Width;
+            r.bottom = r.top + CharHeight;
+            FillRect(dc, &r, blackEnd ? BkgndBrushSel : BkgndBrush);
+        }
+
+        previousEOL = EOL;
+        if (nextLineBegin <= lineOffset)
+            break;
+        lineOffset = nextLineBegin;
+    }
 }
 
 void CViewerWindow::Paint(HDC dc)
@@ -996,6 +1450,11 @@ void CViewerWindow::Paint(HDC dc)
 
             case vtText:
             {
+                if (HasDecodedTextMode())
+                {
+                    PaintDecodedText(dc, fullLine, lines, columns, clipFirstRow, clipLastRow, fatalErr, setFindOffset);
+                    break;
+                }
                 __int64 xRollLimit = (Width - BORDER_WIDTH) / CharWidth / 6;
                 FirstLineSize = LastLineSize = 0;
 
