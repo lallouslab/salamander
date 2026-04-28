@@ -21,6 +21,7 @@ BOOL SupportWarningLogged = FALSE;
 BOOL CaptionColorAttrSupported = TRUE;
 BOOL TextColorAttrSupported = TRUE;
 thread_local int ListTreeThemeApplyDepth = 0;
+thread_local int GroupBoxThemeApplyDepth = 0;
 
 const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_NEW = 20; // Win10 1903+
 const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19; // older Win10 builds
@@ -41,8 +42,15 @@ const COLORREF DIALOG_DARK_INACTIVE_SELECTION = RGB(75, 75, 78);
 const COLORREF DIALOG_DARK_TOOLTIP_BG = RGB(43, 43, 43);
 const TCHAR* IMMERSIVE_COLOR_SET_PARAM = TEXT("ImmersiveColorSet");
 const TCHAR* WINDOWS_THEME_ELEMENT_PARAM = TEXT("WindowsThemeElement");
+const TCHAR* BUTTON_CLASS_NAME = TEXT("Button");
+const TCHAR* COMBOBOX_CLASS_NAME = TEXT("ComboBox");
+const TCHAR* EDIT_CLASS_NAME = TEXT("Edit");
+const TCHAR* LISTBOX_CLASS_NAME = TEXT("ListBox");
 const TCHAR* SCROLLBAR_CLASS_NAME = TEXT("ScrollBar");
+const TCHAR* STATIC_CLASS_NAME = TEXT("Static");
 const WCHAR* UXTHEME_DARKMODE_EXPLORER = L"DarkMode_Explorer";
+const WCHAR* UXTHEME_EXPLORER = L"Explorer";
+const UINT_PTR GROUPBOX_SUBCLASS_ID = 1;
 
 HBRUSH DialogDarkBrush = NULL;
 HBRUSH DialogDarkInputBrush = NULL;
@@ -171,6 +179,253 @@ void EnsureDialogBrushes()
         DialogDarkInputBrush = CreateSolidBrush(DIALOG_DARK_INPUT_BG);
 }
 
+BOOL HasClassName(HWND hwnd, LPCTSTR expectedClassName)
+{
+    if (hwnd == NULL || expectedClassName == NULL || !IsWindow(hwnd))
+        return FALSE;
+
+    TCHAR className[64] = {0};
+    if (GetClassName(hwnd, className, _countof(className)) == 0)
+        return FALSE;
+
+    return _tcsicmp(className, expectedClassName) == 0;
+}
+
+BOOL IsGroupBox(HWND hwnd)
+{
+    if (!HasClassName(hwnd, BUTTON_CLASS_NAME))
+        return FALSE;
+
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    return (style & BS_TYPEMASK) == BS_GROUPBOX;
+}
+
+void InvalidateGroupBox(HWND hwnd)
+{
+    if (hwnd != NULL && IsWindow(hwnd))
+        InvalidateRect(hwnd, NULL, TRUE);
+}
+
+DWORD GetGroupBoxTextFlags(HWND hwnd)
+{
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    DWORD flags = DT_SINGLELINE | DT_VCENTER;
+
+    if ((style & BS_CENTER) == BS_CENTER)
+        flags |= DT_CENTER;
+    else if ((style & BS_RIGHT) == BS_RIGHT)
+        flags |= DT_RIGHT;
+    else
+        flags |= DT_LEFT;
+
+    LRESULT uiState = SendMessage(hwnd, WM_QUERYUISTATE, 0, 0);
+    if ((uiState & UISF_HIDEACCEL) != 0)
+        flags |= DT_HIDEPREFIX;
+
+    return flags;
+}
+
+BOOL PaintDarkGroupBox(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    if (client.right > client.left && client.bottom > client.top)
+    {
+        HFONT hFont = (HFONT)SendMessage(hwnd, WM_GETFONT, 0, 0);
+        if (hFont == NULL)
+            hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+
+        HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+        int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+        COLORREF oldTextColor = SetTextColor(hdc, IsWindowEnabled(hwnd) ? colors.DialogText : colors.DisabledText);
+        COLORREF oldBkColor = SetBkColor(hdc, colors.DialogBackground);
+
+        TEXTMETRIC tm;
+        memset(&tm, 0, sizeof(tm));
+        GetTextMetrics(hdc, &tm);
+        int frameTop = max(1, (tm.tmHeight + 1) / 2);
+
+        HPEN hPen = CreatePen(PS_SOLID, 1, colors.Border);
+        HPEN hOldPen = NULL;
+        if (hPen != NULL)
+            hOldPen = (HPEN)SelectObject(hdc, hPen);
+
+        RECT frame = client;
+        frame.top = min(frame.bottom - 1, frameTop);
+        frame.right--;
+        frame.bottom--;
+        if (frame.right > frame.left && frame.bottom > frame.top)
+        {
+            MoveToEx(hdc, frame.left, frame.top, NULL);
+            LineTo(hdc, frame.right, frame.top);
+            LineTo(hdc, frame.right, frame.bottom);
+            LineTo(hdc, frame.left, frame.bottom);
+            LineTo(hdc, frame.left, frame.top);
+        }
+
+        if (hOldPen != NULL)
+            SelectObject(hdc, hOldPen);
+        if (hPen != NULL)
+            DeleteObject(hPen);
+
+        int textLen = GetWindowTextLength(hwnd);
+        if (textLen > 0)
+        {
+            TCHAR* text = new TCHAR[textLen + 1];
+            if (text != NULL)
+            {
+                int copied = GetWindowText(hwnd, text, textLen + 1);
+                if (copied > 0)
+                {
+                    DWORD textFlags = GetGroupBoxTextFlags(hwnd);
+                    DWORD calcFlags = (textFlags & ~(DWORD)(DT_CENTER | DT_RIGHT)) | DT_LEFT | DT_CALCRECT;
+                    RECT textCalc = {0, 0, max(0, client.right - client.left), tm.tmHeight + tm.tmExternalLeading + 4};
+                    DrawText(hdc, text, copied, &textCalc, calcFlags);
+
+                    int textWidth = textCalc.right - textCalc.left;
+                    int textHeight = max(tm.tmHeight, textCalc.bottom - textCalc.top);
+                    int margin = max(7, tm.tmAveCharWidth);
+                    int pad = max(2, tm.tmAveCharWidth / 2);
+                    int maxTextWidth = max(0, client.right - client.left - 2 * margin);
+                    if (textWidth > maxTextWidth)
+                        textWidth = maxTextWidth;
+
+                    int textLeft = margin;
+                    if ((textFlags & DT_CENTER) != 0)
+                        textLeft = (client.right - client.left - textWidth) / 2;
+                    else if ((textFlags & DT_RIGHT) != 0)
+                        textLeft = client.right - margin - textWidth;
+                    textLeft = max(margin, textLeft);
+
+                    RECT gap = {
+                        max(client.left, textLeft - pad),
+                        client.top,
+                        min(client.right, textLeft + textWidth + pad),
+                        min(client.bottom, max(textHeight, frameTop + 2))};
+                    HBRUSH hBrush = CreateSolidBrush(colors.DialogBackground);
+                    if (hBrush != NULL)
+                    {
+                        FillRect(hdc, &gap, hBrush);
+                        DeleteObject(hBrush);
+                    }
+
+                    RECT textRect = {
+                        textLeft,
+                        client.top,
+                        min(client.right - margin, textLeft + textWidth),
+                        gap.bottom};
+                    DrawText(hdc, text, copied, &textRect, textFlags);
+                }
+                delete[] text;
+            }
+        }
+
+        SetBkColor(hdc, oldBkColor);
+        SetTextColor(hdc, oldTextColor);
+        SetBkMode(hdc, oldBkMode);
+        if (hOldFont != NULL)
+            SelectObject(hdc, hOldFont);
+    }
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
+}
+
+LRESULT CALLBACK GroupBoxSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkGroupBox(hwnd, NULL))
+            return 0;
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkGroupBox(hwnd, (HDC)wParam))
+            return 0;
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (DarkMode_ShouldUseDark())
+            return TRUE;
+        break;
+    }
+
+    case WM_SETTEXT:
+    case WM_SETFONT:
+    case WM_ENABLE:
+    case WM_UPDATEUISTATE:
+    case WM_THEMECHANGED:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        InvalidateGroupBox(hwnd);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, GroupBoxSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void ApplyWindowTheme(HWND hwnd, BOOL useDark, LPCWSTR lightTheme = NULL)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    SetWindowTheme(hwnd, useDark ? UXTHEME_DARKMODE_EXPLORER : lightTheme, NULL);
+}
+
+void ApplyComboBoxChildThemes(HWND hwnd, BOOL useDark)
+{
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    if (GetComboBoxInfo(hwnd, &cbi))
+    {
+        ApplyWindowTheme(cbi.hwndItem, useDark);
+        ApplyWindowTheme(cbi.hwndList, useDark);
+        if (cbi.hwndItem != NULL)
+            InvalidateRect(cbi.hwndItem, NULL, TRUE);
+        if (cbi.hwndList != NULL)
+            InvalidateRect(cbi.hwndList, NULL, TRUE);
+    }
+}
+
+void ApplyTooltipTheme(HWND hwndTooltip)
+{
+    if (hwndTooltip == NULL || !IsWindow(hwndTooltip))
+        return;
+
+    DarkModeColors colors;
+    DarkMode_GetColors(&colors);
+    SendMessage(hwndTooltip, TTM_SETTIPBKCOLOR, colors.ToolTipBackground, 0);
+    SendMessage(hwndTooltip, TTM_SETTIPTEXTCOLOR, colors.ToolTipText, 0);
+    InvalidateRect(hwndTooltip, NULL, TRUE);
+}
+
 void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
 {
     if (hwnd == NULL || !IsWindow(hwnd))
@@ -183,13 +438,14 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
     if (_tcsicmp(className, SCROLLBAR_CLASS_NAME) == 0)
     {
         // Custom panel scrollbars are separate controls and need explicit theming.
-        SetWindowTheme(hwnd, useDark ? UXTHEME_DARKMODE_EXPLORER : NULL, NULL);
+        ApplyWindowTheme(hwnd, useDark);
         InvalidateRect(hwnd, NULL, TRUE);
         return;
     }
 
     if (_tcsicmp(className, WC_LISTVIEW) == 0)
     {
+        ApplyWindowTheme(hwnd, useDark, UXTHEME_EXPLORER);
         DarkModeColors colors;
         DarkMode_GetColors(&colors);
         COLORREF bgColor = colors.InputBackground;
@@ -203,6 +459,7 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
 
     if (_tcsicmp(className, WC_TREEVIEW) == 0)
     {
+        ApplyWindowTheme(hwnd, useDark, UXTHEME_EXPLORER);
         DarkModeColors colors;
         DarkMode_GetColors(&colors);
         COLORREF bgColor = colors.InputBackground;
@@ -212,11 +469,70 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
         InvalidateRect(hwnd, NULL, FALSE);
         return;
     }
+
+    if (_tcsicmp(className, LISTBOX_CLASS_NAME) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark, UXTHEME_EXPLORER);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+
+    if (_tcsicmp(className, TOOLTIPS_CLASS) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark);
+        ApplyTooltipTheme(hwnd);
+        return;
+    }
+
+    if (_tcsicmp(className, BUTTON_CLASS_NAME) == 0 ||
+        _tcsicmp(className, EDIT_CLASS_NAME) == 0 ||
+        _tcsicmp(className, STATIC_CLASS_NAME) == 0 ||
+        _tcsicmp(className, UPDOWN_CLASS) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+
+    if (_tcsicmp(className, COMBOBOX_CLASS_NAME) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark);
+        ApplyComboBoxChildThemes(hwnd, useDark);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+
+    if (_tcsicmp(className, WC_COMBOBOXEX) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark);
+        HWND hCombo = (HWND)SendMessage(hwnd, CBEM_GETCOMBOCONTROL, 0, 0);
+        ApplyWindowTheme(hCombo, useDark);
+        if (hCombo != NULL)
+            ApplyComboBoxChildThemes(hCombo, useDark);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+}
+
+void ApplyGroupBoxThemeToControl(HWND hwnd)
+{
+    if (!IsGroupBox(hwnd))
+        return;
+
+    SetWindowSubclass(hwnd, GroupBoxSubclassProc, GROUPBOX_SUBCLASS_ID, 0);
+    InvalidateGroupBox(hwnd);
 }
 
 BOOL CALLBACK ApplyListTreeThemeEnumProc(HWND hwnd, LPARAM lParam)
 {
     ApplyListTreeThemeToControl(hwnd, (BOOL)lParam);
+    return TRUE;
+}
+
+BOOL CALLBACK ApplyGroupBoxThemeEnumProc(HWND hwnd, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    ApplyGroupBoxThemeToControl(hwnd);
     return TRUE;
 }
 
@@ -324,8 +640,6 @@ BOOL DarkMode_GetMainFramePalette(DarkModeMainFramePalette* palette)
 
 HBRUSH DarkMode_GetDialogCtlColorBrush(UINT msg, HDC hdc, HWND hCtrl)
 {
-    UNREFERENCED_PARAMETER(hCtrl);
-
     if (hdc == NULL || !DarkMode_ShouldUseDark())
         return NULL;
 
@@ -340,13 +654,24 @@ HBRUSH DarkMode_GetDialogCtlColorBrush(UINT msg, HDC hdc, HWND hCtrl)
         return DialogDarkBrush;
 
     case WM_CTLCOLORSTATIC:
+        if (HasClassName(hCtrl, EDIT_CLASS_NAME))
+        {
+            SetTextColor(hdc, hCtrl != NULL && !IsWindowEnabled(hCtrl) ? DIALOG_DARK_DISABLED_TEXT : DIALOG_DARK_INPUT_TEXT);
+            SetBkColor(hdc, DIALOG_DARK_INPUT_BG);
+            SetBkMode(hdc, OPAQUE);
+            return DialogDarkInputBrush;
+        }
         SetTextColor(hdc, DIALOG_DARK_TEXT);
+        if (hCtrl != NULL && !IsWindowEnabled(hCtrl))
+            SetTextColor(hdc, DIALOG_DARK_DISABLED_TEXT);
         SetBkColor(hdc, DIALOG_DARK_BG);
         SetBkMode(hdc, TRANSPARENT);
         return DialogDarkBrush;
 
     case WM_CTLCOLORBTN:
         SetTextColor(hdc, DIALOG_DARK_TEXT);
+        if (hCtrl != NULL && !IsWindowEnabled(hCtrl))
+            SetTextColor(hdc, DIALOG_DARK_DISABLED_TEXT);
         SetBkColor(hdc, DIALOG_DARK_BG);
         SetBkMode(hdc, TRANSPARENT);
         return DialogDarkBrush;
@@ -474,4 +799,18 @@ void DarkMode_ApplyListTreeThemeRecursive(HWND root)
     ApplyListTreeThemeToControl(root, useDark);
     EnumChildWindows(root, ApplyListTreeThemeEnumProc, (LPARAM)useDark);
     ListTreeThemeApplyDepth--;
+}
+
+void DarkMode_ApplyGroupBoxThemeRecursive(HWND root)
+{
+    if (root == NULL || !IsWindow(root))
+        return;
+
+    if (GroupBoxThemeApplyDepth > 0)
+        return;
+
+    GroupBoxThemeApplyDepth++;
+    ApplyGroupBoxThemeToControl(root);
+    EnumChildWindows(root, ApplyGroupBoxThemeEnumProc, 0);
+    GroupBoxThemeApplyDepth--;
 }

@@ -68,6 +68,7 @@ public:
     virtual BOOL Is(int type) { return type == otPropSheetPage || CDialog::Is(type); }
     virtual int GetObjectType() { return otPropSheetPage; }
     virtual BOOL IsAllocated() { return ObjectOrigin == ooAllocated; }
+    void SetDarkModeGroupBoxThemeEnabled(BOOL enabled) { DarkModeGroupBoxThemeEnabled = enabled; }
 
     static INT_PTR CALLBACK CPropSheetPageProc(HWND hwndDlg, UINT uMsg,
                                                WPARAM wParam, LPARAM lParam);
@@ -88,6 +89,7 @@ protected:
 
     // if different from NULL, we change the layout of controls when dialog size changes
     CElasticLayout* ElasticLayout;
+    BOOL DarkModeGroupBoxThemeEnabled;
 
     friend class CPropertyDialog;
     friend class CTreePropDialog;

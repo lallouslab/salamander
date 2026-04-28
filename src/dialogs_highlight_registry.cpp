@@ -760,6 +760,8 @@ CConfigurationDlg::CConfigurationDlg(HWND parent, CUserMenuItems* userMenuItems,
            // mode == 0 ? Configuration.LastFocusedPage : 4
            // in 1.6b2 this fooled me
            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    for (int i = 0; i < Count; i++)
+        At(i)->SetDarkModeGroupBoxThemeEnabled(TRUE);
 }
 
 void CConfigurationDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -793,6 +795,18 @@ void CConfigurationDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             HWND w = At(i)->HWindow;
             if (w != NULL)
                 PostMessage(w, WM_SYSCOLORCHANGE, 0, 0);
+        }
+        break;
+    }
+
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+    {
+        for (int i = 0; i < Count; i++)
+        {
+            HWND w = At(i)->HWindow;
+            if (w != NULL)
+                SendMessage(w, uMsg, wParam, lParam);
         }
         break;
     }

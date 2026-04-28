@@ -1301,7 +1301,6 @@ void CFilesWindow::Pack(CFilesWindow* target, int pluginIndex, const char* plugi
     //---  obtain the files and directories to work with
     CPathBuffer subject; // text for the Unpack dialog (that is being unpacked)
     CPathBuffer path; // Heap-allocated for long path support
-    char text[1000];
     BOOL nameByItem;
     CPanelTmpEnumData data;
     BOOL subDir;

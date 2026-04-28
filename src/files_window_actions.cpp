@@ -1206,9 +1206,6 @@ BOOL CFilesWindow::PrepareCloseCurrentPath(HWND parent, BOOL canForce, BOOL canD
                 // if the user didn't suppress it, we show info about closing an archive that contains edited files
                 if (Configuration.CnfrmCloseArchive && !CriticalShutdown)
                 {
-                    char title[100];
-                    CPathBuffer text;
-                    char checkText[200];
                     bool dontShow = !Configuration.CnfrmCloseArchive;
                     std::wstring msg = FormatStrW(LoadStrW(IDS_ARCHIVECLOSEEDIT), AnsiToWide(GetZIPArchive()).c_str());
                     gPrompter->ShowInfoWithCheckbox(LoadStrW(IDS_INFOTITLE), msg.c_str(),

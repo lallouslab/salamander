@@ -217,6 +217,7 @@ void CPropSheetPage::Init(const TCHAR* title, HINSTANCE modul, int resID,
     HTreeItem = NULL;
     Expanded = NULL;
     ElasticLayout = NULL;
+    DarkModeGroupBoxThemeEnabled = FALSE;
 }
 
 CPropSheetPage::~CPropSheetPage()
@@ -304,6 +305,10 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         TransferData(ttDataToWindow);
         if (ElasticLayout != NULL)
             ElasticLayout->LayoutCtrls();
+#ifndef __TRACESERVER
+        if (DarkModeGroupBoxThemeEnabled)
+            DarkMode_ApplyGroupBoxThemeRecursive(HWindow);
+#endif
         return TRUE; // I want focus from DefDlgProc
     }
 
@@ -332,6 +337,33 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             WinLibHelp->OnContextMenu((HWND)wParam, LOWORD(lParam), HIWORD(lParam));
         return TRUE;
     }
+
+#ifndef __TRACESERVER
+    case WM_ERASEBKGND:
+    {
+        DarkModeColors colors;
+        if (DarkMode_GetColors(&colors))
+        {
+            RECT r;
+            GetClientRect(HWindow, &r);
+            FillRectWithColor((HDC)wParam, &r, colors.DialogBackground);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    {
+        HBRUSH hBrush = DarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (INT_PTR)hBrush;
+        break;
+    }
+#endif
 
     case WM_NOTIFY:
     {
@@ -388,6 +420,31 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
+
+#ifndef __TRACESERVER
+    case WM_SETTINGCHANGE:
+    {
+        if (DarkMode_OnSettingChange(lParam))
+        {
+            DarkMode_ApplyTitleBar(HWindow);
+            DarkMode_ApplyListTreeThemeRecursive(HWindow);
+            if (DarkModeGroupBoxThemeEnabled)
+                DarkMode_ApplyGroupBoxThemeRecursive(HWindow);
+            InvalidateRect(HWindow, NULL, TRUE);
+        }
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    {
+        DarkMode_ApplyTitleBar(HWindow);
+        DarkMode_ApplyListTreeThemeRecursive(HWindow);
+        if (DarkModeGroupBoxThemeEnabled)
+            DarkMode_ApplyGroupBoxThemeRecursive(HWindow);
+        InvalidateRect(HWindow, NULL, TRUE);
+        break;
+    }
+#endif
     }
     return FALSE;
 }
@@ -456,10 +513,18 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
     }
     }
     //--- call DialogProc(...) method of the corresponding dialog object
+    INT_PTR dlgRes;
     if (dlg != NULL)
-        return dlg->DialogProc(uMsg, wParam, lParam);
+        dlgRes = dlg->DialogProc(uMsg, wParam, lParam);
     else
-        return FALSE; // error or message did not arrive between WM_INITDIALOG and WM_DESTROY
+        dlgRes = FALSE; // error or message did not arrive between WM_INITDIALOG and WM_DESTROY
+
+#ifndef __TRACESERVER
+    if (dlg != NULL && uMsg == WM_INITDIALOG)
+        DarkMode_ApplyListTreeThemeRecursive(hwndDlg);
+#endif
+
+    return dlgRes;
 }
 
 //

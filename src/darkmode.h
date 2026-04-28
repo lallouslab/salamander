@@ -51,3 +51,4 @@ BOOL DarkMode_OnSettingChange(LPARAM lParam);
 void DarkMode_ApplyTitleBar(HWND hwnd);
 void DarkMode_ApplyToThreadTopLevelWindows(DWORD threadId);
 void DarkMode_ApplyListTreeThemeRecursive(HWND root);
+void DarkMode_ApplyGroupBoxThemeRecursive(HWND root);

@@ -581,7 +581,7 @@ BOOL CFilesWindow::PostProcessPathFromUser(HWND parent, CPathBuffer& buff)
     // if an ENV variable does not exist, a directory with the same name gets a chance to be expanded
     CPathBuffer expandedBuff;  // Heap-allocated for long path support
     DWORD auxRes = ExpandEnvironmentStrings(buff, expandedBuff, expandedBuff.Size());
-    if (auxRes == 0 || auxRes > buff.Size())
+    if (auxRes == 0 || auxRes > (DWORD)buff.Size())
     {
         TRACE_E("ExpandEnvironmentStrings failed.");
         return FALSE;
