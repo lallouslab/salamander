@@ -4,7 +4,7 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/0xeb/sally/pr-cmake.yml?label=build)](https://github.com/0xeb/sally/actions)
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 
-A fast, modern dual-panel file manager for Windows — fork of [Open Salamander](https://github.com/OpenSalamander/salamander) with Unicode, long paths, and ARM64 support.
+A fast, modern dual-panel file manager for Windows - forked from [Open Salamander](https://github.com/OpenSalamander/salamander) and extended with dark mode, Unicode and long path file operations, native ARM64 builds, and modern release tooling.
 
 <!-- Screenshot: this is the classic annotated UI image from the help docs. Replace with a fresh Windows 11 screenshot when available. -->
 <p align="center">
@@ -15,9 +15,23 @@ A fast, modern dual-panel file manager for Windows — fork of [Open Salamander]
 
 Sally is an independent fork of [Open Salamander](https://github.com/OpenSalamander/salamander), maintained by [Elias Bachaalany](https://github.com/0xeb). The original Open Salamander authors are not responsible for this project and do not provide support for it. Development is AI-assisted using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). See [Origin](doc/ORIGIN.md) for the full project history.
 
+## What Sally Adds
+
+Sally keeps the classic Open Salamander dual-panel workflow, but it is not just a rebuild. It carries forward active Windows work that upstream Open Salamander does not ship:
+
+- Dark mode for the core UI and bundled first-party plugins, with `Light`, `Dark`, and `System` theme modes
+- Unicode filename support throughout file operations, including safer handling of names that cannot round-trip through the system ANSI code page
+- Long path support for modern Windows paths up to 32,767 characters
+- Native x64, x86, and ARM64 builds, including Windows on ARM support
+- WebView2-based Markdown viewing instead of the legacy Internet Explorer WebBrowser control
+- Viewer support for BOM-marked Unicode text files in Auto/Text mode
+- Modern CMake builds for Sally, bundled plugins, trace server, translator, and shell extension
+- Automated GitHub release packages with runtime zips, symbols, language packs, and a translator workspace
+- Consent-based loading for legacy Altap Salamander 4.0 plugins
+
 ## What's New
 
-**Pre-Alpha Dark Mode Support**
+**Dark Mode Support**
 - Early dark-mode support for Sally core UI and bundled first-party plugins
 - Choose `Options` > `Configuration...` > `Appearance` > `Theme` > `Mode`
 - Modes: `Light` (default), `Dark`, and `System` (follows the Windows app theme)
