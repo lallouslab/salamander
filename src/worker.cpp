@@ -7,6 +7,7 @@
 #include "cfgdlg.h"
 #include "worker.h"
 #include "common/fsutil.h"
+#include "common/CopyStrategy.h"
 #include "common/widepath.h"
 #include "common/IFileSystem.h"
 #include "common/IWorkerObserver.h"
@@ -3963,10 +3964,12 @@ struct CCopy_Context
     CQuadWord* OperationDone;
     const CQuadWord* TotalDone;
     const CQuadWord* LastTransferredFileSize;
+    BOOL DisableNetworkLocalBuffering;
 
     CCopy_Context(CAsyncCopyParams* asyncPar, int numOfBlocks, CWorkerState* workerState, COperation* op,
                   IWorkerObserver& observer, HANDLE* in, HANDLE* out, BOOL wholeFileAllocated, COperations* script,
-                  CQuadWord* operationDone, const CQuadWord* totalDone, const CQuadWord* lastTransferredFileSize)
+                  CQuadWord* operationDone, const CQuadWord* totalDone, const CQuadWord* lastTransferredFileSize,
+                  BOOL disableNetworkLocalBuffering)
     {
         AsyncPar = asyncPar;
         ForceOp = fopNotUsed;
@@ -3995,6 +3998,7 @@ struct CCopy_Context
         OperationDone = operationDone;
         TotalDone = totalDone;
         LastTransferredFileSize = lastTransferredFileSize;
+        DisableNetworkLocalBuffering = disableNetworkLocalBuffering;
     }
 
     BOOL IsOperationDone(int numOfBlocks)
@@ -4313,7 +4317,7 @@ BOOL CCopy_Context::RetryCopyReadErr(DWORD* err, BOOL* copyAgain, BOOL* errAgain
             //
             // using Overlapped[0].hEvent from AsyncPar is OK; nothing is "in-progress" now, the event is unused
             // (but WARNING: for example Buffers[0] from AsyncPar may still be in use)
-            if ((Op->OpFlags & OPFL_SRCPATH_IS_NET) && !DisableLocalBuffering(AsyncPar, *In, err))
+            if (DisableNetworkLocalBuffering && (Op->OpFlags & OPFL_SRCPATH_IS_NET) && !DisableLocalBuffering(AsyncPar, *In, err))
                 TRACE_E("CCopy_Context::RetryCopyReadErr(): IOCTL_LMR_DISABLE_LOCAL_BUFFERING failed for network source file: " << Op->SourceName << ", error: " << GetErrorText(*err));
             // using Overlapped[0 and 1].hEvent and Overlapped[0 and 1] from AsyncPar is OK; nothing is
             // "in-progress", the event nor the overlapped structures are used (but WARNING: for example Buffers[0]
@@ -4444,7 +4448,7 @@ BOOL CCopy_Context::RetryCopyWriteErr(DWORD* err, BOOL* copyAgain, BOOL* errAgai
         //
         // using Overlapped[0].hEvent from AsyncPar is OK; nothing is "in-progress" now, the event is unused
         // (but WARNING: for example Buffers[0] from AsyncPar may still be in use)
-        if (ok && (Op->OpFlags & OPFL_TGTPATH_IS_NET) && !DisableLocalBuffering(AsyncPar, *Out, err))
+        if (ok && DisableNetworkLocalBuffering && (Op->OpFlags & OPFL_TGTPATH_IS_NET) && !DisableLocalBuffering(AsyncPar, *Out, err))
             TRACE_E("CCopy_Context::RetryCopyWriteErr(): IOCTL_LMR_DISABLE_LOCAL_BUFFERING failed for network target file: " << Op->TargetName << ", error: " << GetErrorText(*err));
         // using Overlapped[0 and 1].hEvent and Overlapped[0 and 1] from AsyncPar is OK; nothing is
         // "in-progress", the event nor the overlapped structures are used (but WARNING: for example Buffers[0]
@@ -4556,7 +4560,8 @@ void DoCopyFileLoopAsync(CAsyncCopyParams* asyncPar, HANDLE& in, HANDLE& out, vo
                          COperations* script, CWorkerState& workerState, BOOL wholeFileAllocated, COperation* op,
                          const CQuadWord& totalDone, BOOL& copyError, BOOL& skipCopy, IWorkerObserver& observer,
                          CQuadWord& operationDone, CQuadWord& fileSize, int bufferSize,
-                         int& allocWholeFileOnStart, BOOL& copyAgain, const CQuadWord& lastTransferredFileSize)
+                         int& allocWholeFileOnStart, BOOL& copyAgain, const CQuadWord& lastTransferredFileSize,
+                         BOOL disableNetworkLocalBuffering)
 {
     CQuadWord allocFileSize = fileSize;
     DWORD err = NO_ERROR;
@@ -4564,9 +4569,9 @@ void DoCopyFileLoopAsync(CAsyncCopyParams* asyncPar, HANDLE& in, HANDLE& out, vo
 
     // if the source/target is on the network: disable local client-side in-memory caching
     // http://msdn.microsoft.com/en-us/library/ee210753%28v=vs.85%29.aspx
-    if ((op->OpFlags & OPFL_SRCPATH_IS_NET) && !DisableLocalBuffering(asyncPar, in, &err))
+    if (disableNetworkLocalBuffering && (op->OpFlags & OPFL_SRCPATH_IS_NET) && !DisableLocalBuffering(asyncPar, in, &err))
         TRACE_E("DoCopyFileLoopAsync(): IOCTL_LMR_DISABLE_LOCAL_BUFFERING failed for network source file: " << op->SourceName << ", error: " << GetErrorText(err));
-    if ((op->OpFlags & OPFL_TGTPATH_IS_NET) && !DisableLocalBuffering(asyncPar, out, &err))
+    if (disableNetworkLocalBuffering && (op->OpFlags & OPFL_TGTPATH_IS_NET) && !DisableLocalBuffering(asyncPar, out, &err))
         TRACE_E("DoCopyFileLoopAsync(): IOCTL_LMR_DISABLE_LOCAL_BUFFERING failed for network target file: " << op->TargetName << ", error: " << GetErrorText(err));
 
     // copy loop parameters
@@ -4574,7 +4579,7 @@ void DoCopyFileLoopAsync(CAsyncCopyParams* asyncPar, HANDLE& in, HANDLE& out, vo
 
     // Copy operation context (prevents passing heaps of parameters to helper functions, now context methods)
     CCopy_Context ctx(asyncPar, numOfBlocks, &workerState, op, observer, &in, &out, wholeFileAllocated, script,
-                      &operationDone, &totalDone, &lastTransferredFileSize);
+                      &operationDone, &totalDone, &lastTransferredFileSize, disableNetworkLocalBuffering);
     BOOL doCopy = TRUE;
     while (doCopy)
     {
@@ -4972,14 +4977,30 @@ BOOL DoCopyFile(COperation* op, IWorkerObserver& observer, void* buffer,
     // - under Vista it misbehaved badly; forget Vista, it is almost dead anyway, and
     //   when using the old algorithm against Win7 over the network I saw no speed difference
     //   for uploads, and downloads were only 15% slower (acceptable)
-    // - the asynchronous algorithm makes sense only over the network + when source/target is fast or network-based
+    // - historically the asynchronous algorithm was used for network copies only; issue #52 also
+    //   allows large plain copies between fast local volumes to use the same loop for measurement
     // - with the old algorithm, copying on Win7 over the network is easily 2x-3x slower for downloads,
     //   almost 2x slower for uploads, and about 30% slower for network-to-network copies
-    BOOL useAsyncAlg = workerState.UseAsyncCopyAlg &&
-                       op->FileSize.Value > 0 && // empty files are copied synchronously (no data)
-                       ((op->OpFlags & OPFL_SRCPATH_IS_NET) && ((op->OpFlags & OPFL_TGTPATH_IS_NET) ||
-                                                                (op->OpFlags & OPFL_TGTPATH_IS_FAST)) ||
-                        (op->OpFlags & OPFL_TGTPATH_IS_NET) && (op->OpFlags & OPFL_SRCPATH_IS_FAST));
+    sally::copy::StrategyInput copyStrategyInput;
+    copyStrategyInput.FileSize = op->FileSize.Value;
+    copyStrategyInput.SourceIsNetwork = (op->OpFlags & OPFL_SRCPATH_IS_NET) != 0;
+    copyStrategyInput.SourceIsFast = (op->OpFlags & OPFL_SRCPATH_IS_FAST) != 0;
+    copyStrategyInput.SourceIsRemovable = script->RemovableSrcDisk != FALSE;
+    copyStrategyInput.TargetIsNetwork = (op->OpFlags & OPFL_TGTPATH_IS_NET) != 0;
+    copyStrategyInput.TargetIsFast = (op->OpFlags & OPFL_TGTPATH_IS_FAST) != 0;
+    copyStrategyInput.TargetIsRemovable = script->RemovableTgtDisk != FALSE;
+    copyStrategyInput.AsyncEnabled = workerState.UseAsyncCopyAlg != FALSE;
+    copyStrategyInput.SimpleCopyEligible = !copyADS && !copyAsEncrypted && !script->CopyAttrs &&
+                                           !script->CopySecurity && !lantasticCheck;
+    // Keep production behavior unchanged until large local async has merge-quality measurements.
+    copyStrategyInput.FastLocalAsyncEnabled = false;
+    // Keep network async behavior unchanged until a measured production rule replaces it.
+    copyStrategyInput.DisableNetworkLocalBuffering = true;
+    copyStrategyInput.CopyFileExCandidateEnabled = false;
+
+    sally::copy::Strategy copyStrategy = sally::copy::SelectStrategy(copyStrategyInput);
+    BOOL useAsyncAlg = sally::copy::UsesAsyncLoop(copyStrategy);
+    BOOL disableNetworkLocalBuffering = sally::copy::DisablesNetworkLocalBuffering(copyStrategy);
 
     if (asyncPar == NULL)
         asyncPar = new CAsyncCopyParams;
@@ -5191,7 +5212,8 @@ COPY_AGAIN:
                     {
                         DoCopyFileLoopAsync(asyncPar, in, out, buffer, limitBufferSize, script, workerState, wholeFileAllocated, op,
                                             totalDone, copyError, skipCopy, observer, operationDone, fileSize,
-                                            bufferSize, allocWholeFileOnStart, copyAgain, lastTransferredFileSize);
+                                            bufferSize, allocWholeFileOnStart, copyAgain, lastTransferredFileSize,
+                                            disableNetworkLocalBuffering);
                         // NOTE: neither 'in' nor 'out' has the file pointer (SetFilePointer) positioned at the end of the file,
                         //       'out' has it set only when (copyError || skipCopy)
                     }
