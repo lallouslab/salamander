@@ -52,3 +52,4 @@ void DarkMode_ApplyTitleBar(HWND hwnd);
 void DarkMode_ApplyToThreadTopLevelWindows(DWORD threadId);
 void DarkMode_ApplyListTreeThemeRecursive(HWND root);
 void DarkMode_ApplyGroupBoxThemeRecursive(HWND root);
+void DarkMode_DrawSunkenFrame(HDC hDC, const RECT* r, const DarkModeMainFramePalette& palette);

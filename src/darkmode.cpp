@@ -20,11 +20,13 @@ BOOL InitSupportLogged = FALSE;
 BOOL SupportWarningLogged = FALSE;
 BOOL CaptionColorAttrSupported = TRUE;
 BOOL TextColorAttrSupported = TRUE;
+BOOL BorderColorAttrSupported = TRUE;
 thread_local int ListTreeThemeApplyDepth = 0;
 thread_local int GroupBoxThemeApplyDepth = 0;
 
 const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_NEW = 20; // Win10 1903+
 const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19; // older Win10 builds
+const DWORD DWMWA_BORDER_COLOR = 34;
 const DWORD DWMWA_CAPTION_COLOR = 35;
 const DWORD DWMWA_TEXT_COLOR = 36;
 const COLORREF DWMWA_COLOR_DEFAULT = 0xFFFFFFFF;
@@ -705,6 +707,23 @@ BOOL DarkMode_OnSettingChange(LPARAM lParam)
     return changed;
 }
 
+void DarkMode_DrawSunkenFrame(HDC hDC, const RECT* r, const DarkModeMainFramePalette& palette)
+{
+    HGDIOBJ oldPen = SelectObject(hDC, GetStockObject(DC_PEN));
+
+    SetDCPenColor(hDC, palette.LineDark);
+    MoveToEx(hDC, r->left, r->bottom - 1, NULL);
+    LineTo(hDC, r->left, r->top);
+    LineTo(hDC, r->right - 1, r->top);
+
+    SetDCPenColor(hDC, palette.Border);
+    MoveToEx(hDC, r->right - 1, r->top, NULL);
+    LineTo(hDC, r->right - 1, r->bottom - 1);
+    LineTo(hDC, r->left - 1, r->bottom - 1);
+
+    SelectObject(hDC, oldPen);
+}
+
 void DarkMode_ApplyTitleBar(HWND hwnd)
 {
     EnsureInitialized();
@@ -748,14 +767,24 @@ void DarkMode_ApplyTitleBar(HWND hwnd)
     int normalizedTheme = NormalizeThemeMode(ThemeMode);
     COLORREF captionColor = DWMWA_COLOR_DEFAULT;
     COLORREF textColor = DWMWA_COLOR_DEFAULT;
+    COLORREF borderColor = DWMWA_COLOR_DEFAULT;
     if (normalizedTheme == THEME_MODE_DARK)
     {
         captionColor = RGB(32, 32, 32);
         textColor = RGB(255, 255, 255);
     }
+    if (useDark)
+        borderColor = MAINFRAME_DARK_LINE_DARK;
 
     HRESULT hrCaption = S_OK;
     HRESULT hrText = S_OK;
+    HRESULT hrBorder = S_OK;
+    if (BorderColorAttrSupported)
+    {
+        hrBorder = DwmSetWindowAttributePtr(hwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(borderColor));
+        if (FAILED(hrBorder))
+            BorderColorAttrSupported = FALSE;
+    }
     if (CaptionColorAttrSupported)
     {
         hrCaption = DwmSetWindowAttributePtr(hwnd, DWMWA_CAPTION_COLOR, &captionColor, sizeof(captionColor));
@@ -768,11 +797,12 @@ void DarkMode_ApplyTitleBar(HWND hwnd)
         if (FAILED(hrText))
             TextColorAttrSupported = FALSE;
     }
-    if (FAILED(hrCaption) || FAILED(hrText))
+    if (FAILED(hrBorder) || FAILED(hrCaption) || FAILED(hrText))
     {
-        TRACE_I("DarkMode: caption/text color attributes not available or failed, hwnd=" << hwnd
-                                                                                           << ", hrCaption=" << std::hex << hrCaption
-                                                                                           << ", hrText=" << std::hex << hrText);
+        TRACE_I("DarkMode: border/caption/text color attributes not available or failed, hwnd=" << hwnd
+                                                                                                 << ", hrBorder=" << std::hex << hrBorder
+                                                                                                 << ", hrCaption=" << std::hex << hrCaption
+                                                                                                 << ", hrText=" << std::hex << hrText);
     }
 }
 

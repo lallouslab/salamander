@@ -3241,6 +3241,7 @@ void ColorsChanged(BOOL refresh, BOOL colorsOnly, BOOL reloadUMIcons)
             SendMessage(MainWindow->HTopRebar, RB_SETBKCOLOR, 0, (LPARAM)palette.Fill);
         else
             SendMessage(MainWindow->HTopRebar, RB_SETBKCOLOR, 0, (LPARAM)GetSysColor(COLOR_BTNFACE));
+        RedrawWindow(MainWindow->HTopRebar, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
     }
 
     if (refresh && MainWindow != NULL)

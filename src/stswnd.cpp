@@ -740,7 +740,8 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
     HDC dc = ItemBitmap.HMemDC;
 
     BOOL isDirectoryLine = (Border & blTop) != 0;
-    BOOL useDark = DarkMode_ShouldUseDark();
+    DarkModeMainFramePalette palette;
+    BOOL useDark = DarkMode_GetMainFramePalette(&palette);
 
     RECT r;
     r.left = 0;
@@ -767,7 +768,10 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
         RECT textR = r;
         textR.top += 2;
         textR.bottom -= 2;
-        DrawEdge(dc, &textR, BDR_SUNKENOUTER, BF_RECT);
+        if (useDark)
+            DarkMode_DrawSunkenFrame(dc, &textR, palette);
+        else
+            DrawEdge(dc, &textR, BDR_SUNKENOUTER, BF_RECT);
 
         // fill area under text (active/inactive)
         textR.left++;
@@ -2153,12 +2157,19 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         HDC dc = (HDC)wParam;
         if (Border != blNone)
         {
-            HPEN oldPen = (HPEN)SelectObject(dc, BtnShadowPen);
+            DarkModeMainFramePalette palette;
+            BOOL useDark = DarkMode_GetMainFramePalette(&palette);
+            HGDIOBJ oldPen = SelectObject(dc, useDark ? GetStockObject(DC_PEN) : BtnShadowPen);
             if (Border & blBottom)
             {
+                if (useDark)
+                    SetDCPenColor(dc, palette.LineDark);
                 MoveToEx(dc, r.left, r.top, NULL);
                 LineTo(dc, r.left, r.bottom);
-                SelectObject(dc, BtnHilightPen);
+                if (useDark)
+                    SetDCPenColor(dc, palette.Border);
+                else
+                    SelectObject(dc, BtnHilightPen);
                 MoveToEx(dc, r.right - 1, r.top, NULL);
                 LineTo(dc, r.right - 1, r.bottom);
                 MoveToEx(dc, r.left, r.bottom - 1, NULL);

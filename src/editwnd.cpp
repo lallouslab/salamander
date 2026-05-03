@@ -22,8 +22,8 @@ const COLORREF EDITWND_DARK_BG = RGB(45, 45, 48);
 const COLORREF EDITWND_DARK_INPUT_BG = RGB(30, 30, 30);
 const COLORREF EDITWND_DARK_TEXT = RGB(232, 232, 232);
 const COLORREF EDITWND_DARK_DISABLED_TEXT = RGB(140, 140, 140);
-const COLORREF EDITWND_DARK_BORDER_OUTER = RGB(75, 75, 75);
-const COLORREF EDITWND_DARK_BORDER_INNER = RGB(95, 95, 95);
+const COLORREF EDITWND_DARK_BORDER_OUTER = RGB(45, 45, 48);
+const COLORREF EDITWND_DARK_BORDER_INNER = RGB(62, 62, 66);
 const COLORREF EDITWND_DARK_BUTTON_BG = RGB(52, 52, 56);
 
 static void FillRectSolid(HDC hDC, const RECT* rect, COLORREF color)
@@ -33,6 +33,28 @@ static void FillRectSolid(HDC hDC, const RECT* rect, COLORREF color)
     FillRect(hDC, rect, (HBRUSH)GetStockObject(DC_BRUSH));
     SetDCBrushColor(hDC, oldColor);
     SelectObject(hDC, oldBrush);
+}
+
+static void DrawDarkComboFrame(HWND hwnd, HDC hDC)
+{
+    RECT r;
+    GetWindowRect(hwnd, &r);
+    OffsetRect(&r, -r.left, -r.top);
+
+    HGDIOBJ oldPen = SelectObject(hDC, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hDC, GetStockObject(NULL_BRUSH));
+
+    SetDCPenColor(hDC, EDITWND_DARK_BORDER_OUTER);
+    Rectangle(hDC, r.left, r.top, r.right, r.bottom);
+
+    if (r.right - r.left > 3 && r.bottom - r.top > 3)
+    {
+        SetDCPenColor(hDC, EDITWND_DARK_BORDER_INNER);
+        Rectangle(hDC, r.left + 1, r.top + 1, r.right - 1, r.bottom - 1);
+    }
+
+    SelectObject(hDC, oldBrush);
+    SelectObject(hDC, oldPen);
 }
 
 } // namespace
@@ -1779,6 +1801,21 @@ CEditWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return result;
     }
 
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            HDC hDC = HANDLES(GetWindowDC(HWindow));
+            if (hDC != NULL)
+            {
+                DrawDarkComboFrame(HWindow, hDC);
+                HANDLES(ReleaseDC(HWindow, hDC));
+            }
+            return 0;
+        }
+        break;
+    }
+
     case WM_DESTROY:
     {
         if (EditLine != NULL)
@@ -1841,7 +1878,28 @@ CEditWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 btnArea.right = cr.right - 3;
                 btnArea.bottom = cr.bottom - 3;
                 if (btnArea.right > btnArea.left && btnArea.bottom > btnArea.top)
+                {
                     FillRectSolid(hDC, &btnArea, EDITWND_DARK_BUTTON_BG);
+
+                    // The default combo WM_PAINT no longer runs in this branch,
+                    // so the dropdown arrow glyph must be drawn here.
+                    int centerX = (btnArea.left + btnArea.right) / 2;
+                    int centerY = (btnArea.top + btnArea.bottom) / 2;
+                    POINT arrow[3] = {
+                        {centerX - 3, centerY - 1},
+                        {centerX + 4, centerY - 1},
+                        {centerX, centerY + 3},
+                    };
+                    HPEN hArrowPen = HANDLES(CreatePen(PS_SOLID, 1, EDITWND_DARK_TEXT));
+                    HBRUSH hArrowBrush = HANDLES(CreateSolidBrush(EDITWND_DARK_TEXT));
+                    HGDIOBJ oldArrowPen = SelectObject(hDC, hArrowPen);
+                    HGDIOBJ oldArrowBrush = SelectObject(hDC, hArrowBrush);
+                    Polygon(hDC, arrow, 3);
+                    SelectObject(hDC, oldArrowBrush);
+                    SelectObject(hDC, oldArrowPen);
+                    HANDLES(DeleteObject(hArrowBrush));
+                    HANDLES(DeleteObject(hArrowPen));
+                }
 
                 HGDIOBJ oldPen = SelectObject(hDC, GetStockObject(DC_PEN));
                 HGDIOBJ oldBrush = SelectObject(hDC, GetStockObject(NULL_BRUSH));
@@ -1893,7 +1951,8 @@ CEditWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (r.right > r.left && r.bottom > r.top)
                 ValidateRect(HWindow, &r);
 
-            break;
+            ValidateRect(HWindow, NULL);
+            return 0;
         }
 
         // ensure the 2-pixel frame around the combo is not cleared during painting

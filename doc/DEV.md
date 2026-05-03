@@ -41,6 +41,22 @@ A few Altap Salamander 4.0 plugins are either not included or cannot be compiled
 
 All source code uses UTF-8-BOM encoding and is formatted with `clang-format`. Refer to the `\tools\normalize.ps1` script for more information.
 
+## Developer Tool Targets
+
+The CMake build keeps a few standalone maintenance utilities as explicit targets only. They are not part of default builds, `populate`, installs, or release packages. These targets replace old first-party `.vcxproj` files that were preserved from the Open Salamander tree:
+
+- `utfnames`: creates and lists unusual NTFS names, including names with invalid UTF-16 sequences.
+- `salbreak`: hidden hotkey helper that asks running Sally instances to trigger their break/report path.
+- `regparser`: builds `RegParser.exe`, a standalone parser/dumper for `.reg` files using `src/reglib`.
+
+```bash
+cmake --build build --config Debug --target utfnames salbreak regparser
+```
+
+The resulting executables are written under `build/out/sally/<Config>_<Arch>/devtools/`.
+
+The old Portables plugin Visual Studio project was removed without a separate dev-tool replacement because the normal CMake plugin build already covers `plugin_portables` and its English language file. `packages.config` is still used by `cmake/sal_nuget.cmake` to restore the WebView2 SDK for the CMake build.
+
 ## Localization
 
 For the supported Translator workflow, generated workspaces, and contribution steps, see `doc/LOCALIZATION.md`.

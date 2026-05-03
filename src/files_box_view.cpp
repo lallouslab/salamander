@@ -1365,14 +1365,27 @@ CFilesBox::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         GetClientRect(HWindow, &r);
         r.right += 2;
         r.bottom += 2;
-        DrawEdge(hdc, &r, BDR_SUNKENOUTER, BF_RECT);
+        DarkModeMainFramePalette palette;
+        BOOL useDarkPalette = DarkMode_GetMainFramePalette(&palette);
+        if (useDarkPalette)
+            DarkMode_DrawSunkenFrame(hdc, &r, palette);
+        else
+            DrawEdge(hdc, &r, BDR_SUNKENOUTER, BF_RECT);
         if (Parent->StatusLine != NULL && Parent->StatusLine->HWindow != NULL)
         {
             r.left = 0;
             r.top = r.bottom - 1;
             r.right = 1;
             r.bottom = r.top + 1;
-            FillRect(hdc, &r, HMenuGrayTextBrush);
+            if (useDarkPalette)
+            {
+                HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+                SetDCBrushColor(hdc, palette.LineDark);
+                FillRect(hdc, &r, (HBRUSH)GetStockObject(DC_BRUSH));
+                SelectObject(hdc, oldBrush);
+            }
+            else
+                FillRect(hdc, &r, HMenuGrayTextBrush);
         }
         HANDLES(ReleaseDC(HWindow, hdc));
         return 0;

@@ -93,6 +93,236 @@ extern BOOL CacheNextSetFocus;
 
 BOOL MainFrameIsActive = FALSE;
 
+const UINT_PTR MAIN_REBAR_DARK_SUBCLASS_ID = 1;
+static BOOL ApplyingMainRebarDarkStyle = FALSE;
+
+static void ApplyMainRebarDarkStyle(HWND hwnd)
+{
+    if (hwnd == NULL)
+        return;
+
+    DarkModeMainFramePalette palette;
+    BOOL useDark = DarkMode_GetMainFramePalette(&palette);
+
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    LONG_PTR newStyle;
+    if (useDark)
+        newStyle = style & ~(WS_BORDER | RBS_BANDBORDERS);
+    else
+        newStyle = style | WS_BORDER | RBS_BANDBORDERS;
+
+    if (newStyle != style)
+    {
+        SetWindowLongPtr(hwnd, GWL_STYLE, newStyle);
+        SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                     SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE |
+                     SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+
+    int bandCount = (int)SendMessage(hwnd, RB_GETBANDCOUNT, 0, 0);
+    for (int i = 0; i < bandCount; i++)
+    {
+        REBARBANDINFO rbbi;
+        ZeroMemory(&rbbi, sizeof(rbbi));
+        rbbi.cbSize = sizeof(rbbi);
+        rbbi.fMask = RBBIM_STYLE | RBBIM_ID | RBBIM_HEADERSIZE;
+        if (!SendMessage(hwnd, RB_GETBANDINFO, (WPARAM)i, (LPARAM)&rbbi))
+            continue;
+
+        DWORD originalStyle = rbbi.fStyle;
+        UINT originalHeader = rbbi.cxHeader;
+        BOOL forceNoGrip = useDark ||
+                           rbbi.wID == BANDID_DRIVEBAR2 ||
+                           rbbi.wID == BANDID_WORKER;
+
+        if (forceNoGrip || !Configuration.GripsVisible)
+        {
+            rbbi.fStyle &= ~RBBS_GRIPPERALWAYS;
+            rbbi.fStyle |= RBBS_NOGRIPPER;
+            if (useDark || rbbi.wID == BANDID_DRIVEBAR2 || rbbi.wID == BANDID_WORKER)
+                rbbi.cxHeader = 0;
+            else if (rbbi.cxHeader == 0)
+                rbbi.cxHeader = 2;
+        }
+        else
+        {
+            rbbi.fStyle &= ~RBBS_NOGRIPPER;
+            rbbi.fStyle |= RBBS_GRIPPERALWAYS;
+        }
+
+        if (rbbi.fStyle != originalStyle || rbbi.cxHeader != originalHeader)
+        {
+            rbbi.fMask = RBBIM_STYLE | RBBIM_HEADERSIZE;
+            ApplyingMainRebarDarkStyle = TRUE;
+            SendMessage(hwnd, RB_SETBANDINFO, (WPARAM)i, (LPARAM)&rbbi);
+            ApplyingMainRebarDarkStyle = FALSE;
+        }
+    }
+}
+
+static void DrawDarkRebarLine(HDC hdc, int x1, int y1, int x2, int y2, COLORREF color)
+{
+    SetDCPenColor(hdc, color);
+    MoveToEx(hdc, x1, y1, NULL);
+    LineTo(hdc, x2, y2);
+}
+
+static void PaintDarkRebarClientLines(HWND hwnd, HDC hdc)
+{
+    DarkModeMainFramePalette palette;
+    if (!DarkMode_GetMainFramePalette(&palette))
+        return;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    if (client.right <= client.left || client.bottom <= client.top)
+        return;
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+
+    int bandCount = (int)SendMessage(hwnd, RB_GETBANDCOUNT, 0, 0);
+    for (int i = 0; i < bandCount; i++)
+    {
+        RECT band;
+        if (!SendMessage(hwnd, RB_GETRECT, (WPARAM)i, (LPARAM)&band))
+            continue;
+
+        if (band.top > client.top && band.top < client.bottom)
+            DrawDarkRebarLine(hdc, client.left, band.top, client.right, band.top, palette.LineDark);
+    }
+
+    SelectObject(hdc, oldPen);
+}
+
+static void PaintDarkRebarClient(HWND hwnd, HDC hdc)
+{
+    DarkModeMainFramePalette palette;
+    if (!DarkMode_GetMainFramePalette(&palette))
+        return;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    if (client.right <= client.left || client.bottom <= client.top)
+        return;
+
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, palette.Fill);
+    FillRect(hdc, &client, (HBRUSH)GetStockObject(DC_BRUSH));
+    SelectObject(hdc, oldBrush);
+
+    PaintDarkRebarClientLines(hwnd, hdc);
+}
+
+static void PaintDarkRebarNonClientFrame(HWND hwnd)
+{
+    DarkModeMainFramePalette palette;
+    if (!DarkMode_GetMainFramePalette(&palette))
+        return;
+
+    HDC hdc = HANDLES(GetWindowDC(hwnd));
+    if (hdc == NULL)
+        return;
+
+    RECT r;
+    GetWindowRect(hwnd, &r);
+    OffsetRect(&r, -r.left, -r.top);
+
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, palette.Fill);
+    FillRect(hdc, &r, (HBRUSH)GetStockObject(DC_BRUSH));
+    SelectObject(hdc, oldBrush);
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+
+    SetDCPenColor(hdc, palette.Fill);
+    MoveToEx(hdc, r.left, r.top, NULL);
+    LineTo(hdc, r.right - 1, r.top);
+    LineTo(hdc, r.right - 1, r.bottom - 1);
+    LineTo(hdc, r.left, r.bottom - 1);
+    LineTo(hdc, r.left, r.top);
+
+    SelectObject(hdc, oldPen);
+    HANDLES(ReleaseDC(hwnd, hdc));
+}
+
+static LRESULT CALLBACK MainRebarDarkSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                                  UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    switch (uMsg)
+    {
+    case WM_ERASEBKGND:
+    {
+        DarkModeMainFramePalette palette;
+        if (DarkMode_GetMainFramePalette(&palette))
+        {
+            RECT r;
+            GetClientRect(hwnd, &r);
+            HGDIOBJ oldBrush = SelectObject((HDC)wParam, GetStockObject(DC_BRUSH));
+            SetDCBrushColor((HDC)wParam, palette.Fill);
+            FillRect((HDC)wParam, &r, (HBRUSH)GetStockObject(DC_BRUSH));
+            SelectObject((HDC)wParam, oldBrush);
+            return 1;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PAINTSTRUCT ps;
+            HDC hdc = HANDLES(BeginPaint(hwnd, &ps));
+            PaintDarkRebarClient(hwnd, hdc);
+            HANDLES(EndPaint(hwnd, &ps));
+            return 0;
+        }
+        return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+    }
+
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PaintDarkRebarNonClientFrame(hwnd);
+            return 0;
+        }
+        return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+    }
+
+    case WM_THEMECHANGED:
+    case WM_SYSCOLORCHANGE:
+    case WM_SETTINGCHANGE:
+        ApplyMainRebarDarkStyle(hwnd);
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        break;
+
+    case RB_INSERTBAND:
+    {
+        LRESULT result = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        ApplyMainRebarDarkStyle(hwnd);
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        return result;
+    }
+
+    case RB_SETBANDINFO:
+    {
+        LRESULT result = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (!ApplyingMainRebarDarkStyle)
+        {
+            ApplyMainRebarDarkStyle(hwnd);
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        }
+        return result;
+    }
+
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hwnd, MainRebarDarkSubclassProc, uIdSubclass);
+        break;
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
 // code for testing time losses
 /*
   const char *s1 = "aj hjka sakjSJKAHS AJKSH JKDSHFJSDH FJS HDFJSD HFJS";
@@ -1078,10 +1308,8 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         // disable them
         SetWindowTheme(HTopRebar, (L" "), (L" "));
 
-        // enforce WS_BORDER which somehow "disappeared"
-        DWORD style = (DWORD)GetWindowLongPtr(HTopRebar, GWL_STYLE);
-        style |= WS_BORDER;
-        SetWindowLongPtr(HTopRebar, GWL_STYLE, style);
+        SetWindowSubclass(HTopRebar, MainRebarDarkSubclassProc, MAIN_REBAR_DARK_SUBCLASS_ID, 0);
+        ApplyMainRebarDarkStyle(HTopRebar);
 
         MenuBar = new CMenuBar(&MainMenu, HWindow);
         if (MenuBar == NULL)
@@ -6767,14 +6995,23 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         RECT r;
         if (TopToolBar->HWindow != NULL)
         {
-            MoveToEx(dc, 0, 0, NULL);
-            LineTo(dc, WindowWidth + 1, 0);
             if (useDarkPalette)
-                SetDCPenColor(dc, palette.LineLight);
+            {
+                r.left = 0;
+                r.top = 0;
+                r.right = WindowWidth;
+                r.bottom = 2;
+                SetDCBrushColor(dc, palette.Fill);
+                FillRect(dc, &r, (HBRUSH)GetStockObject(DC_BRUSH));
+            }
             else
+            {
+                MoveToEx(dc, 0, 0, NULL);
+                LineTo(dc, WindowWidth + 1, 0);
                 SelectObject(dc, BtnHilightPen);
-            MoveToEx(dc, 0, 1, NULL);
-            LineTo(dc, WindowWidth + 1, 1);
+                MoveToEx(dc, 0, 1, NULL);
+                LineTo(dc, WindowWidth + 1, 1);
+            }
         }
 
         if (PanelsHeight > 0)
@@ -6793,7 +7030,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             {
                 SetDCBrushColor(dc, palette.Fill);
                 FillRect(dc, &r, (HBRUSH)GetStockObject(DC_BRUSH));
-                SetDCPenColor(dc, palette.Border);
+                SetDCPenColor(dc, palette.LineDark);
             }
             else
             {

@@ -313,7 +313,7 @@ void CHeaderLine::PaintItem(HDC hDC, int index, int x)
     if (useDarkChrome)
     {
         HGDIOBJ oldPen = SelectObject(ItemBitmap.HMemDC, GetStockObject(DC_PEN));
-        SetDCPenColor(ItemBitmap.HMemDC, palette.LineLight);
+        SetDCPenColor(ItemBitmap.HMemDC, palette.LineDark);
         MoveToEx(ItemBitmap.HMemDC, r.left, r.top, NULL);
         LineTo(ItemBitmap.HMemDC, r.right, r.top);
         if (first)
@@ -327,7 +327,6 @@ void CHeaderLine::PaintItem(HDC hDC, int index, int x)
             LineTo(ItemBitmap.HMemDC, r.left, r.bottom - 2);
         }
 
-        SetDCPenColor(ItemBitmap.HMemDC, palette.LineDark);
         MoveToEx(ItemBitmap.HMemDC, r.left, r.bottom - 1, NULL);
         LineTo(ItemBitmap.HMemDC, r.right, r.bottom - 1);
         if (!last)
