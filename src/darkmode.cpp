@@ -707,6 +707,23 @@ BOOL DarkMode_OnSettingChange(LPARAM lParam)
     return changed;
 }
 
+void DarkMode_DrawSunkenFrame(HDC hDC, const RECT* r, const DarkModeMainFramePalette& palette)
+{
+    HGDIOBJ oldPen = SelectObject(hDC, GetStockObject(DC_PEN));
+
+    SetDCPenColor(hDC, palette.LineDark);
+    MoveToEx(hDC, r->left, r->bottom - 1, NULL);
+    LineTo(hDC, r->left, r->top);
+    LineTo(hDC, r->right - 1, r->top);
+
+    SetDCPenColor(hDC, palette.Border);
+    MoveToEx(hDC, r->right - 1, r->top, NULL);
+    LineTo(hDC, r->right - 1, r->bottom - 1);
+    LineTo(hDC, r->left - 1, r->bottom - 1);
+
+    SelectObject(hDC, oldPen);
+}
+
 void DarkMode_ApplyTitleBar(HWND hwnd)
 {
     EnsureInitialized();

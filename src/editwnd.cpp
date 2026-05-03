@@ -1878,7 +1878,28 @@ CEditWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 btnArea.right = cr.right - 3;
                 btnArea.bottom = cr.bottom - 3;
                 if (btnArea.right > btnArea.left && btnArea.bottom > btnArea.top)
+                {
                     FillRectSolid(hDC, &btnArea, EDITWND_DARK_BUTTON_BG);
+
+                    // The default combo WM_PAINT no longer runs in this branch,
+                    // so the dropdown arrow glyph must be drawn here.
+                    int centerX = (btnArea.left + btnArea.right) / 2;
+                    int centerY = (btnArea.top + btnArea.bottom) / 2;
+                    POINT arrow[3] = {
+                        {centerX - 3, centerY - 1},
+                        {centerX + 4, centerY - 1},
+                        {centerX, centerY + 3},
+                    };
+                    HPEN hArrowPen = HANDLES(CreatePen(PS_SOLID, 1, EDITWND_DARK_TEXT));
+                    HBRUSH hArrowBrush = HANDLES(CreateSolidBrush(EDITWND_DARK_TEXT));
+                    HGDIOBJ oldArrowPen = SelectObject(hDC, hArrowPen);
+                    HGDIOBJ oldArrowBrush = SelectObject(hDC, hArrowBrush);
+                    Polygon(hDC, arrow, 3);
+                    SelectObject(hDC, oldArrowBrush);
+                    SelectObject(hDC, oldArrowPen);
+                    HANDLES(DeleteObject(hArrowBrush));
+                    HANDLES(DeleteObject(hArrowPen));
+                }
 
                 HGDIOBJ oldPen = SelectObject(hDC, GetStockObject(DC_PEN));
                 HGDIOBJ oldBrush = SelectObject(hDC, GetStockObject(NULL_BRUSH));

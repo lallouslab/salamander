@@ -58,23 +58,6 @@ static void FillRectSolid(HDC hDC, const RECT* rect, COLORREF color)
     SelectObject(hDC, oldBrush);
 }
 
-static void DrawDarkSunkenFrame(HDC hDC, const RECT* r, const DarkModeMainFramePalette& palette)
-{
-    HGDIOBJ oldPen = SelectObject(hDC, GetStockObject(DC_PEN));
-
-    SetDCPenColor(hDC, palette.LineDark);
-    MoveToEx(hDC, r->left, r->bottom - 1, NULL);
-    LineTo(hDC, r->left, r->top);
-    LineTo(hDC, r->right - 1, r->top);
-
-    SetDCPenColor(hDC, palette.Border);
-    MoveToEx(hDC, r->right - 1, r->top, NULL);
-    LineTo(hDC, r->right - 1, r->bottom - 1);
-    LineTo(hDC, r->left - 1, r->bottom - 1);
-
-    SelectObject(hDC, oldPen);
-}
-
 //
 // ****************************************************************************
 // CStatusWindow
@@ -786,7 +769,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
         textR.top += 2;
         textR.bottom -= 2;
         if (useDark)
-            DrawDarkSunkenFrame(dc, &textR, palette);
+            DarkMode_DrawSunkenFrame(dc, &textR, palette);
         else
             DrawEdge(dc, &textR, BDR_SUNKENOUTER, BF_RECT);
 

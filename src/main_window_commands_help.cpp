@@ -286,9 +286,7 @@ static LRESULT CALLBACK MainRebarDarkSubclassProc(HWND hwnd, UINT uMsg, WPARAM w
             PaintDarkRebarNonClientFrame(hwnd);
             return 0;
         }
-        LRESULT result = DefSubclassProc(hwnd, uMsg, wParam, lParam);
-        PaintDarkRebarNonClientFrame(hwnd);
-        return result;
+        return DefSubclassProc(hwnd, uMsg, wParam, lParam);
     }
 
     case WM_THEMECHANGED:
