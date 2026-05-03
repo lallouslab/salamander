@@ -27,6 +27,37 @@ static void FillRectWithColor(HDC hDC, const RECT* r, COLORREF color)
     SelectObject(hDC, oldBrush);
 }
 
+static void DrawDarkToolbarFrame(HDC hDC, const RECT* r, BOOL pressed)
+{
+    HGDIOBJ oldPen = SelectObject(hDC, GetStockObject(DC_PEN));
+
+    COLORREF upperLeft = pressed ? RGB(28, 28, 28) : RGB(62, 62, 66);
+    COLORREF lowerRight = pressed ? RGB(62, 62, 66) : RGB(28, 28, 28);
+    COLORREF border = RGB(62, 62, 66);
+
+    SetDCPenColor(hDC, border);
+    MoveToEx(hDC, r->left, r->top, NULL);
+    LineTo(hDC, r->right - 1, r->top);
+    LineTo(hDC, r->right - 1, r->bottom - 1);
+    LineTo(hDC, r->left, r->bottom - 1);
+    LineTo(hDC, r->left, r->top);
+
+    if (r->right - r->left > 2 && r->bottom - r->top > 2)
+    {
+        SetDCPenColor(hDC, upperLeft);
+        MoveToEx(hDC, r->left + 1, r->bottom - 2, NULL);
+        LineTo(hDC, r->left + 1, r->top + 1);
+        LineTo(hDC, r->right - 2, r->top + 1);
+
+        SetDCPenColor(hDC, lowerRight);
+        MoveToEx(hDC, r->right - 2, r->top + 1, NULL);
+        LineTo(hDC, r->right - 2, r->bottom - 2);
+        LineTo(hDC, r->left + 1, r->bottom - 2);
+    }
+
+    SelectObject(hDC, oldPen);
+}
+
 static COLORREF GetToolBarBkColor()
 {
     return DarkMode_ShouldUseDark() ? RGB(45, 45, 48) : GetSysColor(COLOR_BTNFACE);
@@ -490,8 +521,8 @@ void CToolBar::DrawItem(HDC hDC, int index)
 
     if (item->Style & TLBI_STYLE_SEPARATOR)
     {
-        COLORREF separatorDark = useDarkToolbar ? RGB(70, 70, 70) : GetSysColor(COLOR_BTNSHADOW);
-        COLORREF separatorLight = useDarkToolbar ? RGB(95, 95, 95) : GetSysColor(COLOR_BTNHIGHLIGHT);
+        COLORREF separatorDark = useDarkToolbar ? RGB(28, 28, 28) : GetSysColor(COLOR_BTNSHADOW);
+        COLORREF separatorLight = useDarkToolbar ? RGB(45, 45, 48) : GetSysColor(COLOR_BTNHIGHLIGHT);
         if (vertical)
         {
             int y = height / 2 - 1;
@@ -499,9 +530,12 @@ void CToolBar::DrawItem(HDC hDC, int index)
             SetDCPenColor(CacheBitmap->HMemDC, separatorDark);
             MoveToEx(CacheBitmap->HMemDC, 1, y, NULL);
             LineTo(CacheBitmap->HMemDC, Width - 1, y);
-            SetDCPenColor(CacheBitmap->HMemDC, separatorLight);
-            MoveToEx(CacheBitmap->HMemDC, 1, y + 1, NULL);
-            LineTo(CacheBitmap->HMemDC, Width - 1, y + 1);
+            if (!useDarkToolbar)
+            {
+                SetDCPenColor(CacheBitmap->HMemDC, separatorLight);
+                MoveToEx(CacheBitmap->HMemDC, 1, y + 1, NULL);
+                LineTo(CacheBitmap->HMemDC, Width - 1, y + 1);
+            }
             SelectObject(CacheBitmap->HMemDC, hOldPen);
         }
         else
@@ -511,9 +545,12 @@ void CToolBar::DrawItem(HDC hDC, int index)
             SetDCPenColor(CacheBitmap->HMemDC, separatorDark);
             MoveToEx(CacheBitmap->HMemDC, x, 1, NULL);
             LineTo(CacheBitmap->HMemDC, x, Height - 1);
-            SetDCPenColor(CacheBitmap->HMemDC, separatorLight);
-            MoveToEx(CacheBitmap->HMemDC, x + 1, 1, NULL);
-            LineTo(CacheBitmap->HMemDC, x + 1, Height - 1);
+            if (!useDarkToolbar)
+            {
+                SetDCPenColor(CacheBitmap->HMemDC, separatorLight);
+                MoveToEx(CacheBitmap->HMemDC, x + 1, 1, NULL);
+                LineTo(CacheBitmap->HMemDC, x + 1, Height - 1);
+            }
             SelectObject(CacheBitmap->HMemDC, hOldPen);
         }
     }
@@ -592,7 +629,10 @@ void CToolBar::DrawItem(HDC hDC, int index)
 
             // frame around body
             DWORD mode = bodyDown ? BDR_SUNKENOUTER : BDR_RAISEDINNER;
-            DrawEdge(CacheBitmap->HMemDC, &r, mode, BF_RECT);
+            if (useDarkToolbar)
+                DrawDarkToolbarFrame(CacheBitmap->HMemDC, &r, bodyDown);
+            else
+                DrawEdge(CacheBitmap->HMemDC, &r, mode, BF_RECT);
 
             if (HotIndex == index && outterDropPresent)
             {
@@ -600,7 +640,10 @@ void CToolBar::DrawItem(HDC hDC, int index)
                 r.left = r.right;
                 r.right = width;
                 mode = dropDown ? BDR_SUNKENOUTER : BDR_RAISEDINNER;
-                DrawEdge(CacheBitmap->HMemDC, &r, mode, BF_RECT);
+                if (useDarkToolbar)
+                    DrawDarkToolbarFrame(CacheBitmap->HMemDC, &r, dropDown);
+                else
+                    DrawEdge(CacheBitmap->HMemDC, &r, mode, BF_RECT);
             }
         }
 

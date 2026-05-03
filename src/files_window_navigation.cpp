@@ -3328,6 +3328,7 @@ void CFilesWindow::OnColorsChanged()
         // A color/theme switch can happen after the panel was already painted.
         // Force a full panel repaint so stale light pixels are not left behind
         // until the user moves selection or scrolls.
+        RedrawWindow(ListBox->HWindow, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
         InvalidateRect(ListBox->HWindow, &ListBox->FilesRect, FALSE);
         if (ListBox->HeaderLine.HWindow != NULL)
             InvalidateRect(ListBox->HeaderLine.HWindow, NULL, TRUE);
