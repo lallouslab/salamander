@@ -20,6 +20,7 @@ struct CTVData
     int Left, Top, Width, Height;
     CViewerWindow* View;
     const char* Name;
+    const wchar_t* NameW;
     UINT ShowCmd;
     BOOL Success;
     const char* Caption;
@@ -50,7 +51,13 @@ unsigned ThreadViewerMessageLoopBody(void* parameter)
     CTVData* data = (CTVData*)parameter;
     CViewerWindow* view = data->View;
     CPathBuffer name;
-    strcpy(name, data->Name);
+    if (data->Name != NULL)
+        strcpy(name, data->Name);
+    else
+        name[0] = 0;
+    std::wstring nameW;
+    if (data->NameW != NULL && data->NameW[0] != L'\0')
+        nameW = data->NameW;
     CPathBuffer captionBuf;
     const char* caption = NULL;
     BOOL wholeCaption = FALSE;
@@ -113,7 +120,12 @@ unsigned ThreadViewerMessageLoopBody(void* parameter)
     if (ok) // if the window was created, run the application loop
     {
         CALL_STACK_MESSAGE1("ThreadViewerMessageLoopBody::message_loop");
-        if (SalGetFullName(name, NULL, NULL, NULL, NULL, name.Size()))
+        if (!nameW.empty())
+        {
+            if (SalGetFullNameW(nameW))
+                view->OpenFileW(nameW.c_str(), caption, wholeCaption);
+        }
+        else if (SalGetFullName(name, NULL, NULL, NULL, NULL, name.Size()))
             view->OpenFile(name, caption, wholeCaption);
 
         MSG msg;
@@ -164,8 +176,18 @@ BOOL OpenViewer(const char* name, CViewType mode, int left, int top, int width, 
                 CSalamanderPluginViewerData* viewerData, int enumFileNamesSourceUID,
                 int enumFileNamesLastFileIndex)
 {
+    return OpenViewerW(NULL, name, mode, left, top, width, height, showCmd, returnLock,
+                       lock, lockOwner, viewerData, enumFileNamesSourceUID,
+                       enumFileNamesLastFileIndex);
+}
+
+BOOL OpenViewerW(const wchar_t* nameW, const char* nameA, CViewType mode, int left, int top,
+                 int width, int height, UINT showCmd, BOOL returnLock, HANDLE* lock,
+                 BOOL* lockOwner, CSalamanderPluginViewerData* viewerData,
+                 int enumFileNamesSourceUID, int enumFileNamesLastFileIndex)
+{
     CALL_STACK_MESSAGE11("OpenViewer(%s, %d, %d, %d, %d, %d, %u, %d, , , , %d, %d)",
-                         name, mode, left, top, width, height, showCmd, returnLock,
+                         nameA != NULL ? nameA : "", mode, left, top, width, height, showCmd, returnLock,
                          enumFileNamesSourceUID, enumFileNamesLastFileIndex);
     CSalamanderPluginInternalViewerData* intViewerData = NULL;
     if (viewerData != NULL && viewerData->Size == sizeof(CSalamanderPluginInternalViewerData))
@@ -192,9 +214,11 @@ BOOL OpenViewer(const char* name, CViewType mode, int left, int top, int width, 
         data.Top = top;
         data.Width = width;
         data.Height = height;
-        data.Name = name;
+        data.Name = nameA;
+        data.NameW = nameW;
         data.ShowCmd = showCmd;
         data.Caption = intViewerData != NULL ? intViewerData->Caption : NULL;
+        data.WholeCaption = intViewerData != NULL ? intViewerData->WholeCaption : FALSE;
 
         DWORD ThreadID;
         HANDLE loop = HANDLES(CreateThread(NULL, 0, ThreadViewerMessageLoop, &data, 0, &ThreadID));
@@ -353,14 +377,13 @@ void CViewerWindow::CodeCharacters(unsigned char* start, unsigned char* end)
 BOOL CViewerWindow::LoadBefore(HANDLE* hFile)
 {
     CALL_STACK_MESSAGE1("CViewerWindow::LoadBefore()");
-    if (FileName.empty())
+    if (FileName.empty() && FileNameW.empty())
         return FALSE;
 
     HANDLE file;
     if (hFile == NULL || *hFile == NULL)
     {
-        file = SalCreateFileH(FileName.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                              OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+        file = OpenViewedFile(FILE_FLAG_SEQUENTIAL_SCAN);
         if (hFile != NULL && file != INVALID_HANDLE_VALUE)
             *hFile = file;
     }
@@ -454,8 +477,7 @@ BOOL CViewerWindow::LoadBefore(HANDLE* hFile)
 
         if (!ret && kill) // possibly end working with this file
         {
-            FileName.clear();
-            FileName.clear();
+            ClearViewedFile();
             if (!Caption.empty())
             {
                 Caption.clear();
@@ -476,8 +498,7 @@ BOOL CViewerWindow::LoadBefore(HANDLE* hFile)
     {
         DWORD err = GetLastError();
         Seek = Loaded = 0;
-        FileName.clear();
-        FileName.clear();
+        ClearViewedFile();
         if (!Caption.empty())
         {
             Caption.clear();
@@ -498,14 +519,13 @@ BOOL CViewerWindow::LoadBefore(HANDLE* hFile)
 BOOL CViewerWindow::LoadBehind(HANDLE* hFile)
 {
     CALL_STACK_MESSAGE1("CViewerWindow::LoadBehind()");
-    if (FileName.empty())
+    if (FileName.empty() && FileNameW.empty())
         return FALSE;
 
     HANDLE file;
     if (hFile == NULL || *hFile == NULL)
     {
-        file = SalCreateFileH(FileName.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-                              FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+        file = OpenViewedFile(FILE_FLAG_SEQUENTIAL_SCAN);
         if (hFile != NULL && file != INVALID_HANDLE_VALUE)
             *hFile = file;
     }
@@ -608,8 +628,7 @@ BOOL CViewerWindow::LoadBehind(HANDLE* hFile)
 
         if (!ret && kill) // possibly end working with this file
         {
-            FileName.clear();
-            FileName.clear();
+            ClearViewedFile();
             if (!Caption.empty())
             {
                 Caption.clear();
@@ -630,8 +649,7 @@ BOOL CViewerWindow::LoadBehind(HANDLE* hFile)
     {
         DWORD err = GetLastError();
         Seek = Loaded = 0;
-        FileName.clear();
-        FileName.clear();
+        ClearViewedFile();
         if (!Caption.empty())
         {
             Caption.clear();
@@ -684,6 +702,7 @@ void CViewerWindow::OpenFile(const char* file, const char* caption, BOOL wholeCa
     else
         WholeCaption = FALSE;
     FileName = (const char*)fileName;
+    FileNameW = AnsiToWide(fileName);
     TooBigSelAction = 0;
     CanSwitchToHex = TRUE;
     CanSwitchQuietlyToHex = TRUE;
@@ -711,6 +730,70 @@ void CViewerWindow::OpenFile(const char* file, const char* caption, BOOL wholeCa
     InvalidateRect(HWindow, NULL, FALSE);
     UpdateWindow(HWindow);
     CanSwitchQuietlyToHex = FALSE;
+}
+
+void CViewerWindow::OpenFileW(const wchar_t* file, const char* caption, BOOL wholeCaption)
+{
+    std::wstring fileNameW = file != NULL ? std::wstring(file) : std::wstring();
+    CALL_STACK_MESSAGE3("CViewerWindow::OpenFileW(%S, %s)", fileNameW.c_str(), caption);
+
+    Caption.clear();
+    if (caption != NULL)
+    {
+        Caption = caption;
+        WholeCaption = wholeCaption;
+    }
+    else
+        WholeCaption = FALSE;
+    FileNameW = fileNameW;
+    FileName = WideToAnsi(FileNameW);
+    TooBigSelAction = 0;
+    CanSwitchToHex = TRUE;
+    CanSwitchQuietlyToHex = TRUE;
+    OriginX = 0;
+    SeekY = 0;
+    ExitTextMode = FALSE;
+    ForceTextMode = FALSE;
+    CodeType = 0;
+    UseCodeTable = FALSE;
+    TextEncoding = Sally::Unicode::BomEncoding::LegacyBytes;
+    TextContentOffset = 0;
+    BOOL fatalErr = FALSE;
+    FileChanged(NULL, FALSE, fatalErr, TRUE);
+    if (fatalErr)
+        FatalFileErrorOccured();
+    if (fatalErr || ExitTextMode)
+    {
+        CanSwitchQuietlyToHex = FALSE;
+        return;
+    }
+    if (FileNameW.empty())
+        SetWindowText(HWindow, LoadStr(IDS_VIEWERTITLE));
+    else
+        SetViewerCaption();
+    InvalidateRect(HWindow, NULL, FALSE);
+    UpdateWindow(HWindow);
+    CanSwitchQuietlyToHex = FALSE;
+}
+
+HANDLE CViewerWindow::OpenViewedFile(DWORD flags) const
+{
+    if (!FileNameW.empty())
+    {
+        return SalCreateFileWideH(FileNameW.c_str(), GENERIC_READ,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                  OPEN_EXISTING, flags, NULL);
+    }
+
+    return SalCreateFileH(FileName.c_str(), GENERIC_READ,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                          OPEN_EXISTING, flags, NULL);
+}
+
+void CViewerWindow::ClearViewedFile()
+{
+    FileName.clear();
+    FileNameW.clear();
 }
 
 void CViewerWindow::ReleaseMouseDrag()
@@ -775,7 +858,7 @@ void CViewerWindow::FileChanged(HANDLE file, BOOL testOnlyFileSize, BOOL& fatalE
     fatalErr = FALSE;
     if (calledHeightChanged != NULL)
         *calledHeightChanged = FALSE;
-    if (FileName.empty())
+    if (FileName.empty() && FileNameW.empty())
         return;
 
     const char* s = strrchr(FileName.c_str(), '\\');
@@ -792,8 +875,7 @@ void CViewerWindow::FileChanged(HANDLE file, BOOL testOnlyFileSize, BOOL& fatalE
     BOOL close;
     if (file == NULL)
     {
-        file = SalCreateFileH(FileName.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-                              FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+        file = OpenViewedFile(FILE_FLAG_SEQUENTIAL_SCAN);
         close = TRUE;
     }
     else
@@ -817,8 +899,7 @@ void CViewerWindow::FileChanged(HANDLE file, BOOL testOnlyFileSize, BOOL& fatalE
             ReleaseMouseDrag();
             FirstLineSize = LastLineSize = ViewSize = 0;
             LastFindSeekY = -1;
-            FileName.clear();
-            FileName.clear();
+            ClearViewedFile();
             if (!Caption.empty())
             {
                 Caption.clear();
@@ -1001,8 +1082,7 @@ void CViewerWindow::FileChanged(HANDLE file, BOOL testOnlyFileSize, BOOL& fatalE
         ReleaseMouseDrag();
         FirstLineSize = LastLineSize = ViewSize = 0;
         LastFindSeekY = -1;
-        FileName.clear();
-        FileName.clear();
+        ClearViewedFile();
         if (!Caption.empty())
         {
             Caption.clear();

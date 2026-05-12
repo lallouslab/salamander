@@ -16,11 +16,47 @@
 #include "plugins.h"
 #include "fileswnd.h"
 #include "dialogs.h"
+#include "darkmode.h"
 
 //****************************************************************************
 //
 // CFindDialog (continued find_dialog_results.cpp)
 //
+
+static void FillRectSolid(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldColor = SetDCBrushColor(hdc, color);
+    FillRect(hdc, rect, (HBRUSH)GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+}
+
+static void DrawRectOutline(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    COLORREF oldColor = SetDCPenColor(hdc, color);
+    Rectangle(hdc, rect->left, rect->top, rect->right, rect->bottom);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static void ApplyFindTBHeaderFrameStyle(HWND hwnd)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    LONG_PTR newExStyle = DarkMode_ShouldUseDark() ? (exStyle & ~WS_EX_STATICEDGE) : (exStyle | WS_EX_STATICEDGE);
+    if (newExStyle != exStyle)
+    {
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, newExStyle);
+        SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+}
 
 void CFindDialog::OnHideSelection()
 {
@@ -161,7 +197,9 @@ void CFindDialog::OnDelete(BOOL toRecycle)
     if (lastFocusedIndex != -1)
     {
         CFoundFilesData* lastItem = FoundFilesListView->At(lastFocusedIndex);
-        lastFocusedItem.Set(lastItem->Path.c_str(), lastItem->Name.c_str(), lastItem->Size, lastItem->Attr, &lastItem->LastWrite, lastItem->IsDir);
+        lastFocusedItem.Set(lastItem->Path.c_str(), lastItem->Name.c_str(),
+                            lastItem->PathW.c_str(), lastItem->NameW.c_str(),
+                            lastItem->Size, lastItem->Attr, &lastItem->LastWrite, lastItem->IsDir);
     }
 
     CShellExecuteWnd shellExecuteWnd;
@@ -280,6 +318,8 @@ void CFindDialog::OnColorsChange()
         MenuBarHeight = MenuBar->GetNeededHeight();
         LayoutControls();
     }
+    DarkMode_ApplyListTreeThemeRecursive(HWindow);
+    RedrawWindow(HWindow, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 //****************************************************************************
@@ -304,6 +344,7 @@ CFindTBHeader::CFindTBHeader(HWND hDlg, int ctrlID)
     DWORD exStyle = (DWORD)GetWindowLongPtr(HWindow, GWL_EXSTYLE);
     exStyle |= WS_EX_STATICEDGE;
     SetWindowLongPtr(HWindow, GWL_EXSTYLE, exStyle);
+    ApplyFindTBHeaderFrameStyle(HWindow);
 
     LogToolBar = NULL;
     HWarningIcon = NULL;
@@ -400,12 +441,16 @@ BOOL CFindTBHeader::CreateLogToolbar(BOOL errors, BOOL infos)
 
 void CFindTBHeader::OnColorsChange()
 {
+    ApplyFindTBHeaderFrameStyle(HWindow);
     if (ToolBar != NULL)
     {
         ToolBar->SetImageList(HGrayToolBarImageList);
         ToolBar->SetHotImageList(HHotToolBarImageList);
         ToolBar->OnColorsChanged();
     }
+    if (LogToolBar != NULL)
+        LogToolBar->OnColorsChanged();
+    RedrawWindow(HWindow, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 int CFindTBHeader::GetNeededHeight()
@@ -529,7 +574,16 @@ CFindTBHeader::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         HFONT hOldFont = (HFONT)SelectObject(hdc, (HFONT)SendMessage(HWindow, WM_GETFONT, 0, 0));
         int oldBkMode = SetBkMode(hdc, TRANSPARENT);
-        FillRect(hdc, &r, (HBRUSH)(COLOR_3DFACE + 1));
+        DarkModeColors colors;
+        BOOL useDark = DarkMode_GetColors(&colors);
+        if (useDark)
+        {
+            FillRectSolid(hdc, &r, colors.DialogBackground);
+            DrawRectOutline(hdc, &r, colors.Border);
+            SetTextColor(hdc, colors.DialogText);
+        }
+        else
+            FillRect(hdc, &r, (HBRUSH)(COLOR_3DFACE + 1));
         DrawText(hdc, Text, -1, &tr, DT_SINGLELINE | DT_RIGHT | DT_VCENTER);
         SetBkMode(hdc, oldBkMode);
         SelectObject(hdc, hOldFont);
@@ -596,6 +650,14 @@ CFindTBHeader::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             tbH = LogToolBar->GetNeededHeight();
             SetWindowPos(LogToolBar->HWindow, NULL, width - tbW, 0, tbW, tbH, SWP_NOZORDER | SWP_NOACTIVATE);
         }
+        break;
+    }
+
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+    case WM_SYSCOLORCHANGE:
+    {
+        OnColorsChange();
         break;
     }
 
@@ -1357,7 +1419,9 @@ void CFindDialog::OnDrag(BOOL rightMouseButton)
     if (lastFocusedIndex != -1)
     {
         CFoundFilesData* lastItem = FoundFilesListView->At(lastFocusedIndex);
-        lastFocusedItem.Set(lastItem->Path.c_str(), lastItem->Name.c_str(), lastItem->Size, lastItem->Attr, &lastItem->LastWrite, lastItem->IsDir);
+        lastFocusedItem.Set(lastItem->Path.c_str(), lastItem->Name.c_str(),
+                            lastItem->PathW.c_str(), lastItem->NameW.c_str(),
+                            lastItem->Size, lastItem->Attr, &lastItem->LastWrite, lastItem->IsDir);
     }
 
     CMyEnumFileNamesData data;

@@ -6,6 +6,7 @@
 
 #include "cfgdlg.h"
 #include "worker.h"
+#include "common/CreateDirectoryFlow.h"
 #include "common/fsutil.h"
 #include "common/CopyStrategy.h"
 #include "common/widepath.h"
@@ -14,6 +15,7 @@
 #include "DialogWorkerObserver.h"
 #include "common/unicode/helpers.h"
 #include "common/unicode/PathIdentityPolicy.h"
+#include "common/unicode/PanelPathPolicy.h"
 
 #include <aclapi.h>
 #include <ntsecapi.h>
@@ -508,6 +510,45 @@ void COperation::PopulateWidePathsFromAnsi()
     }
 }
 
+static std::wstring BuildOperationNameW(std::wstring widePath, const std::wstring& wideFileName)
+{
+    if (!wideFileName.empty())
+    {
+        if (!widePath.empty() && widePath.back() != L'\\')
+            widePath += L'\\';
+        widePath += wideFileName;
+    }
+
+    if (widePath.length() >= SAL_LONG_PATH_THRESHOLD &&
+        widePath.compare(0, 4, L"\\\\?\\") != 0)
+    {
+        if (widePath.length() >= 2 && widePath[0] == L'\\' && widePath[1] == L'\\')
+            widePath = L"\\\\?\\UNC\\" + widePath.substr(2);
+        else
+            widePath = L"\\\\?\\" + widePath;
+    }
+
+    return widePath;
+}
+
+void COperations::ReanchorWideSourcePaths(const char* anchorAnsi, const wchar_t* anchorWide)
+{
+    for (size_t i = 0; i < m_ops.size(); ++i)
+    {
+        COperation& op = m_ops[i];
+        if (!op.OwnsSourceName || op.SourceName == NULL || op.SourceNameWExplicit)
+            continue;
+
+        std::wstring rebound = sally::unicode::RebindAnsiPathToWideAnchor(
+            op.SourceName, anchorAnsi, anchorWide);
+        if (rebound.empty())
+            continue;
+
+        op.SourceNameW = BuildOperationNameW(std::move(rebound), std::wstring());
+        op.SourceNameWExplicit = true;
+    }
+}
+
 void COperation::SetSourceNameW(const char* ansiPath, const std::wstring& wideFileName)
 {
     if (ansiPath == NULL)
@@ -523,30 +564,7 @@ void COperation::SetSourceNameW(const char* ansiPath, const std::wstring& wideFi
     MultiByteToWideChar(CP_ACP, 0, ansiPath, -1, &widePath[0], pathLen);
     widePath.resize(pathLen - 1);  // Remove null terminator from size
 
-    if (!wideFileName.empty())
-    {
-        // Append wide filename
-        if (!widePath.empty() && widePath.back() != L'\\')
-            widePath += L'\\';
-        widePath += wideFileName;
-    }
-
-    // Add \\?\ prefix for long paths
-    if (widePath.length() >= SAL_LONG_PATH_THRESHOLD)
-    {
-        if (widePath.length() >= 2 && widePath[0] == L'\\' && widePath[1] == L'\\')
-        {
-            // UNC path: \\server\share -> \\?\UNC\server\share
-            widePath = L"\\\\?\\UNC\\" + widePath.substr(2);
-        }
-        else
-        {
-            // Local path: C:\foo -> \\?\C:\foo
-            widePath = L"\\\\?\\" + widePath;
-        }
-    }
-
-    SourceNameW = std::move(widePath);
+    SetSourceNameW(widePath, wideFileName);
 }
 
 void COperation::SetTargetNameW(const char* ansiPath, const std::wstring& wideFileName)
@@ -564,30 +582,19 @@ void COperation::SetTargetNameW(const char* ansiPath, const std::wstring& wideFi
     MultiByteToWideChar(CP_ACP, 0, ansiPath, -1, &widePath[0], pathLen);
     widePath.resize(pathLen - 1);  // Remove null terminator from size
 
-    if (!wideFileName.empty())
-    {
-        // Append wide filename
-        if (!widePath.empty() && widePath.back() != L'\\')
-            widePath += L'\\';
-        widePath += wideFileName;
-    }
+    SetTargetNameW(widePath, wideFileName);
+}
 
-    // Add \\?\ prefix for long paths
-    if (widePath.length() >= SAL_LONG_PATH_THRESHOLD)
-    {
-        if (widePath.length() >= 2 && widePath[0] == L'\\' && widePath[1] == L'\\')
-        {
-            // UNC path: \\server\share -> \\?\UNC\server\share
-            widePath = L"\\\\?\\UNC\\" + widePath.substr(2);
-        }
-        else
-        {
-            // Local path: C:\foo -> \\?\C:\foo
-            widePath = L"\\\\?\\" + widePath;
-        }
-    }
+void COperation::SetSourceNameW(const std::wstring& widePath, const std::wstring& wideFileName)
+{
+    SourceNameW = BuildOperationNameW(widePath, wideFileName);
+    SourceNameWExplicit = true;
+}
 
-    TargetNameW = std::move(widePath);
+void COperation::SetTargetNameW(const std::wstring& widePath, const std::wstring& wideFileName)
+{
+    TargetNameW = BuildOperationNameW(widePath, wideFileName);
+    TargetNameWExplicit = true;
 }
 
 
@@ -3703,7 +3710,8 @@ void DoCopyFileLoopOrig(HANDLE& in, HANDLE& out, void* buffer, int& limitBufferS
                 ret = IDCANCEL;
                 if (err == NO_ERROR && read != written)
                     err = ERROR_DISK_FULL;
-                ret = observer.AskFileErrorById(IDS_ERRORWRITINGFILE, op->TargetName, err);
+                ret = observer.AskFileErrorByIdW(IDS_ERRORWRITINGFILE, op->TargetName,
+                                                 op->HasWideTarget() ? op->TargetNameW.c_str() : NULL, err);
                 switch (ret)
                 {
                 case IDRETRY: // on a network we must reopen the handle; local access forbids it due to sharing
@@ -5278,7 +5286,9 @@ COPY_AGAIN:
                                 goto SKIP_COPY;
 
                             int ret = IDCANCEL;
-                            ret = observer.AskFileErrorById(IDS_ERRORWRITINGFILE, op->TargetName, ERROR_DISK_FULL);
+                            ret = observer.AskFileErrorByIdW(IDS_ERRORWRITINGFILE, op->TargetName,
+                                                             op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                             ERROR_DISK_FULL);
                             switch (ret)
                             {
                             case IDRETRY:
@@ -5444,7 +5454,8 @@ COPY_AGAIN:
                                 goto SKIP_COPY;
 
                             int ret = IDCANCEL;
-                            ret = observer.AskFileErrorById(IDS_ERRORWRITINGFILE, op->TargetName, err);
+                            ret = observer.AskFileErrorByIdW(IDS_ERRORWRITINGFILE, op->TargetName,
+                                                             op->HasWideTarget() ? op->TargetNameW.c_str() : NULL, err);
                             switch (ret)
                             {
                             case IDRETRY:
@@ -5523,7 +5534,11 @@ COPY_AGAIN:
                                 ret = IDB_IGNORE;
                             else
                             {
-                                ret = observer.AskCopyPermError(op->SourceName, op->TargetName, (char*)(DWORD_PTR)err);
+                                ret = observer.AskCopyPermErrorW(op->SourceName,
+                                                                 op->HasWideSource() ? op->SourceNameW.c_str() : NULL,
+                                                                 op->TargetName,
+                                                                 op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                                 (char*)(DWORD_PTR)err);
                             }
                             switch (ret)
                             {
@@ -5646,7 +5661,11 @@ COPY_AGAIN:
                                 else
                                 {
                                     // show the prompt
-                                    ret = observer.AskOverwrite(op->TargetName, tAttr, op->SourceName, sAttr);
+                                    ret = observer.AskOverwriteW(op->TargetName,
+                                                                 op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                                 tAttr, op->SourceName,
+                                                                 op->HasWideSource() ? op->SourceNameW.c_str() : NULL,
+                                                                 sAttr);
                                 }
                                 switch (ret)
                                 {
@@ -5902,7 +5921,10 @@ COPY_AGAIN:
 
                             int ret;
                             ret = IDCANCEL;
-                            ret = observer.AskFileErrorById(errDeletingFile ? IDS_ERRORDELETINGFILE : IDS_ERROROPENINGFILE, op->TargetName, err);
+                            ret = observer.AskFileErrorByIdW(errDeletingFile ? IDS_ERRORDELETINGFILE : IDS_ERROROPENINGFILE,
+                                                             op->TargetName,
+                                                             op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                             err);
                             switch (ret)
                             {
                             case IDRETRY:
@@ -5939,7 +5961,8 @@ COPY_AGAIN:
 
             int ret;
             ret = IDCANCEL;
-            ret = observer.AskFileErrorById(IDS_ERROROPENINGFILE, op->SourceName, err);
+            ret = observer.AskFileErrorByIdW(IDS_ERROROPENINGFILE, op->SourceName,
+                                             op->HasWideSource() ? op->SourceNameW.c_str() : NULL, err);
             switch (ret)
             {
             case IDRETRY:
@@ -6020,7 +6043,11 @@ BOOL DoMoveFile(COperation* op, IWorkerObserver& observer, void* buffer,
                     ret = IDB_IGNORE;
                 else
                 {
-                    ret = observer.AskCopyPermError(op->SourceName, op->TargetName, (char*)(DWORD_PTR)srcSecurity.SrcError);
+                    ret = observer.AskCopyPermErrorW(op->SourceName,
+                                                     op->HasWideSource() ? op->SourceNameW.c_str() : NULL,
+                                                     op->TargetName,
+                                                     op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                     (char*)(DWORD_PTR)srcSecurity.SrcError);
                 }
                 switch (ret)
                 {
@@ -6098,7 +6125,11 @@ BOOL DoMoveFile(COperation* op, IWorkerObserver& observer, void* buffer,
                             ret = IDB_IGNORE;
                         else
                         {
-                            ret = observer.AskCopyPermError(op->SourceName, op->TargetName, (char*)(DWORD_PTR)err);
+                            ret = observer.AskCopyPermErrorW(op->SourceName,
+                                                             op->HasWideSource() ? op->SourceNameW.c_str() : NULL,
+                                                             op->TargetName,
+                                                             op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                             (char*)(DWORD_PTR)err);
                         }
                         switch (ret)
                         {
@@ -6296,7 +6327,11 @@ BOOL DoMoveFile(COperation* op, IWorkerObserver& observer, void* buffer,
                         else
                         {
                             // display the prompt
-                            ret = observer.AskOverwrite(op->TargetName, tAttr, op->SourceName, sAttr);
+                            ret = observer.AskOverwriteW(op->TargetName,
+                                                         op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                         tAttr, op->SourceName,
+                                                         op->HasWideSource() ? op->SourceNameW.c_str() : NULL,
+                                                         sAttr);
                         }
                         switch (ret)
                         {
@@ -6390,7 +6425,8 @@ BOOL DoMoveFile(COperation* op, IWorkerObserver& observer, void* buffer,
 
                             int ret;
                             ret = IDCANCEL;
-                            ret = observer.AskFileErrorById(IDS_ERROROVERWRITINGFILE, op->TargetName, err2);
+                            ret = observer.AskFileErrorByIdW(IDS_ERROROVERWRITINGFILE, op->TargetName,
+                                                             op->HasWideTarget() ? op->TargetNameW.c_str() : NULL, err2);
                             switch (ret)
                             {
                             case IDRETRY:
@@ -6433,7 +6469,11 @@ BOOL DoMoveFile(COperation* op, IWorkerObserver& observer, void* buffer,
                     {
                         int ret;
                         ret = IDCANCEL;
-                        ret = observer.AskCannotMoveErr(op->SourceName, op->TargetName, err, dir != FALSE);
+                        ret = observer.AskCannotMoveErrW(op->SourceName,
+                                                         op->HasWideSource() ? op->SourceNameW.c_str() : NULL,
+                                                         op->TargetName,
+                                                         op->HasWideTarget() ? op->TargetNameW.c_str() : NULL,
+                                                         err, dir != FALSE);
                         switch (ret)
                         {
                         case IDRETRY:
@@ -6704,95 +6744,7 @@ BOOL DoDeleteFile(IWorkerObserver& observer, char* name, const CQuadWord& size, 
 
 BOOL SalCreateDirectoryEx(const char* name, DWORD* err)
 {
-    if (err != NULL)
-        *err = 0;
-    // if the name ends with a space/dot we must append '\\', otherwise CreateDirectory
-    // quietly trims the trailing spaces/dots and creates a different directory
-    std::wstring nameW = AnsiToWide(name);
-    std::wstring nameCrDirW = MakeCopyWithBackslashIfNeededW(nameW.c_str());
-    bool nameUnmodified = (nameCrDirW == nameW); // true when no trailing space/dot fixup was needed
-    if (CreateDirectoryW(nameCrDirW.c_str(), NULL))
-        return TRUE;
-    else
-    {
-        DWORD errLoc = GetLastError();
-        if (nameUnmodified &&               // a name ending with a space/dot cannot collide with a DOS name
-            (errLoc == ERROR_FILE_EXISTS || // check whether this is only overwriting the file's DOS name
-             errLoc == ERROR_ALREADY_EXISTS))
-        {
-            IFileSystem* fileSystem = GetWorkerFileSystem();
-            WIN32_FIND_DATAW data;
-            HANDLE find = fileSystem != NULL ? fileSystem->FindFirstFile(nameW.c_str(), &data)
-                                             : INVALID_HANDLE_VALUE;
-            if (find != INVALID_HANDLE_VALUE)
-            {
-                HANDLES(FindClose(find));
-                const char* tgtName = SalPathFindFileName(name);
-                char cAltNameA[14];
-                WideCharToMultiByte(CP_ACP, 0, data.cAlternateFileName, -1, cAltNameA, 14, NULL, NULL);
-                // Compare tgtName against the ANSI alternate (DOS) name; use wide cFileName directly
-                char cFileNameA[MAX_PATH];
-                WideCharToMultiByte(CP_ACP, 0, data.cFileName, -1, cFileNameA, MAX_PATH, NULL, NULL);
-                if (StrICmp(tgtName, cAltNameA) == 0 &&    // match only for the DOS name
-                    StrICmp(tgtName, cFileNameA) != 0)     // (the full name differs)
-                {
-                    // rename ("tidy up") the file/directory whose DOS name conflicts to a temporary 8.3 name (no extra DOS name needed)
-                    std::wstring tmpNameW = nameW;
-                    CutDirectoryW(tmpNameW);
-                    SalPathAddBackslashW(tmpNameW);
-                    size_t tmpNamePartPos = tmpNameW.size();
-                    std::wstring origFullNameW = tmpNameW;
-                    SalPathAppendW(origFullNameW, data.cFileName); // use wide cFileName directly — no ANSI lossy conversion
-                    tmpNameW = origFullNameW;
-                    {
-                        DWORD num = (GetTickCount() / 10) % 0xFFF;
-                        DWORD origFullNameAttr = GetFileAttributesW(origFullNameW.c_str());
-                        while (1)
-                        {
-                            wchar_t tmpSuffix[8];
-                            swprintf(tmpSuffix, _countof(tmpSuffix), L"sal%03X", num++);
-                            tmpNameW.resize(tmpNamePartPos);
-                            tmpNameW += tmpSuffix;
-                            if (MoveFileW(origFullNameW.c_str(), tmpNameW.c_str()))
-                                break;
-                            DWORD e = GetLastError();
-                            if (e != ERROR_FILE_EXISTS && e != ERROR_ALREADY_EXISTS)
-                            {
-                                tmpNameW.clear();
-                                break;
-                            }
-                        }
-                        if (!tmpNameW.empty()) // if we managed to "tidy up" the conflicting file, retry the create
-                        {                      // and then restore the original name of the "tidied" file
-                            BOOL createDirDone = CreateDirectoryW(nameW.c_str(), NULL);
-                            if (!MoveFileW(tmpNameW.c_str(), origFullNameW.c_str()))
-                            { // this can apparently happen: inexplicably Windows creates a file named origFullName instead of name (the DOS name)
-                                TRACE_I("Unexpected situation: unable to rename file from tmp-name to original long file name!");
-                                if (createDirDone)
-                                {
-                                    if (RemoveDirectoryW(nameW.c_str()))
-                                        createDirDone = FALSE;
-                                    if (!MoveFileW(tmpNameW.c_str(), origFullNameW.c_str()))
-                                        TRACE_E("Fatal unexpected situation: unable to rename file from tmp-name to original long file name!");
-                                }
-                            }
-                            else
-                            {
-                                if ((origFullNameAttr & FILE_ATTRIBUTE_ARCHIVE) == 0)
-                                    SetFileAttributesW(origFullNameW.c_str(), origFullNameAttr); // leave it without extra handling or retries; not important (normally toggles unpredictably)
-                            }
-
-                            if (createDirDone)
-                                return TRUE;
-                        }
-                    }
-                }
-            }
-        }
-        if (err != NULL)
-            *err = errLoc;
-    }
-    return FALSE;
+    return SalCreateDirectoryExW(AnsiToWide(name).c_str(), err);
 }
 
 // ANSI wrapper — delegates to wide version
@@ -6863,7 +6815,7 @@ BOOL DoCopyDirTime(IWorkerObserver& observer, const char* targetName, FILETIME* 
             ret = IDB_IGNORE;
         else
         {
-            ret = observer.AskCopyDirTimeError(targetName, error);
+            ret = observer.AskCopyDirTimeErrorW(targetName, targetNameW.empty() ? NULL : targetNameW.c_str(), error);
         }
         switch (ret)
         {
@@ -8243,6 +8195,8 @@ unsigned ThreadWorkerBody(void* parameter)
                 pd.Source = op->SourceName;
                 pd.Preposition = workerState.OpStrCopyingPrep;
                 pd.Target = op->TargetName;
+                pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+                pd.TargetW = op->HasWideTarget() ? op->TargetNameW.c_str() : NULL;
                 observer.SetOperationInfo(&pd);
 
                 observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
@@ -8265,6 +8219,8 @@ unsigned ThreadWorkerBody(void* parameter)
                 pd.Source = op->SourceName;
                 pd.Preposition = workerState.OpStrMovingPrep;
                 pd.Target = op->TargetName;
+                pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+                pd.TargetW = op->HasWideTarget() ? op->TargetNameW.c_str() : NULL;
                 observer.SetOperationInfo(&pd);
 
                 observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
@@ -8291,6 +8247,8 @@ unsigned ThreadWorkerBody(void* parameter)
                 pd.Source = op->TargetName;
                 pd.Preposition = "";
                 pd.Target = "";
+                pd.SourceW = op->HasWideTarget() ? op->TargetNameW.c_str() : NULL;
+                pd.TargetW = NULL;
                 observer.SetOperationInfo(&pd);
 
                 observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
@@ -8383,6 +8341,8 @@ unsigned ThreadWorkerBody(void* parameter)
                     pd.Source = op->TargetName;
                     pd.Preposition = "";
                     pd.Target = "";
+                    pd.SourceW = op->HasWideTarget() ? op->TargetNameW.c_str() : NULL;
+                    pd.TargetW = NULL;
                     observer.SetOperationInfo(&pd);
 
                     observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
@@ -8412,6 +8372,8 @@ unsigned ThreadWorkerBody(void* parameter)
                 pd.Source = op->SourceName;
                 pd.Preposition = "";
                 pd.Target = "";
+                pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+                pd.TargetW = NULL;
                 observer.SetOperationInfo(&pd);
 
                 observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
@@ -8461,6 +8423,8 @@ unsigned ThreadWorkerBody(void* parameter)
                 pd.Source = op->SourceName;
                 pd.Preposition = "";
                 pd.Target = "";
+                pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+                pd.TargetW = NULL;
                 observer.SetOperationInfo(&pd);
 
                 observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
@@ -8477,6 +8441,8 @@ unsigned ThreadWorkerBody(void* parameter)
                 pd.Source = op->SourceName;
                 pd.Preposition = "";
                 pd.Target = "";
+                pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+                pd.TargetW = NULL;
                 observer.SetOperationInfo(&pd);
 
                 observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
@@ -8607,6 +8573,8 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
             pd.Source = op->SourceName;
             pd.Preposition = workerState.OpStrCopyingPrep;
             pd.Target = op->TargetName;
+            pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+            pd.TargetW = op->HasWideTarget() ? op->TargetNameW.c_str() : NULL;
             observer.SetOperationInfo(&pd);
             observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
 
@@ -8626,6 +8594,8 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
             pd.Source = op->SourceName;
             pd.Preposition = workerState.OpStrMovingPrep;
             pd.Target = op->TargetName;
+            pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+            pd.TargetW = op->HasWideTarget() ? op->TargetNameW.c_str() : NULL;
             observer.SetOperationInfo(&pd);
             observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
 
@@ -8646,6 +8616,8 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
             pd.Source = op->SourceName;
             pd.Preposition = "";
             pd.Target = "";
+            pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+            pd.TargetW = NULL;
             observer.SetOperationInfo(&pd);
             observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
 
@@ -8663,6 +8635,8 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
             pd.Source = op->TargetName;
             pd.Preposition = "";
             pd.Target = "";
+            pd.SourceW = op->HasWideTarget() ? op->TargetNameW.c_str() : NULL;
+            pd.TargetW = NULL;
             observer.SetOperationInfo(&pd);
             observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
 
@@ -8712,6 +8686,8 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
             pd.Source = op->SourceName;
             pd.Preposition = "";
             pd.Target = "";
+            pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+            pd.TargetW = NULL;
             observer.SetOperationInfo(&pd);
             observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
 
@@ -8763,6 +8739,8 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
             pd.Source = op->SourceName;
             pd.Preposition = "";
             pd.Target = "";
+            pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+            pd.TargetW = NULL;
             observer.SetOperationInfo(&pd);
             observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
 
@@ -8777,6 +8755,8 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
             pd.Source = op->SourceName;
             pd.Preposition = "";
             pd.Target = "";
+            pd.SourceW = op->HasWideSource() ? op->SourceNameW.c_str() : NULL;
+            pd.TargetW = NULL;
             observer.SetOperationInfo(&pd);
             observer.SetProgress(0, CaclProg(totalDone, script->TotalSize));
 

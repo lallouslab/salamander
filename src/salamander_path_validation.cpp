@@ -15,6 +15,7 @@
 #include "ui/IPrompter.h"
 #include "common/IRegistry.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 #include "common/IFileSystem.h"
 #include "common/fsutil.h"
 
@@ -562,19 +563,124 @@ RETRY:
     return lastError;
 }
 
-// Wide wrapper: converts to ANSI and calls SalCheckPath.
-// The underlying implementation uses ANSI thread paths and UI dialogs.
-// Full wide conversion requires threading infrastructure changes.
 DWORD SalCheckPathW(BOOL echo, const wchar_t* path, DWORD err, BOOL postRefresh, HWND parent)
 {
-    std::string pathA = WideToAnsi(path);
-    return SalCheckPath(echo, pathA.c_str(), err, postRefresh, parent);
+    std::string tracePath = WideToAnsi(path);
+    CALL_STACK_MESSAGE5("SalCheckPathW(%d, %s, 0x%X, %d, )", echo, tracePath.c_str(), err, postRefresh);
+
+    HANDLES(EnterCriticalSection(&CheckPathCS));
+
+    static BOOL called = FALSE;
+    if (called)
+    {
+        HANDLES(LeaveCriticalSection(&CheckPathCS));
+        TRACE_I("SalCheckPathW: recursive call (in one thread) is not allowed!");
+        return 666;
+    }
+    called = TRUE;
+
+    BeginStopRefresh();
+
+    BOOL valid = FALSE;
+    DWORD lastError = ERROR_SUCCESS;
+
+    if (err == ERROR_SUCCESS)
+    {
+        if (path == NULL || *path == L'\0')
+        {
+            lastError = ERROR_PATH_NOT_FOUND;
+        }
+        else
+        {
+            DWORD attrs = GetFileAttributesW(path);
+            valid = attrs != INVALID_FILE_ATTRIBUTES;
+            if (!valid)
+            {
+                lastError = GetLastError();
+                if (lastError == ERROR_INVALID_PARAMETER)
+                    lastError = ERROR_NOT_READY;
+            }
+        }
+    }
+    else
+    {
+        lastError = err;
+        err = ERROR_SUCCESS;
+    }
+
+    if ((err == ERROR_USER_TERMINATED || echo) && !valid)
+    {
+        switch (lastError)
+        {
+        case (DWORD)ERROR_USER_TERMINATED:
+            break;
+
+        case ERROR_DIRECTORY:
+        case ERROR_FILE_NOT_FOUND:
+        case ERROR_PATH_NOT_FOUND:
+        case ERROR_BAD_PATHNAME:
+        {
+            std::wstring msg = FormatStrW(LoadStrW(IDS_DIRNAMEINVALID), path != NULL ? path : L"");
+            gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
+            break;
+        }
+
+        default:
+            gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), GetErrorTextW(lastError));
+            break;
+        }
+    }
+
+    EndStopRefresh(postRefresh);
+    called = FALSE;
+
+    HANDLES(LeaveCriticalSection(&CheckPathCS));
+    return valid ? ERROR_SUCCESS : lastError;
 }
 
 BOOL SalCheckAndRestorePathW(HWND parent, const wchar_t* path, BOOL tryNet)
 {
-    std::string pathA = WideToAnsi(path);
-    return SalCheckAndRestorePath(parent, pathA.c_str(), tryNet);
+    CALL_STACK_MESSAGE3("SalCheckAndRestorePathW(, %s, %d)", WideToAnsi(path).c_str(), tryNet);
+    DWORD err;
+    if ((err = SalCheckPathW(FALSE, path, ERROR_SUCCESS, TRUE, parent)) != ERROR_SUCCESS)
+    {
+        BOOL ok = FALSE;
+        BOOL pathInvalid = FALSE;
+        if (tryNet && err != ERROR_USER_TERMINATED && path != NULL)
+        {
+            tryNet = FALSE;
+            if (path[0] != L'\0' && path[1] == L':' &&
+                ((path[0] >= L'a' && path[0] <= L'z') || (path[0] >= L'A' && path[0] <= L'Z')))
+            {
+                if (CheckAndRestoreNetworkConnection(parent, (char)path[0], pathInvalid))
+                {
+                    if ((err = SalCheckPathW(FALSE, path, ERROR_SUCCESS, TRUE, parent)) == ERROR_SUCCESS)
+                        ok = TRUE;
+                }
+            }
+            else
+            {
+                std::string pathA;
+                if (sally::unicode::TryExactAnsiFallback(path, pathA) &&
+                    CheckAndConnectUNCNetworkPath(parent, pathA.c_str(), pathInvalid, FALSE))
+                {
+                    if ((err = SalCheckPathW(FALSE, path, ERROR_SUCCESS, TRUE, parent)) == ERROR_SUCCESS)
+                        ok = TRUE;
+                }
+            }
+        }
+        if (!ok)
+        {
+            if (pathInvalid ||
+                err == ERROR_USER_TERMINATED ||
+                SalCheckPathW(TRUE, path, err, TRUE, parent) != ERROR_SUCCESS)
+            {
+                return FALSE;
+            }
+        }
+    }
+
+    return TRUE;
 }
 
 BOOL SalCheckAndRestorePath(HWND parent, const char* path, BOOL tryNet)
@@ -691,6 +797,72 @@ _CHECK_AGAIN:
         tryNet = FALSE;
         if (CheckAndConnectUNCNetworkPath(parent, path, pathInvalid, donotReconnect))
             goto _CHECK_AGAIN;
+    }
+
+    return !pathInvalid && err == ERROR_SUCCESS;
+}
+
+BOOL SalCheckAndRestorePathWithCutW(HWND parent, std::wstring& path, BOOL& tryNet, DWORD& err, DWORD& lastErr,
+                                    BOOL& pathInvalid, BOOL& cut, BOOL donotReconnect)
+{
+    CALL_STACK_MESSAGE4("SalCheckAndRestorePathWithCutW(, %s, %d, , , , , %d)", WideToAnsi(path).c_str(), tryNet,
+                        donotReconnect);
+
+    pathInvalid = FALSE;
+    cut = FALSE;
+    lastErr = ERROR_SUCCESS;
+    BOOL semTimeoutOccured = FALSE;
+
+_CHECK_AGAIN:
+
+    while ((err = SalCheckPathW(FALSE, path.c_str(), ERROR_SUCCESS, TRUE, parent)) != ERROR_SUCCESS)
+    {
+        if (err == ERROR_SEM_TIMEOUT && !semTimeoutOccured)
+        {
+            semTimeoutOccured = TRUE;
+            Sleep(300);
+            continue;
+        }
+        if (err == ERROR_USER_TERMINATED)
+            break;
+        if (tryNet)
+        {
+            tryNet = FALSE;
+            if (path.length() >= 2 && path[1] == L':' &&
+                ((path[0] >= L'a' && path[0] <= L'z') || (path[0] >= L'A' && path[0] <= L'Z')))
+            {
+                if (!donotReconnect && CheckAndRestoreNetworkConnection(parent, (char)path[0], pathInvalid))
+                    continue;
+            }
+            else
+            {
+                std::string pathA;
+                if (sally::unicode::TryExactAnsiFallback(path, pathA) &&
+                    CheckAndConnectUNCNetworkPath(parent, pathA.c_str(), pathInvalid, donotReconnect))
+                {
+                    continue;
+                }
+            }
+            if (pathInvalid)
+                break;
+        }
+        lastErr = err;
+        if (!IsDirError(err))
+            break;
+        if (!CutDirectoryW(path))
+            break;
+        cut = TRUE;
+    }
+
+    if (tryNet && err != ERROR_USER_TERMINATED)
+    {
+        tryNet = FALSE;
+        std::string pathA;
+        if (sally::unicode::TryExactAnsiFallback(path, pathA) &&
+            CheckAndConnectUNCNetworkPath(parent, pathA.c_str(), pathInvalid, donotReconnect))
+        {
+            goto _CHECK_AGAIN;
+        }
     }
 
     return !pathInvalid && err == ERROR_SUCCESS;
@@ -950,6 +1122,226 @@ PARSE_AGAIN:
     }
 }
 
+BOOL SalParsePathW(HWND parent, std::wstring& path, int& type, BOOL& isDir, wchar_t*& secondPart,
+                   const wchar_t* errorTitle, std::wstring* nextFocus, BOOL curPathIsDiskOrArchive,
+                   const wchar_t* curPath, const wchar_t* curArchivePath, int* error)
+{
+    CALL_STACK_MESSAGE_NONE
+    type = -1;
+    secondPart = NULL;
+    isDir = FALSE;
+    if (nextFocus != NULL)
+        nextFocus->clear();
+    if (error != NULL)
+        *error = 0;
+
+PARSE_AGAIN_W:
+    int len = (int)path.length();
+    BOOL backslashAtEnd = (len > 0 && path[len - 1] == L'\\');
+    BOOL mustBePath = (len == 2 && LowerCase[(unsigned char)path[0]] >= 'a' && LowerCase[(unsigned char)path[0]] <= 'z' &&
+                       path[1] == L':');
+
+    if (nextFocus != NULL && !mustBePath)
+    {
+        size_t pos = path.find(L'\\');
+        if (pos == std::wstring::npos || pos + 1 == path.length())
+        {
+            size_t focusLen = (pos == std::wstring::npos) ? path.length() : pos;
+            if (focusLen < MAX_PATH)
+                *nextFocus = path.substr(0, focusLen);
+        }
+    }
+
+    int errTextID;
+    if (!SalGetFullNameW(path, &errTextID, curPathIsDiskOrArchive ? curPath : NULL, nextFocus, NULL, curPathIsDiskOrArchive))
+    {
+        if (errTextID == IDS_EMPTYNAMENOTALLOWED)
+        {
+            if (curPath == NULL)
+            {
+                if (error != NULL)
+                    *error = SPP_EMPTYPATHNOTALLOWED;
+            }
+            else
+            {
+                path = curPath;
+                goto PARSE_AGAIN_W;
+            }
+        }
+        else
+        {
+            if (errTextID == IDS_INCOMLETEFILENAME)
+            {
+                if (error != NULL)
+                    *error = SPP_INCOMLETEPATH;
+                if (!curPathIsDiskOrArchive)
+                    return FALSE;
+            }
+            else if (error != NULL)
+                *error = SPP_WINDOWSPATHERROR;
+        }
+        std::wstring msg = FormatStrW(LoadStrW(IDS_PATHERRORFORMAT), path.c_str(), LoadStrW(errTextID));
+        gPrompter->ShowError(errorTitle, msg.c_str());
+        if (backslashAtEnd || mustBePath)
+            SalPathAddBackslashW(path);
+        return FALSE;
+    }
+
+    if (curArchivePath != NULL && _wcsicmp(path.c_str(), curArchivePath) == 0)
+    {
+        SalPathAddBackslashW(path);
+        backslashAtEnd = TRUE;
+    }
+
+    std::wstring root = GetRootPathW(path.c_str());
+    BOOL tryNet = !curPathIsDiskOrArchive || curPath == NULL || !HasTheSameRootPathW(root.c_str(), curPath);
+    if (!SalCheckAndRestorePathW(parent, root.c_str(), tryNet))
+    {
+        if (backslashAtEnd || mustBePath)
+            SalPathAddBackslashW(path);
+        if (error != NULL)
+            *error = SPP_WINDOWSPATHERROR;
+        return FALSE;
+    }
+
+FIND_AGAIN_W:
+    wchar_t* buffer = path.data();
+    wchar_t* end = buffer + path.length();
+    wchar_t* afterRoot = buffer + root.length();
+    if (afterRoot > buffer && *(afterRoot - 1) == L'\\')
+        ;
+    else if (*afterRoot == L'\\')
+        afterRoot++;
+    wchar_t lastChar = 0;
+    BOOL hasMask = FALSE;
+    if (end > afterRoot)
+    {
+        wchar_t* end2 = end;
+        while (*--end2 != L'\\')
+        {
+            if (*end2 == L'*' || *end2 == L'?')
+                hasMask = TRUE;
+        }
+        if (hasMask)
+        {
+            CutSpacesFromBothSidesW(end2 + 1);
+            end = end2;
+            lastChar = *end;
+            *end = 0;
+            path.resize((size_t)(end - buffer));
+            buffer = path.data();
+            end = buffer + path.length();
+            afterRoot = buffer + root.length();
+        }
+    }
+
+    HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
+    isDir = TRUE;
+    std::wstring text;
+    while (end > afterRoot)
+    {
+        if (*(end - 1) != L'\\')
+        {
+            DWORD attrs = GetFileAttributesW(path.c_str());
+            if (attrs != 0xFFFFFFFF)
+            {
+                if ((attrs & FILE_ATTRIBUTE_DIRECTORY) == 0)
+                {
+                    if (lastChar != 0 || backslashAtEnd || mustBePath)
+                    {
+                        std::string ansiPath = WideToAnsi(path);
+                        if (PackerFormatConfig.PackIsArchive(ansiPath.c_str()))
+                        {
+                            type = PATH_TYPE_ARCHIVE;
+                            isDir = FALSE;
+                            break;
+                        }
+                        text = LoadStrW(IDS_NOTARCHIVEPATH);
+                        if (error != NULL)
+                            *error = SPP_NOTARCHIVEFILE;
+                        break;
+                    }
+                    isDir = FALSE;
+                    while (*--end != L'\\')
+                        ;
+                    lastChar = *end;
+                    break;
+                }
+                break;
+            }
+            else
+            {
+                DWORD err = GetLastError();
+                if (err != ERROR_FILE_NOT_FOUND && err != ERROR_INVALID_NAME &&
+                    err != ERROR_PATH_NOT_FOUND && err != ERROR_BAD_PATHNAME &&
+                    err != ERROR_DIRECTORY)
+                {
+                    text = GetErrorTextW(err);
+                    if (error != NULL)
+                        *error = SPP_WINDOWSPATHERROR;
+                    break;
+                }
+            }
+        }
+        *end = lastChar;
+        while (*--end != L'\\')
+            ;
+        lastChar = *end;
+        *end = 0;
+        path.resize((size_t)(end - buffer));
+        buffer = path.data();
+        end = buffer + path.length();
+        afterRoot = buffer + root.length();
+    }
+    // Capture the boundary between the existing-path prefix and the
+    // non-existent leaf/mask before the buffer-trick resize below grows
+    // path back to its original length. Use `end - buffer` rather than
+    // `path.length()`: the new-dir/mask loop path always resizes path to
+    // match `end`, so the two agree; but the existing-file break at
+    // lines 1264-1268 walks `end` back to the previous '\\' WITHOUT
+    // resizing path, leaving path.length() at the full original length.
+    // Taking path.length() there would lose the boundary the same way the
+    // pre-fix code did and secondPart would point at the terminator.
+    const size_t boundaryOff = (size_t)(end - buffer);
+    if (end <= buffer + path.length())
+        *end = lastChar;
+    path.resize(wcslen(buffer));
+    SetCursor(oldCur);
+
+    if (text.empty())
+    {
+        buffer = path.data();
+        // Restore end to the boundary captured above, not to the new
+        // terminator. Without this, secondPart would be returned empty for
+        // copy/move targets with a non-existent leaf or mask, and
+        // SalSplitWindowsPathW would treat the whole input as an existing
+        // directory.
+        end = buffer + boundaryOff;
+        if (*end == L'\\')
+            end++;
+        if (isDir && *end != 0 && !hasMask && wcschr(end, L'\\') == NULL)
+        {
+            BOOL changeNextFocus = nextFocus != NULL && !nextFocus->empty() && _wcsicmp(nextFocus->c_str(), end) == 0;
+            if (MakeValidFileNameComponentW(end))
+            {
+                path.resize(wcslen(buffer));
+                if (changeNextFocus)
+                    *nextFocus = end;
+                goto FIND_AGAIN_W;
+            }
+        }
+        secondPart = end;
+        type = PATH_TYPE_WINDOWS;
+        return TRUE;
+    }
+
+    std::wstring msg = FormatStrW(LoadStrW(IDS_PATHERRORFORMAT), path.c_str(), text.c_str());
+    gPrompter->ShowError(errorTitle, msg.c_str());
+    if (backslashAtEnd || mustBePath)
+        SalPathAddBackslashW(path);
+    return FALSE;
+}
+
 BOOL SalSplitWindowsPath(HWND parent, const char* title, const char* errorTitle, int selCount,
                          char* path, char* secondPart, BOOL pathIsDir, BOOL backslashAtEnd,
                          const char* dirName, const char* curDiskPath, char*& mask)
@@ -1042,6 +1434,89 @@ BOOL SalSplitWindowsPath(HWND parent, const char* title, const char* errorTitle,
     }
     else
         return FALSE;
+}
+
+BOOL SalSplitWindowsPathW(HWND parent, const wchar_t* title, const wchar_t* errorTitle, int selCount,
+                          wchar_t* path, wchar_t* secondPart, BOOL pathIsDir, BOOL backslashAtEnd,
+                          const wchar_t* dirName, const wchar_t* curDiskPath, wchar_t*& mask)
+{
+    std::wstring root = GetRootPathW(path);
+    wchar_t* afterRoot = path + root.length() - 1;
+    if (*afterRoot == L'\\')
+        afterRoot++;
+
+    std::vector<wchar_t> newDirs(SAL_MAX_LONG_PATH, 0);
+    if (SalSplitGeneralPathW(parent, title, errorTitle, selCount, path, afterRoot, secondPart,
+                             pathIsDir, backslashAtEnd, dirName, curDiskPath, mask, newDirs.data(), NULL))
+    {
+        if (mask - 1 > path && *(mask - 2) == L'\\' &&
+            (mask - 1 > afterRoot || *path == L'\\'))
+        {
+            memmove(mask - 2, mask - 1, (wcslen(mask) + 2) * sizeof(wchar_t));
+            mask--;
+        }
+
+        if (newDirs[0] != 0)
+        {
+            size_t prefixLen = (size_t)(secondPart - path);
+            memmove(newDirs.data() + prefixLen, newDirs.data(), (wcslen(newDirs.data()) + 1) * sizeof(wchar_t));
+            memmove(newDirs.data(), path, prefixLen * sizeof(wchar_t));
+            newDirs[prefixLen + wcslen(newDirs.data() + prefixLen)] = 0;
+            SalPathRemoveBackslashW(newDirs.data());
+
+            BOOL ok = TRUE;
+            wchar_t* st = newDirs.data() + prefixLen;
+            while (1)
+            {
+                BOOL invalidPath = *st != 0 && *st <= L' ';
+                wchar_t* slash = wcschr(st, L'\\');
+                if (slash != NULL)
+                {
+                    if (slash > st && (*(slash - 1) <= L' ' || *(slash - 1) == L'.'))
+                        invalidPath = TRUE;
+                    *slash = 0;
+                }
+                else if (*st != 0)
+                {
+                    wchar_t* end = st + wcslen(st) - 1;
+                    if (*end <= L' ' || *end == L'.')
+                        invalidPath = TRUE;
+                }
+
+                if (invalidPath || !CreateDirectoryW(newDirs.data(), NULL))
+                {
+                    DWORD lastErr = invalidPath ? ERROR_INVALID_NAME : GetLastError();
+                    if (lastErr != ERROR_ALREADY_EXISTS)
+                    {
+                        std::wstring msg = FormatStrW(LoadStrW(IDS_CREATEDIRFAILED), newDirs.data());
+                        gPrompter->ShowError(errorTitle, msg.c_str());
+                        ok = FALSE;
+                        break;
+                    }
+                }
+
+                if (slash != NULL)
+                    *slash = L'\\';
+                else
+                    break;
+                st = slash + 1;
+            }
+
+            std::wstring changesRoot(path, prefixLen);
+            MainWindow->PostChangeOnPathNotificationW(changesRoot.c_str(), FALSE);
+            if (!ok)
+            {
+                wchar_t* e = path + wcslen(path);
+                if (e > path && *(e - 1) != L'\\')
+                    *e++ = L'\\';
+                if (e != mask)
+                    memmove(e, mask, (wcslen(mask) + 1) * sizeof(wchar_t));
+                return FALSE;
+            }
+        }
+        return TRUE;
+    }
+    return FALSE;
 }
 
 BOOL SalSplitGeneralPath(HWND parent, const char* title, const char* errorTitle, int selCount,

@@ -603,7 +603,11 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         BOOL processed = FALSE;
         if (DirectoryHelper)
-            processed = OnDirectoryKeyDown((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE);
+        {
+            processed = UnicodeInput.IsEnabled()
+                            ? OnDirectoryKeyDownW((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, UnicodeInput.GetControlHandle())
+                            : OnDirectoryKeyDown((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE);
+        }
         if (!processed)
             processed = OnKeyDownHandleSelectAll((DWORD)lParam, HWindow, IDE_PATH);
         SetWindowLongPtr(HWindow, DWLP_MSGRESULT, processed);
@@ -612,7 +616,10 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_USER_BUTTON:
     {
-        OnDirectoryButton(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam);
+        if (UnicodeInput.IsEnabled())
+            OnDirectoryButtonW(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam, UnicodeInput.GetControlHandle());
+        else
+            OnDirectoryButton(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam);
         return 0;
     }
 
@@ -718,7 +725,8 @@ MENU_TEMPLATE_ITEM EditNewFileDialogMenu[] =
 CCopyMoveMoreDialog::CCopyMoveMoreDialog(HWND parent, char* path, int pathBufSize, char* title,
                                          CTruncatedString* subject, DWORD helpID,
                                          char* history[], int historyCount, CCriteriaData* criteriaInOut,
-                                         BOOL havePermissions, BOOL supportsADS)
+                                         BOOL havePermissions, BOOL supportsADS,
+                                         wchar_t* historyW[], int historyWCount)
     : CCommonDialog(HLanguage, IDD_COPYMOVEMOREDIALOG, helpID, parent)
 {
     if (history == NULL)
@@ -730,6 +738,8 @@ CCopyMoveMoreDialog::CCopyMoveMoreDialog(HWND parent, char* path, int pathBufSiz
     PathBufSize = pathBufSize;
     History = history;
     HistoryCount = historyCount;
+    HistoryW = historyW;
+    HistoryWCount = historyWCount;
     CriteriaInOut = criteriaInOut;
     Criteria = new CCriteriaData();
     *Criteria = *CriteriaInOut;
@@ -737,13 +747,17 @@ CCopyMoveMoreDialog::CCopyMoveMoreDialog(HWND parent, char* path, int pathBufSiz
     HavePermissions = havePermissions;
     SupportsADS = supportsADS;
     MoreButton = NULL;
-    HUnicodeEdit = NULL;
+    UseUnicodeInput = FALSE;
 }
 
 void CCopyMoveMoreDialog::SetUnicodePath(const std::wstring& pathW)
 {
+    UseUnicodeInput = TRUE;
     PathW = pathW;
     ResultW.clear();
+#ifndef _UNICODE
+    UnicodeWnd = TRUE;
+#endif
 }
 
 CCopyMoveMoreDialog::~CCopyMoveMoreDialog()
@@ -771,40 +785,39 @@ void CCopyMoveMoreDialog::Transfer(CTransferInfo& ti)
             }
             else
             {
-                // Get Unicode result if Unicode edit control is present
-                if (HUnicodeEdit != NULL)
+                if (UnicodeInput.IsEnabled())
                 {
-                    int len = GetWindowTextLengthW(HUnicodeEdit);
-                    if (len > 0)
-                    {
-                        std::vector<wchar_t> buffer(len + 1);
-                        GetWindowTextW(HUnicodeEdit, buffer.data(), len + 1);
-                        ResultW = buffer.data();
-                    }
-                    // Also convert to ANSI for the Path buffer (fallback)
+                    ResultW = UnicodeInput.GetText();
+                    PathW = ResultW;
                     WideCharToMultiByte(CP_ACP, 0, ResultW.c_str(), -1, Path, PathBufSize, "?", NULL);
                 }
                 else
                 {
                     SendMessage(hWnd, WM_GETTEXT, PathBufSize, (LPARAM)Path);
+                    int lenW = GetWindowTextLengthW(hWnd);
+                    if (lenW > 0)
+                    {
+                        std::vector<wchar_t> buffer((size_t)lenW + 1);
+                        GetWindowTextW(hWnd, buffer.data(), lenW + 1);
+                        ResultW.assign(buffer.data());
+                    }
+                    else
+                        ResultW.clear();
                 }
                 AddValueToStdHistoryValues(History, HistoryCount, Path, FALSE);
+                if (HistoryW != NULL && HistoryWCount > 0)
+                {
+                    std::wstring wide = ResultW.empty() ? AnsiToWide(Path) : ResultW;
+                    if (!wide.empty())
+                        AddValueToStdHistoryValuesW(HistoryW, HistoryWCount, wide.c_str(), FALSE);
+                }
             }
         }
     }
     else
     {
-        // Get Unicode result from overlay edit if present
-        if (ti.Type == ttDataFromWindow && HUnicodeEdit != NULL)
-        {
-            int len = GetWindowTextLengthW(HUnicodeEdit);
-            if (len > 0)
-            {
-                std::vector<wchar_t> buffer(len + 1);
-                GetWindowTextW(HUnicodeEdit, buffer.data(), len + 1);
-                ResultW = buffer.data();
-            }
-        }
+        if (ti.Type == ttDataFromWindow && UnicodeInput.IsEnabled())
+            ResultW = UnicodeInput.GetText();
         ti.EditLine(IDE_PATH, Path, PathBufSize);
     }
     TransferCriteriaControls(ti);
@@ -1160,46 +1173,33 @@ CCopyMoveMoreDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (!Criteria->IsDirty()) // collapse the dialog if Criteria do not contain any data
             DisplayMore(FALSE, TRUE);
 
-        // If Unicode path is set, create an overlay Unicode edit control
-        if (!PathW.empty())
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+
+        HWND hCombo = GetDlgItem(HWindow, IDE_PATH);
+        if (UseUnicodeInput && hCombo != NULL)
         {
-            HWND hCombo = GetDlgItem(HWindow, IDE_PATH);
-            if (hCombo != NULL)
+            TRACE_I("CCopyMoveMoreDialog: UseUnicodeInput=" << UseUnicodeInput << " hCombo=" << (void*)hCombo
+                    << " PathW.len=" << PathW.length()
+                    << " PathW.hasNonAscii=" << (PathW.find_first_not_of(L" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~") != std::wstring::npos ? 1 : 0)
+                    << " Path[0..20]=" << std::string(Path, (std::min)((size_t)20, strlen(Path))));
+            if (UnicodeInput.EnableForCombo(HWindow, IDE_PATH, PathW, HistoryW, HistoryWCount, PathBufSize, -1))
             {
-                COMBOBOXINFO cbi = {sizeof(COMBOBOXINFO)};
-                if (GetComboBoxInfo(hCombo, &cbi) && cbi.hwndItem)
-                {
-                    RECT editRect;
-                    GetWindowRect(cbi.hwndItem, &editRect);
-                    MapWindowPoints(NULL, HWindow, (LPPOINT)&editRect, 2);
-
-                    HFONT hFont = (HFONT)SendMessage(hCombo, WM_GETFONT, 0, 0);
-
-                    HUnicodeEdit = CreateWindowExW(
-                        0, L"EDIT", PathW.c_str(),
-                        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-                        editRect.left, editRect.top,
-                        editRect.right - editRect.left, editRect.bottom - editRect.top,
-                        HWindow, NULL, HInstance, NULL);
-
-                    if (HUnicodeEdit != NULL)
-                    {
-                        ShowWindow(cbi.hwndItem, SW_HIDE);
-                        if (hFont != NULL)
-                            SendMessage(HUnicodeEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
-                        SetWindowSubclass(HUnicodeEdit, UnicodeEditSubclassProc, 1, (DWORD_PTR)hCombo);
-                        PostMessage(HUnicodeEdit, EM_SETSEL, 0, -1); // select all
-                        SetFocus(HUnicodeEdit);
-                    }
-                }
+                // Leave the hidden ANSI combo subclassed; the Unicode controller owns the visible control.
+                TRACE_I("CCopyMoveMoreDialog: Unicode combo created, GetText().len=" << UnicodeInput.GetText().length());
+            }
+            else
+            {
+                TRACE_E("CCopyMoveMoreDialog: EnableForCombo FAILED!");
             }
         }
-        break;
+        return UnicodeInput.IsEnabled() ? FALSE : ret;
     }
 
     case WM_USER_KEYDOWN:
     {
-        BOOL processed = OnDirectoryKeyDown((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE);
+        BOOL processed = UnicodeInput.IsEnabled()
+                             ? OnDirectoryKeyDownW((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, UnicodeInput.GetControlHandle())
+                             : OnDirectoryKeyDown((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE);
         if (!processed)
             processed = OnKeyDownHandleSelectAll((DWORD)lParam, HWindow, IDE_PATH);
         SetWindowLongPtr(HWindow, DWLP_MSGRESULT, processed);
@@ -1208,8 +1208,17 @@ CCopyMoveMoreDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_USER_BUTTON:
     {
-        OnDirectoryButton(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam);
+        if (UnicodeInput.IsEnabled())
+            OnDirectoryButtonW(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam, UnicodeInput.GetControlHandle());
+        else
+            OnDirectoryButton(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam);
         return 0;
+    }
+
+    case WM_DESTROY:
+    {
+        UnicodeInput.Reset();
+        break;
     }
 
     case WM_USER_BUTTONDROPDOWN:
@@ -1294,18 +1303,14 @@ MENU_TEMPLATE_ITEM CopyMoveMoreDialogMenu[] =
 
     case WM_COMMAND:
     {
-        // Handle combobox selection change - update overlay edit if present
-        if (LOWORD(wParam) == IDE_PATH && HIWORD(wParam) == CBN_SELCHANGE && HUnicodeEdit != NULL)
+        if (LOWORD(wParam) == IDE_PATH && UnicodeInput.IsEnabled())
         {
-            HWND hCombo = (HWND)lParam;
-            CPathBuffer ansiText;
-            int len = (int)SendMessage(hCombo, WM_GETTEXT, ansiText.Size(), (LPARAM)ansiText.Get());
-            if (len > 0)
+            HWND hCombo2 = (HWND)lParam;
+            if (hCombo2 == UnicodeInput.GetControlHandle())
             {
-                std::wstring wideText(ansiText.Size(), L'\0');
-                int wideLen = MultiByteToWideChar(CP_ACP, 0, ansiText, -1, &wideText[0], (int)wideText.size());
-                wideText.resize(wideLen > 0 ? wideLen - 1 : 0);
-                SetWindowTextW(HUnicodeEdit, wideText.c_str());
+                BOOL isDropdownOpen = (BOOL)SendMessage(hCombo2, CB_GETDROPPEDSTATE, 0, 0);
+                if (sally::unicode::ShouldSyncUnicodeComboSelection(HIWORD(wParam), isDropdownOpen))
+                    UnicodeInput.SyncSelectionToEdit();
             }
         }
 
@@ -1493,7 +1498,9 @@ CChangeDirDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_USER_KEYDOWN:
     {
-        BOOL processed = OnDirectoryKeyDown((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE);
+        BOOL processed = (HUnicodeEdit != NULL)
+                             ? OnDirectoryKeyDownW((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, HUnicodeEdit)
+                             : OnDirectoryKeyDown((DWORD)lParam, HWindow, IDE_PATH, PathBufSize, IDB_BROWSE);
         if (!processed)
             processed = OnKeyDownHandleSelectAll((DWORD)lParam, HWindow, IDE_PATH);
         SetWindowLongPtr(HWindow, DWLP_MSGRESULT, processed);
@@ -1502,7 +1509,10 @@ CChangeDirDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_USER_BUTTON:
     {
-        OnDirectoryButton(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam);
+        if (HUnicodeEdit != NULL)
+            OnDirectoryButtonW(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam, HUnicodeEdit);
+        else
+            OnDirectoryButton(HWindow, IDE_PATH, PathBufSize, IDB_BROWSE, wParam, lParam);
         return 0;
     }
 

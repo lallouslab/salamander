@@ -20,6 +20,15 @@ protected:
 
 public:
     CComboboxEdit();
+#ifndef _UNICODE
+    // Subclass the combo's edit child as a Unicode window. Required when the
+    // combo lives inside a Unicode dialog and the dialog issues
+    // SetDlgItemTextW into it: the combo control itself is Unicode, but
+    // AttachToWindow's default ANSI subclass would flip the edit child's
+    // WindowProc to ANSI, and WM_SETTEXT W→A would convert through CP_ACP
+    // on its way to the edit. Unicode subclass keeps the W path intact.
+    explicit CComboboxEdit(BOOL unicodeWnd);
+#endif
 
     void GetSel(DWORD* start, DWORD* end);
 

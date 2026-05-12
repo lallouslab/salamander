@@ -438,6 +438,24 @@ HANDLE SalLPCreateFile(
         hTemplateFile);
 }
 
+HANDLE SalLPCreateFileWide(
+    const wchar_t* fileName,
+    DWORD dwDesiredAccess,
+    DWORD dwShareMode,
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+    DWORD dwCreationDisposition,
+    DWORD dwFlagsAndAttributes,
+    HANDLE hTemplateFile)
+{
+    IFileSystem* fs = GetActiveFileSystem();
+    if (fs != NULL)
+        return fs->CreateFile(fileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
+                              dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+
+    return CreateFileW(fileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
+                       dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+}
+
 DWORD SalLPGetFileAttributes(const char* fileName)
 {
     IFileSystem* fs = GetActiveFileSystem();
@@ -562,6 +580,15 @@ HANDLE SalLPFindFirstFile(const char* fileName, WIN32_FIND_DATAW* findData)
     return FindFirstFileW(widePath.Get(), findData);
 }
 
+HANDLE SalLPFindFirstFileWide(const wchar_t* fileName, WIN32_FIND_DATAW* findData)
+{
+    IFileSystem* fs = GetActiveFileSystem();
+    if (fs != NULL)
+        return fs->FindFirstFile(fileName, findData);
+
+    return FindFirstFileW(fileName, findData);
+}
+
 BOOL SalLPFindNextFile(HANDLE hFindFile, WIN32_FIND_DATAW* findData)
 {
     IFileSystem* fs = GetActiveFileSystem();
@@ -648,6 +675,28 @@ HANDLE SalLPCreateFileTracked(
     return h;
 }
 
+HANDLE SalLPCreateFileTrackedWide(
+    const wchar_t* fileName,
+    DWORD dwDesiredAccess,
+    DWORD dwShareMode,
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+    DWORD dwCreationDisposition,
+    DWORD dwFlagsAndAttributes,
+    HANDLE hTemplateFile,
+    const char* srcFile,
+    int srcLine)
+{
+    HANDLE h = SalLPCreateFileWide(fileName, dwDesiredAccess, dwShareMode,
+                                   lpSecurityAttributes, dwCreationDisposition,
+                                   dwFlagsAndAttributes, hTemplateFile);
+
+    DWORD err = GetLastError();
+    __Handles.SetInfo(srcFile, srcLine, __otQuiet)
+        .CheckCreate(h != INVALID_HANDLE_VALUE, __htFile, __hoCreateFile, h, err, TRUE);
+
+    return h;
+}
+
 HANDLE SalLPFindFirstFileTracked(
     const char* fileName,
     WIN32_FIND_DATAA* findData,
@@ -656,10 +705,32 @@ HANDLE SalLPFindFirstFileTracked(
 {
     HANDLE h = SalLPFindFirstFileA(fileName, findData);
 
-    // Track the handle using Salamander's handle tracking system
-    DWORD err = GetLastError();
-    __Handles.SetInfo(srcFile, srcLine, __otQuiet)
-        .CheckCreate(h != INVALID_HANDLE_VALUE, __htFindFile, __hoFindFirstFile, h, err, TRUE);
+    if (GetActiveFileSystem() == NULL)
+    {
+        // Track fallback handles. The active Win32 IFileSystem tracks in its FindFirstFile
+        // implementation so direct IFileSystem callers and wrapper callers behave alike.
+        DWORD err = GetLastError();
+        __Handles.SetInfo(srcFile, srcLine, __otQuiet)
+            .CheckCreate(h != INVALID_HANDLE_VALUE, __htFindFile, __hoFindFirstFile, h, err, TRUE);
+    }
+
+    return h;
+}
+
+HANDLE SalLPFindFirstFileTrackedWide(
+    const wchar_t* fileName,
+    WIN32_FIND_DATAW* findData,
+    const char* srcFile,
+    int srcLine)
+{
+    HANDLE h = SalLPFindFirstFileWide(fileName, findData);
+
+    if (GetActiveFileSystem() == NULL)
+    {
+        DWORD err = GetLastError();
+        __Handles.SetInfo(srcFile, srcLine, __otQuiet)
+            .CheckCreate(h != INVALID_HANDLE_VALUE, __htFindFile, __hoFindFirstFile, h, err, TRUE);
+    }
 
     return h;
 }
@@ -672,10 +743,14 @@ HANDLE SalLPFindFirstFileTrackedW(
 {
     HANDLE h = SalLPFindFirstFile(fileName, findData);
 
-    // Track the handle using Salamander's handle tracking system
-    DWORD err = GetLastError();
-    __Handles.SetInfo(srcFile, srcLine, __otQuiet)
-        .CheckCreate(h != INVALID_HANDLE_VALUE, __htFindFile, __hoFindFirstFile, h, err, TRUE);
+    if (GetActiveFileSystem() == NULL)
+    {
+        // Track fallback handles. The active Win32 IFileSystem tracks in its FindFirstFile
+        // implementation so direct IFileSystem callers and wrapper callers behave alike.
+        DWORD err = GetLastError();
+        __Handles.SetInfo(srcFile, srcLine, __otQuiet)
+            .CheckCreate(h != INVALID_HANDLE_VALUE, __htFindFile, __hoFindFirstFile, h, err, TRUE);
+    }
 
     return h;
 }

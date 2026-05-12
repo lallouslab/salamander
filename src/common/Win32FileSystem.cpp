@@ -333,7 +333,7 @@ public:
             SetLastError(LastErrorOr(ERROR_INVALID_PARAMETER));
             return INVALID_HANDLE_VALUE;
         }
-        return ::FindFirstFileW(lp.Get(), findData);
+        return HANDLES_Q(FindFirstFileW(lp.Get(), findData));
     }
 
     BOOL FindNextFile(HANDLE findHandle, WIN32_FIND_DATAW* findData) override

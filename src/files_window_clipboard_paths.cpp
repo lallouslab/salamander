@@ -73,6 +73,104 @@ BOOL CFilesWindow::ParsePath(char* path, int& type, BOOL& isDir, char*& secondPa
                         Is(ptDisk) || Is(ptZIPArchive), curPath, curArchivePath, error, pathBufSize);
 }
 
+BOOL CFilesWindow::ParsePathW(std::wstring& path, int& type, BOOL& isDir, wchar_t*& secondPart,
+                              const wchar_t* errorTitle, std::wstring* nextFocus, int* error)
+{
+    CALL_STACK_MESSAGE_NONE
+    std::wstring curPath;
+    const wchar_t* curArchivePath = NULL;
+    GetGeneralPathW(curPath);
+    if (Is(ptZIPArchive))
+    {
+        SalPathAddBackslashW(curPath);
+        curArchivePath = GetZIPArchiveW();
+    }
+    return SalParsePathW(HWindow, path, type, isDir, secondPart, errorTitle, nextFocus,
+                         Is(ptDisk) || Is(ptZIPArchive), curPath.c_str(), curArchivePath, error);
+}
+
+static BOOL BuildCopyMoveDataFromHDrop(IDataObject* dataObj, BOOL copy, CCopyMoveData** outData)
+{
+    if (outData == NULL)
+        return FALSE;
+    *outData = NULL;
+    if (dataObj == NULL)
+        return FALSE;
+
+    FORMATETC formatEtc;
+    formatEtc.cfFormat = CF_HDROP;
+    formatEtc.ptd = NULL;
+    formatEtc.dwAspect = DVASPECT_CONTENT;
+    formatEtc.lindex = -1;
+    formatEtc.tymed = TYMED_HGLOBAL;
+
+    STGMEDIUM stgMedium;
+    stgMedium.tymed = TYMED_HGLOBAL;
+    stgMedium.hGlobal = NULL;
+    stgMedium.pUnkForRelease = NULL;
+
+    if (dataObj->GetData(&formatEtc, &stgMedium) != S_OK)
+        return FALSE;
+
+    BOOL ok = FALSE;
+    DROPFILES* data = (DROPFILES*)HANDLES(GlobalLock(stgMedium.hGlobal));
+    if (data != NULL)
+    {
+        CCopyMoveData* array = new CCopyMoveData(100, 50);
+        if (array != NULL)
+        {
+            array->MakeCopyOfName = copy;
+            if (data->fWide)
+            {
+                const wchar_t* fileW = (const wchar_t*)(((const char*)data) + data->pFiles);
+                while (*fileW != 0)
+                {
+                    CCopyMoveRecord* record = new CCopyMoveRecord(fileW, (const wchar_t*)NULL);
+                    if (record == NULL)
+                        break;
+                    array->Add(record);
+                    if (!array->IsGood())
+                    {
+                        array->ResetState();
+                        break;
+                    }
+                    while (*fileW++ != 0)
+                        ;
+                }
+            }
+            else
+            {
+                const char* fileA = ((const char*)data) + data->pFiles;
+                while (*fileA != 0)
+                {
+                    CCopyMoveRecord* record = new CCopyMoveRecord(fileA, (const char*)NULL);
+                    if (record == NULL)
+                        break;
+                    array->Add(record);
+                    if (!array->IsGood())
+                    {
+                        array->ResetState();
+                        break;
+                    }
+                    while (*fileA++ != 0)
+                        ;
+                }
+            }
+
+            if (array->IsGood())
+            {
+                *outData = array;
+                ok = TRUE;
+            }
+            else
+                DestroyCopyMoveData(array);
+        }
+    }
+    HANDLES(GlobalUnlock(stgMedium.hGlobal));
+    ReleaseStgMedium(&stgMedium);
+    return ok;
+}
+
 int CFilesWindow::GetPanelCode()
 {
     CALL_STACK_MESSAGE_NONE
@@ -247,49 +345,102 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
 
         if (ownRutine) // execute our own routine - copy or move
         {
-            if (pastePath != NULL)
-                lstrcpyn(DropPath, pastePath, DropPath.Size());
-            else
-                lstrcpyn(DropPath, GetPath(), DropPath.Size());
-            CImpDropTarget* dropTarget = new CImpDropTarget(MainWindow->HWindow, DoCopyMove, this,
-                                                            GetCurrentDirClipboard, this,
-                                                            DropEnd, this, NULL, NULL, NULL, NULL,
-                                                            UseOwnRutine, DoDragDropOper, this,
-                                                            NULL, NULL);
-            if (dropTarget != NULL)
+            if (Is(ptDisk) && ourClipDataObject)
             {
-                OurClipDataObject = ourClipDataObject;
-                POINTL pt;
-                pt.x = pt.y = 0;
-                DWORD eff = effect;
-                dropTarget->DragEnter(dataObj, 0, pt, &effect);
-                effect = eff;
-                dropTarget->DragOver(0, pt, &effect);
-                effect = eff;
-                dropTarget->Drop(dataObj, 0, pt, &eff);
-
-                FocusFirstNewItem = TRUE; // if it will be a single new file, let the focus find it
-
-                dropTarget->Release();
-                OurClipDataObject = FALSE;
-                if (effect == DROPEFFECT_MOVE)
+                CCopyMoveData* array = NULL;
+                if (BuildCopyMoveDataFromHDrop(dataObj, effect == DROPEFFECT_COPY, &array))
                 {
-                    if (OpenClipboard(HWindow))
+                    // Honor the caller-supplied pastePath when present (set by
+                    // the shell extension's folder-context-menu Paste at
+                    // shellsup.cpp). The earlier FakeDataObject branch above
+                    // already honors it; this HDROP branch was dropping it on
+                    // the floor and pasting into the panel root instead of
+                    // the clicked folder.
+                    CPathBuffer targetPath;
+                    std::wstring targetPathW;
+                    const BOOL haveExplicitPath =
+                        pastePath != NULL && pastePath[0] != '\0';
+                    if (haveExplicitPath)
                     {
-                        EmptyClipboard();
-                        CloseClipboard();
+                        lstrcpyn(targetPath, pastePath, targetPath.Size());
+                        targetPathW = AnsiToWide(pastePath);
                     }
                     else
-                        TRACE_E("OpenClipboard() has failed!");
-                }
+                    {
+                        lstrcpyn(targetPath, GetPath(), targetPath.Size());
+                        targetPathW = GetPathW();
+                    }
+                    DropCopyMove(effect == DROPEFFECT_COPY, targetPath,
+                                 targetPathW.empty() ? NULL : targetPathW.c_str(),
+                                 array);
+                    DestroyCopyMoveData(array);
 
-                if (effect != DROPEFFECT_COPY)
+                    FocusFirstNewItem = TRUE; // if it will be a single new file, let the focus find it
+
+                    if (effect == DROPEFFECT_MOVE)
+                    {
+                        if (OpenClipboard(HWindow))
+                        {
+                            EmptyClipboard();
+                            CloseClipboard();
+                        }
+                        else
+                            TRACE_E("OpenClipboard() has failed!");
+                    }
+
+                    if (effect != DROPEFFECT_COPY)
+                    {
+                        IdleRefreshStates = TRUE;  // force state variable check on next Idle
+                        IdleCheckClipboard = TRUE; // also enable clipboard checking
+                    }
+                }
+            }
+            else
+            {
+                if (pastePath != NULL)
+                    lstrcpyn(DropPath, pastePath, DropPath.Size());
+                else
+                    lstrcpyn(DropPath, GetPath(), DropPath.Size());
+                CImpDropTarget* dropTarget = new CImpDropTarget(MainWindow->HWindow, DoCopyMove, this,
+                                                                GetCurrentDirClipboard, this,
+                                                                DropEnd, this, NULL, NULL, NULL, NULL,
+                                                                UseOwnRutine, DoDragDropOper, this,
+                                                                NULL, NULL);
+                if (dropTarget != NULL)
                 {
-                    IdleRefreshStates = TRUE;  // force state variable check on next Idle
-                    IdleCheckClipboard = TRUE; // also enable clipboard checking
-                }
+                    OurClipDataObject = ourClipDataObject;
+                    POINTL pt;
+                    pt.x = pt.y = 0;
+                    DWORD eff = effect;
+                    dropTarget->DragEnter(dataObj, 0, pt, &effect);
+                    effect = eff;
+                    dropTarget->DragOver(0, pt, &effect);
+                    effect = eff;
+                    dropTarget->Drop(dataObj, 0, pt, &eff);
 
-                // panel refresh is performed in DropCopyMove
+                    FocusFirstNewItem = TRUE; // if it will be a single new file, let the focus find it
+
+                    dropTarget->Release();
+                    OurClipDataObject = FALSE;
+                    if (effect == DROPEFFECT_MOVE)
+                    {
+                        if (OpenClipboard(HWindow))
+                        {
+                            EmptyClipboard();
+                            CloseClipboard();
+                        }
+                        else
+                            TRACE_E("OpenClipboard() has failed!");
+                    }
+
+                    if (effect != DROPEFFECT_COPY)
+                    {
+                        IdleRefreshStates = TRUE;  // force state variable check on next Idle
+                        IdleCheckClipboard = TRUE; // also enable clipboard checking
+                    }
+
+                    // panel refresh is performed in DropCopyMove
+                }
             }
         }
         else

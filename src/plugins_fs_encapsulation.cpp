@@ -7,6 +7,8 @@
 #include "ui/IPrompter.h"
 #include "common/IRegistry.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
+#include "plugins/shared/spl_vers.h"
 #include "menu.h"
 #include "cfgdlg.h"
 #include "plugins.h"
@@ -20,6 +22,14 @@
 #include "dialogs.h"
 
 CPlugins Plugins;
+
+static bool ShouldRejectBrokenWideFSPlugin(CPluginInterfaceEncapsulation& pluginIface,
+                                           int builtForVersion)
+{
+    return builtForVersion == SALLY_PLUGIN_BROKEN_WIDE_FS_VERSION &&
+           pluginIface.NotEmpty() &&
+           pluginIface.GetInterfaceForFS() != NULL;
+}
 
 static IRegistry* GetPluginsRegistry()
 {
@@ -116,6 +126,194 @@ BOOL CPluginFSInterfaceEncapsulation::IsPathFromThisFS(const char* fsName, const
         return IsOurPath(PluginFSNameIndex, fsNameIndex, fsUserPart); // does the user part match?
     }
     return FALSE; // not our path
+}
+
+BOOL CPluginFSInterfaceEncapsulation::GetCurrentPathW(std::wstring& userPart)
+{
+    CALL_STACK_MESSAGE3("CPluginFSInterfaceEncapsulation::GetCurrentPathW() (%s v. %s)",
+                        DLLName, Version);
+    if (BuiltForVersion >= SALLY_PLUGIN_WIDE_FS_VERSION)
+    {
+        std::vector<wchar_t> buf(SAL_MAX_LONG_PATH);
+        EnterPlugin();
+        BOOL r = Interface->GetCurrentPathW(buf.data(), (int)buf.size());
+        LeavePlugin();
+        if (r)
+            userPart = buf.data();
+        return r;
+    }
+
+    CPathBuffer userPartA;
+    if (!GetCurrentPath(userPartA))
+        return FALSE;
+    userPart = AnsiToWide(userPartA);
+    return TRUE;
+}
+
+BOOL CPluginFSInterfaceEncapsulation::GetFullNameW(CFileData& file, int isDir, std::wstring& fullName)
+{
+    CALL_STACK_MESSAGE4("CPluginFSInterfaceEncapsulation::GetFullNameW(, %d, ,) (%s v. %s)",
+                        isDir, DLLName, Version);
+    if (BuiltForVersion >= SALLY_PLUGIN_WIDE_FS_VERSION)
+    {
+        std::vector<wchar_t> buf(SAL_MAX_LONG_PATH);
+        EnterPlugin();
+        BOOL r = Interface->GetFullNameW(file, isDir, buf.data(), (int)buf.size());
+        LeavePlugin();
+        if (r)
+            fullName = buf.data();
+        return r;
+    }
+
+    CPathBuffer fullNameA;
+    if (!GetFullName(file, isDir, fullNameA, fullNameA.Size()))
+        return FALSE;
+    fullName = AnsiToWide(fullNameA);
+    return TRUE;
+}
+
+BOOL CPluginFSInterfaceEncapsulation::GetFullFSPathW(HWND parent, const std::wstring& fsName,
+                                                     std::wstring& path, BOOL& success)
+{
+    CALL_STACK_MESSAGE3("CPluginFSInterfaceEncapsulation::GetFullFSPathW() (%s v. %s)",
+                        DLLName, Version);
+    if (BuiltForVersion >= SALLY_PLUGIN_WIDE_FS_VERSION)
+    {
+        std::vector<wchar_t> pathBuf(SAL_MAX_LONG_PATH);
+        lstrcpynW(pathBuf.data(), path.c_str(), (int)pathBuf.size());
+        EnterPlugin();
+        BOOL r = Interface->GetFullFSPathW(parent, fsName.c_str(), pathBuf.data(), (int)pathBuf.size(), success);
+        LeavePlugin();
+        if (r && success)
+            path = pathBuf.data();
+        return r;
+    }
+
+    std::string fsNameA;
+    std::string pathA;
+    if (!sally::unicode::TryExactAnsiFallback(fsName, fsNameA) ||
+        !sally::unicode::TryExactAnsiFallback(path, pathA))
+    {
+        success = FALSE;
+        return FALSE;
+    }
+
+    CPathBuffer pathBuf(pathA.c_str());
+    BOOL r = GetFullFSPath(parent, fsNameA.c_str(), pathBuf, pathBuf.Size(), success);
+    if (r && success)
+        path = AnsiToWide(pathBuf);
+    return r;
+}
+
+BOOL CPluginFSInterfaceEncapsulation::GetRootPathW(std::wstring& userPart)
+{
+    CALL_STACK_MESSAGE3("CPluginFSInterfaceEncapsulation::GetRootPathW() (%s v. %s)",
+                        DLLName, Version);
+    if (BuiltForVersion >= SALLY_PLUGIN_WIDE_FS_VERSION)
+    {
+        std::vector<wchar_t> buf(SAL_MAX_LONG_PATH);
+        EnterPlugin();
+        BOOL r = Interface->GetRootPathW(buf.data(), (int)buf.size());
+        LeavePlugin();
+        if (r)
+            userPart = buf.data();
+        return r;
+    }
+
+    CPathBuffer userPartA;
+    if (!GetRootPath(userPartA))
+        return FALSE;
+    userPart = AnsiToWide(userPartA);
+    return TRUE;
+}
+
+BOOL CPluginFSInterfaceEncapsulation::IsCurrentPathW(int currentFSNameIndex, int fsNameIndex,
+                                                     const std::wstring& userPart)
+{
+    CALL_STACK_MESSAGE5("CPluginFSInterfaceEncapsulation::IsCurrentPathW(%d, %d,) (%s v. %s)",
+                        currentFSNameIndex, fsNameIndex, DLLName, Version);
+    if (BuiltForVersion >= SALLY_PLUGIN_WIDE_FS_VERSION)
+    {
+        EnterPlugin();
+        BOOL r = Interface->IsCurrentPathW(currentFSNameIndex, fsNameIndex, userPart.c_str());
+        LeavePlugin();
+        return r;
+    }
+
+    std::string userPartA;
+    return sally::unicode::TryExactAnsiFallback(userPart, userPartA) &&
+           IsCurrentPath(currentFSNameIndex, fsNameIndex, userPartA.c_str());
+}
+
+BOOL CPluginFSInterfaceEncapsulation::IsOurPathW(int currentFSNameIndex, int fsNameIndex,
+                                                 const std::wstring& userPart)
+{
+    CALL_STACK_MESSAGE5("CPluginFSInterfaceEncapsulation::IsOurPathW(%d, %d,) (%s v. %s)",
+                        currentFSNameIndex, fsNameIndex, DLLName, Version);
+    if (BuiltForVersion >= SALLY_PLUGIN_WIDE_FS_VERSION)
+    {
+        EnterPlugin();
+        BOOL r = Interface->IsOurPathW(currentFSNameIndex, fsNameIndex, userPart.c_str());
+        LeavePlugin();
+        return r;
+    }
+
+    std::string userPartA;
+    return sally::unicode::TryExactAnsiFallback(userPart, userPartA) &&
+           IsOurPath(currentFSNameIndex, fsNameIndex, userPartA.c_str());
+}
+
+BOOL CPluginFSInterfaceEncapsulation::ChangePathW(int currentFSNameIndex, std::wstring& fsName,
+                                                  int fsNameIndex, const std::wstring& userPart,
+                                                  std::wstring* cutFileName, BOOL* pathWasCut,
+                                                  BOOL forceRefresh, int mode)
+{
+    CALL_STACK_MESSAGE7("CPluginFSInterfaceEncapsulation::ChangePathW(%d, , %d, , , , %d, %d) (%s v. %s)",
+                        currentFSNameIndex, fsNameIndex, forceRefresh, mode, DLLName, Version);
+    if (BuiltForVersion >= SALLY_PLUGIN_WIDE_FS_VERSION)
+    {
+        wchar_t fsNameBuf[MAX_PATH];
+        wchar_t cutFileNameBuf[SAL_MAX_LONG_PATH];
+        lstrcpynW(fsNameBuf, fsName.c_str(), MAX_PATH);
+        cutFileNameBuf[0] = 0;
+        EnterPlugin();
+        BOOL r = Interface->ChangePathW(currentFSNameIndex, fsNameBuf, fsNameIndex, userPart.c_str(),
+                                        cutFileName != NULL ? cutFileNameBuf : NULL,
+                                        SAL_MAX_LONG_PATH, pathWasCut, forceRefresh, mode);
+        CALL_STACK_MESSAGE1("CPluginFSInterface::GetSupportedServices()");
+        SupportedServices = Interface->GetSupportedServices();
+        LeavePlugin();
+        if (r)
+        {
+            fsName = fsNameBuf;
+            if (cutFileName != NULL)
+                *cutFileName = cutFileNameBuf;
+        }
+        return r;
+    }
+
+    std::string fsNameA;
+    std::string userPartA;
+    if (!sally::unicode::TryExactAnsiFallback(fsName, fsNameA) ||
+        !sally::unicode::TryExactAnsiFallback(userPart, userPartA))
+    {
+        if (cutFileName != NULL)
+            cutFileName->clear();
+        return FALSE;
+    }
+
+    CPathBuffer fsNameBuf(fsNameA.c_str());
+    CPathBuffer cutFileNameBuf;
+    BOOL r = ChangePath(currentFSNameIndex, fsNameBuf, fsNameIndex, userPartA.c_str(),
+                        cutFileName != NULL ? cutFileNameBuf.Get() : NULL,
+                        pathWasCut, forceRefresh, mode);
+    if (r)
+    {
+        fsName = AnsiToWide(fsNameBuf);
+        if (cutFileName != NULL)
+            *cutFileName = AnsiToWide(cutFileNameBuf);
+    }
+    return r;
 }
 
 BOOL CPluginFSInterfaceEncapsulation::ListCurrentPath(CSalamanderDirectoryAbstract* dir,
@@ -2107,6 +2305,7 @@ BOOL CPluginData::InitDLL(HWND parent, BOOL quiet, BOOL waitCursor, BOOL showUns
                     LeavePlugin();
                     SalamanderGeneral.Init(PluginIface.GetInterface());
 
+                    BOOL pluginNethoodChanged = FALSE;
                     if (!PluginIface.NotEmpty())
                     {
                         PluginIsNethood = oldPluginIsNethood; // when the entry point fails, we restore the original value
@@ -2114,8 +2313,28 @@ BOOL CPluginData::InitDLL(HWND parent, BOOL quiet, BOOL waitCursor, BOOL showUns
                     }
                     else
                     {
-                        if (PluginIsNethood != oldPluginIsNethood)
+                        pluginNethoodChanged = PluginIsNethood != oldPluginIsNethood;
+                        if (pluginNethoodChanged)
                             refreshUNCRootPaths = TRUE;
+                    }
+
+                    if (!oldVer && ShouldRejectBrokenWideFSPlugin(PluginIface, BuiltForVersion))
+                    {
+                        PluginIsNethood = oldPluginIsNethood;
+                        PluginUsesPasswordManager = oldPluginUsesPasswordManager;
+                        if (pluginNethoodChanged)
+                            refreshUNCRootPaths = FALSE;
+                        oldVer = TRUE;
+                        suppressOldVerError = TRUE;
+                        if (!quiet)
+                        {
+                            std::wstring msg;
+                            if (Name.empty() || Name[0] == 0)
+                                msg = FormatStrW(LoadStrW(IDS_BROKENFSPLUGINVERSION2), AnsiToWide(s).c_str());
+                            else
+                                msg = FormatStrW(LoadStrW(IDS_BROKENFSPLUGINVERSION), AnsiToWide(Name.c_str()).c_str(), AnsiToWide(s).c_str());
+                            gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
+                        }
                     }
                 }
                 else // probably unnecessary, just to be safe

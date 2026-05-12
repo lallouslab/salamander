@@ -2258,10 +2258,14 @@ CErrorSettingAttrsDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 //
 
 CErrorCopyingPermissionsDlg::CErrorCopyingPermissionsDlg(HWND parent, const char* sourceFile,
-                                                         const char* targetFile, DWORD error) : CCommonDialog(HLanguage, IDD_CANNOTCOPYPERMISSIONS, parent)
+                                                         const char* targetFile, DWORD error,
+                                                         const wchar_t* sourceFileW,
+                                                         const wchar_t* targetFileW) : CCommonDialog(HLanguage, IDD_CANNOTCOPYPERMISSIONS, parent)
 {
     SourceFile = sourceFile;
     TargetFile = targetFile;
+    SourceFileW = sourceFileW;
+    TargetFileW = targetFileW;
     Error = error;
 }
 
@@ -2275,12 +2279,22 @@ CErrorCopyingPermissionsDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         CStaticText* name;
         if ((name = new CStaticText(HWindow, IDS_SOURCENAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(SourceFile);
+        {
+            if (SourceFileW != NULL)
+                name->SetTextToDblQuotesIfNeededW(SourceFileW);
+            else
+                name->SetTextToDblQuotesIfNeeded(SourceFile);
+        }
         else
             TRACE_E(LOW_MEMORY);
 
         if ((name = new CStaticText(HWindow, IDS_TARGETNAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(TargetFile);
+        {
+            if (TargetFileW != NULL)
+                name->SetTextToDblQuotesIfNeededW(TargetFileW);
+            else
+                name->SetTextToDblQuotesIfNeeded(TargetFile);
+        }
         else
             TRACE_E(LOW_MEMORY);
 
@@ -2311,9 +2325,11 @@ CErrorCopyingPermissionsDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 // CErrorCopyingDirTimeDlg
 //
 
-CErrorCopyingDirTimeDlg::CErrorCopyingDirTimeDlg(HWND parent, const char* targetFile, DWORD error) : CCommonDialog(HLanguage, IDD_CANNOTCOPYDIRTIME, parent)
+CErrorCopyingDirTimeDlg::CErrorCopyingDirTimeDlg(HWND parent, const char* targetFile, DWORD error,
+                                                 const wchar_t* targetFileW) : CCommonDialog(HLanguage, IDD_CANNOTCOPYDIRTIME, parent)
 {
     TargetFile = targetFile;
+    TargetFileW = targetFileW;
     Error = error;
 }
 
@@ -2327,7 +2343,12 @@ CErrorCopyingDirTimeDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         CStaticText* name;
         if ((name = new CStaticText(HWindow, IDS_TARGETNAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(TargetFile);
+        {
+            if (TargetFileW != NULL)
+                name->SetTextToDblQuotesIfNeededW(TargetFileW);
+            else
+                name->SetTextToDblQuotesIfNeeded(TargetFile);
+        }
         else
             TRACE_E(LOW_MEMORY);
 

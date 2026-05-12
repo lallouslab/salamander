@@ -26,6 +26,36 @@ BOOL ViewerActive(HWND hwnd)
 
 void CViewerWindow::SetViewerCaption()
 {
+    if (!FileNameW.empty())
+    {
+        std::wstring captionW;
+        if (Caption.empty())
+            captionW = FileNameW;
+        else
+            captionW = AnsiToWide(Caption.c_str());
+        if (Caption.empty() || !WholeCaption)
+        {
+            if (!captionW.empty())
+                captionW += L" - ";
+            captionW += AnsiToWide(LoadStr(IDS_VIEWERTITLE));
+            if (CodeType > 0)
+            {
+                char codeName[200];
+                CodeTables.GetCodeName(CodeType, codeName, 200);
+                RemoveAmpersands(codeName);
+                char* s = codeName + strlen(codeName);
+                while (s > codeName && *(s - 1) == ' ')
+                    s--;
+                *s = 0;
+                captionW += L" - [";
+                captionW += AnsiToWide(codeName);
+                captionW += L"]";
+            }
+        }
+        SetWindowTextW(HWindow, captionW.c_str());
+        return;
+    }
+
     CPathBuffer caption;
     if (Caption.empty())
     {

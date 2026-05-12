@@ -229,6 +229,7 @@ const char* SALCF_FAKE_SRCFSPATH = "SalFakeSrcFSPath";
 
 const char* MAINWINDOW_NAME = "Sally";
 const char* CMAINWINDOW_CLASSNAME = "SalamanderMainWindowVer25";
+const wchar_t* CMAINWINDOW_CLASSNAMEW = L"SalamanderMainWindowVer25";
 const char* SAVEBITS_CLASSNAME = "SalamanderSaveBits";
 const char* SHELLEXECUTE_CLASSNAME = "SalamanderShellExecute";
 
@@ -4397,29 +4398,29 @@ FIND_NEW_SLG_FILE:
                                             NULL,
                                             CFILESBOX_CLASSNAME,
                                             NULL) &&
-        CMainWindow::RegisterUniversalClass(CS_DBLCLKS,
-                                            0,
-                                            0,
-                                            HANDLES(LoadIcon(HInstance,
-                                                             MAKEINTRESOURCE(IDI_SALAMANDER))),
-                                            LoadCursor(NULL, IDC_ARROW),
-                                            (HBRUSH)(COLOR_WINDOW + 1),
-                                            NULL,
-                                            CMAINWINDOW_CLASSNAME,
-                                            NULL))
+        CMainWindow::RegisterUniversalClassW(CS_DBLCLKS,
+                                             0,
+                                             0,
+                                             HANDLES(LoadIcon(HInstance,
+                                                              MAKEINTRESOURCE(IDI_SALAMANDER))),
+                                             LoadCursor(NULL, IDC_ARROW),
+                                             (HBRUSH)(COLOR_WINDOW + 1),
+                                             NULL,
+                                             CMAINWINDOW_CLASSNAMEW,
+                                             NULL))
     {
         MainWindow = new CMainWindow;
         if (MainWindow != NULL)
         {
             MainWindow->CmdShow = cmdShow;
-            if (MainWindow->Create(CMAINWINDOW_CLASSNAME,
-                                   "",
-                                   WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-                                   CW_USEDEFAULT, 0, CW_USEDEFAULT, 0,
-                                   NULL,
-                                   NULL,
-                                   HInstance,
-                                   MainWindow))
+            if (MainWindow->CreateW(CMAINWINDOW_CLASSNAMEW,
+                                    L"",
+                                    WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
+                                    CW_USEDEFAULT, 0, CW_USEDEFAULT, 0,
+                                    NULL,
+                                    NULL,
+                                    HInstance,
+                                    MainWindow))
             {
                 SetMessagesParent(MainWindow->HWindow);
                 PluginMsgBoxParent = MainWindow->HWindow;

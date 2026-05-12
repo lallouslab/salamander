@@ -195,7 +195,7 @@ inline int SWPrintFToEnd_s(WCHAR (&_Dst)[_Size], const WCHAR* _Format, ...)
 {
     va_list _ArgList;
     va_start(_ArgList, _Format);
-    int len = wcslen(_Dst);
+    size_t len = wcslen(_Dst);
     return vswprintf_s(_Dst + len, _Size - len, _Format, _ArgList);
 }
 
@@ -203,7 +203,7 @@ inline int SWPrintFToEnd_s(WCHAR* _Dst, size_t _SizeInWords, const WCHAR* _Forma
 {
     va_list _ArgList;
     va_start(_ArgList, _Format);
-    int len = (int)wcslen(_Dst);
+    size_t len = wcslen(_Dst);
     return vswprintf_s(_Dst + len, _SizeInWords - len, _Format, _ArgList);
 }
 
@@ -218,7 +218,7 @@ inline int SPrintFToEnd_s(char (&_Dst)[_Size], const char* _Format, ...)
 {
     va_list _ArgList;
     va_start(_ArgList, _Format);
-    int len = strlen(_Dst);
+    size_t len = strlen(_Dst);
     return vsprintf_s(_Dst + len, _Size - len, _Format, _ArgList);
 }
 

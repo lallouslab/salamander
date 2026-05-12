@@ -6,6 +6,7 @@
 
 #include "ui/IPrompter.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 #include "common/IEnvironment.h"
 
 #include "cfgdlg.h"
@@ -23,6 +24,44 @@
 #include "geticon.h"
 #include "shiconov.h"
 #include "common/widepath.h"
+
+namespace
+{
+bool GetVolumeRootForPathW(const std::wstring& path, std::wstring& root)
+{
+    if (path.empty())
+        return false;
+
+    std::vector<wchar_t> buffer(path.length() + MAX_PATH + 1);
+    if (GetVolumePathNameW(path.c_str(), buffer.data(), (DWORD)buffer.size()))
+    {
+        root = buffer.data();
+        return !root.empty();
+    }
+
+    return false;
+}
+
+BOOL GetVolumeInformationForPathW(const std::wstring& path, LPDWORD flags)
+{
+    std::wstring root;
+    if (!GetVolumeRootForPathW(path, root))
+        return FALSE;
+
+    DWORD dummyMaximumComponentLength;
+    return GetVolumeInformationW(root.c_str(), NULL, 0, NULL,
+                                 &dummyMaximumComponentLength, flags, NULL, 0);
+}
+
+UINT GetDriveTypeForPathW(const std::wstring& path)
+{
+    std::wstring root;
+    if (GetVolumeRootForPathW(path, root))
+        return GetDriveTypeW(root.c_str());
+
+    return GetDriveTypeW(path.c_str());
+}
+} // namespace
 
 //
 // ****************************************************************************
@@ -45,6 +84,8 @@ CFilesWindowAncestor::CFilesWindowAncestor()
     ArchiveDir = NULL;
     ZIPArchive[0] = 0;
     ZIPPath[0] = 0;
+    ZIPArchiveW.clear();
+    ZIPPathW.clear();
 
     PluginFS.Init(NULL, NULL, NULL, NULL, NULL, NULL, -1, 0, 0, 0);
     PluginFSDir = NULL;
@@ -54,6 +95,7 @@ CFilesWindowAncestor::CFilesWindowAncestor()
     CPathBuffer buf; // Heap-allocated for long path support
     EnvGetSystemDirectoryA(gEnvironment, buf, buf.Size());
     GetRootPath(Path, buf);
+    PathW = AnsiToWide(Path);
 
     OnlyDetachFSListing = FALSE;
     NewFSFiles = NULL;
@@ -86,7 +128,15 @@ CFilesWindowAncestor::CheckPath(BOOL echo, const char* path, DWORD err, BOOL pos
 
     parent = (parent == NULL) ? HWindow : parent;
     if (path == NULL)
+    {
+        // Route the implicit-path case through the wide cache when populated so
+        // Unicode-only disk paths (e.g. zz中文) are not misreported as missing
+        // by SalCheckPath fed with the lossy ANSI mirror.
+        const wchar_t* pathW = GetPathW();
+        if (sally::unicode::HasWidePathW(pathW))
+            return SalCheckPathW(echo, pathW, err, postRefresh, parent);
         path = GetPath();
+    }
 
     return SalCheckPath(echo, path, err, postRefresh, parent);
 }
@@ -224,15 +274,72 @@ BOOL CFilesWindowAncestor::GetGeneralPath(char* buf, int bufSize, BOOL convertFS
 void CFilesWindowAncestor::SetPath(const char* path)
 {
     CALL_STACK_MESSAGE2("CFilesWindowAncestor::SetPath(%s)", path);
-    if (SuppressAutoRefresh && (!Is(ptDisk) || !IsTheSamePath(path, Path)))
+    SetPathW(AnsiToWide(path).c_str());
+}
+
+BOOL CFilesWindowAncestor::GetGeneralPathW(std::wstring& buf, BOOL convertFSPathToExternal)
+{
+    CALL_STACK_MESSAGE_NONE
+    buf.clear();
+    if (Is(ptDisk))
+    {
+        buf = GetPathW();
+        return TRUE;
+    }
+    if (Is(ptZIPArchive))
+    {
+        buf = GetZIPArchiveW();
+        if (GetZIPPathW()[0] != 0)
+        {
+            if (GetZIPPathW()[0] != L'\\')
+                buf += L'\\';
+            buf += GetZIPPathW();
+        }
+        return TRUE;
+    }
+    if (Is(ptPluginFS))
+    {
+        if (PluginFS.NotEmpty())
+        {
+            std::wstring userPartW;
+            if (PluginFS.GetCurrentPathW(userPartW))
+            {
+                buf = AnsiToWide(PluginFS.GetPluginFSName());
+                buf += L":";
+                buf += userPartW;
+                return TRUE;
+            }
+        }
+        if (convertFSPathToExternal)
+        {
+            CPathBuffer ansi;
+            if (GetGeneralPath(ansi, ansi.Size(), TRUE))
+            {
+                buf = AnsiToWide(ansi);
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+void CFilesWindowAncestor::SetPathW(const wchar_t* path)
+{
+    std::wstring newPath = path != NULL ? path : L"";
+    std::string pathA = WideToAnsi(newPath);
+
+    CALL_STACK_MESSAGE2("CFilesWindowAncestor::SetPathW(%s)", pathA.c_str());
+    if (SuppressAutoRefresh && (!Is(ptDisk) || !IsTheSamePath(pathA.c_str(), Path)))
         SuppressAutoRefresh = FALSE;
     DetachDirectory((CFilesWindow*)this);
-    strcpy(Path, path);
+    PathW = newPath;
+    if (!Path.Assign(pathA.c_str()))
+        Path.Clear();
 
     //--- detection of file-based compression/encryption and FAT32
-    DWORD dummy1, flags;
-    if ((Is(ptDisk) || Is(ptZIPArchive)) &&
-        MyGetVolumeInformation(path, NULL, NULL, NULL, NULL, 0, NULL, &dummy1, &flags, NULL, 0))
+    DWORD flags;
+    if ((Is(ptDisk) || Is(ptZIPArchive)) && !newPath.empty() &&
+        GetVolumeInformationForPathW(newPath, &flags))
     {
         ((CFilesWindow*)this)->FileBasedCompression = (flags & FS_FILE_COMPRESSION) != 0 && Is(ptDisk);
         ((CFilesWindow*)this)->FileBasedEncryption = (flags & FILE_SUPPORTS_ENCRYPTION) != 0 && Is(ptDisk);
@@ -249,7 +356,7 @@ void CFilesWindowAncestor::SetPath(const char* path)
     DriveType = DRIVE_UNKNOWN;
     if (!Is(ptPluginFS)) // pluginFS handles changes differently...
     {
-        DriveType = MyGetDriveType(Path);
+        DriveType = GetDriveTypeForPathW(newPath);
         switch (DriveType)
         {
         case DRIVE_REMOVABLE:
@@ -290,7 +397,15 @@ void CFilesWindowAncestor::SetPath(const char* path)
             MonitorChanges = FALSE;
 
         if (MonitorChanges)
-            AddDirectory((CFilesWindow*)this, Path, DriveType == DRIVE_REMOVABLE || DriveType == DRIVE_FIXED);
+        {
+            // Prefer the wide path so FindFirstChangeNotificationW receives the
+            // real Unicode bytes — the ANSI mirror would have CP_ACP-mangled the
+            // panel root and the snooper would never fire for non-CP_ACP paths.
+            if (sally::unicode::HasWidePathW(PathW.c_str()))
+                AddDirectoryW((CFilesWindow*)this, PathW.c_str(), DriveType == DRIVE_REMOVABLE || DriveType == DRIVE_FIXED);
+            else
+                AddDirectory((CFilesWindow*)this, Path, DriveType == DRIVE_REMOVABLE || DriveType == DRIVE_FIXED);
+        }
         else // if changes are not monitored, Snooper does not call SetAutomaticRefresh -> we do it here
         {
             ((CFilesWindow*)this)->SetAutomaticRefresh(FALSE, TRUE);
@@ -343,19 +458,36 @@ CFilesWindowAncestor::GetPluginDataForPluginIface()
 void CFilesWindowAncestor::SetZIPPath(const char* path)
 {
     CALL_STACK_MESSAGE_NONE
+    SetZIPPathW(AnsiToWide(path).c_str());
+}
+
+void CFilesWindowAncestor::SetZIPPathW(const wchar_t* path)
+{
+    CALL_STACK_MESSAGE_NONE
+    if (path == NULL)
+        path = L"";
     if (*path == '\\')
         path++; // ZIPPath will not start with '\\'
-    int l = (int)strlen(path);
-    if (l > 0 && path[l - 1] == '\\')
-        l--; // ZIPPath will not end with '\\'
-    memcpy(ZIPPath, path, l);
-    ZIPPath[l] = 0;
+    ZIPPathW = path;
+    if (!ZIPPathW.empty() && ZIPPathW.back() == L'\\')
+        ZIPPathW.pop_back(); // ZIPPath will not end with '\\'
+
+    std::string pathA = WideToAnsi(ZIPPathW);
+    ZIPPath.Assign(pathA.c_str());
 }
 
 void CFilesWindowAncestor::SetZIPArchive(const char* archive)
 {
     CALL_STACK_MESSAGE_NONE
-    strcpy(ZIPArchive, archive);
+    SetZIPArchiveW(AnsiToWide(archive).c_str());
+}
+
+void CFilesWindowAncestor::SetZIPArchiveW(const wchar_t* archive)
+{
+    CALL_STACK_MESSAGE_NONE
+    ZIPArchiveW = archive != NULL ? archive : L"";
+    std::string archiveA = WideToAnsi(ZIPArchiveW);
+    ZIPArchive.Assign(archiveA.c_str());
 }
 
 BOOL CFilesWindowAncestor::SamePath(CFilesWindowAncestor* other)
@@ -1401,6 +1533,7 @@ CFilesWindow::CFilesWindow(CMainWindow* parent)
     SetValidFileData(VALID_DATA_ALL);
     AutomaticRefresh = TRUE;
     NextFocusName[0] = 0;
+    NextFocusNameW.clear();
     DontClearNextFocusName = FALSE;
     LastRefreshTime = 0;
     FilesActionInProgress = FALSE;
@@ -1694,13 +1827,14 @@ void CFilesWindow::DirectoryLineSetText()
             strcat(ZIPbuf, GetZIPPath());
         }
         path = ZIPbuf;
-        PathHistory->AddPath(1, GetZIPArchive(), GetZIPPath(), NULL, NULL);
+        PathHistory->AddPath(1, GetZIPArchive(), GetZIPPath(), NULL, NULL,
+                             GetZIPArchiveW(), GetZIPPathW());
     }
     else
     {
         if (Is(ptDisk))
         {
-            PathHistory->AddPath(0, GetPath(), NULL, NULL, NULL);
+            PathHistory->AddPath(0, GetPath(), NULL, NULL, NULL, GetPathW(), nullptr);
             path = GetPath();
         }
         else
@@ -1729,7 +1863,16 @@ void CFilesWindow::DirectoryLineSetText()
     {
         CPathBuffer buf; // Heap-allocated for long path support
         int pathLen = (int)strlen(path);
-        if (Is(ptDisk) || Is(ptZIPArchive))
+        if (Is(ptDisk))
+        {
+            std::wstring bufW = GetPathW();
+            int pathLenW = (int)bufW.size();
+            if (!bufW.empty() && bufW.back() != L'\\')
+                bufW.push_back(L'\\');
+            bufW += AnsiToWide(Filter.GetMasksString());
+            DirectoryLine->SetTextW(bufW.c_str(), pathLenW);
+        }
+        else if (Is(ptZIPArchive))
         {
             int l = pathLen;
             memcpy(buf, path, l);
@@ -1748,11 +1891,15 @@ void CFilesWindow::DirectoryLineSetText()
                 lstrcpyn(buf + l, Filter.GetMasksString(), MAX_PATH);
             }
         }
-        DirectoryLine->SetText(buf, pathLen);
+        if (!Is(ptDisk))
+            DirectoryLine->SetText(buf, pathLen);
     }
     else
     {
-        DirectoryLine->SetText(path);
+        if (Is(ptDisk))
+            DirectoryLine->SetTextW(GetPathW());
+        else
+            DirectoryLine->SetText(path);
     }
 }
 
@@ -2183,7 +2330,10 @@ void CFilesWindow::GotoRoot()
     {
         if (Is(ptZIPArchive) && GetZIPPath()[0] != 0) // we are not in the root of the archive -> go there
         {
-            ChangePathToArchive(GetZIPArchive(), "");
+            if (sally::unicode::HasWidePathW(GetZIPArchiveW()))
+                ChangePathToArchiveW(GetZIPArchiveW(), L"");
+            else
+                ChangePathToArchive(GetZIPArchive(), "");
         }
         else // go to the root of the Windows path
         {

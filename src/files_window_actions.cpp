@@ -26,8 +26,11 @@ extern "C"
 #include "salshlib.h"
 #include "shellib.h"
 #include "common/widepath.h"
+#include "common/fsutil.h"
 #include "ui/IPrompter.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/NameRenderPolicy.h"
+#include "common/unicode/PanelPathPolicy.h"
 
 //
 // ****************************************************************************
@@ -45,7 +48,10 @@ void CFilesWindow::HandsOff(BOOL off)
         }
         else
         {
-            ChangeDirectory((CFilesWindow*)this, GetPath(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
+            if (sally::unicode::HasWidePathW(GetPathW()))
+                ChangeDirectoryW((CFilesWindow*)this, GetPathW(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
+            else
+                ChangeDirectory((CFilesWindow*)this, GetPath(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
             HANDLES(EnterCriticalSection(&TimeCounterSection));
             int t1 = MyTimeCounter++;
             HANDLES(LeaveCriticalSection(&TimeCounterSection));
@@ -224,21 +230,29 @@ void CFilesWindow::Execute(int index)
                 // backup data for TopIndexMem
                 strcpy(path, GetPath());
                 int topIndex = ListBox->GetTopIndex();
+                std::wstring archiveNameW;
 
                 if (!linkIsFile)
                 {
                     // construction of full archive name for ChangePathToArchive
-                    strcpy(fullName, GetPath());
-                    if (!SalPathAppend(fullName, fileName, fullName.Size()))
+                    archiveNameW = sally::unicode::BuildPanelChildPathW(GetPathW(), fileName, file->NameW);
+                    if (archiveNameW.length() >= SAL_MAX_LONG_PATH - 2)
                     {
                         gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), LoadStrW(IDS_TOOLONGNAME));
                         UpdateWindow(HWindow);
                         EndStopRefresh();
                         return;
                     }
+                    std::string fullNameA;
+                    if (sally::unicode::TryExactAnsiFallback(archiveNameW, fullNameA))
+                        fullName.Assign(fullNameA.c_str());
+                    else
+                        fullName[0] = 0;
                 }
+                else
+                    archiveNameW = AnsiToWide(fullName);
                 BOOL noChange;
-                if (ChangePathToArchive(fullName, "", -1, NULL, FALSE, &noChange)) // entering the archive successfully
+                if (ChangePathToArchiveW(archiveNameW.c_str(), L"", -1, NULL, FALSE, &noChange)) // entering the archive successfully
                 {
                     if (linkIsFile)
                         TopIndexMem.Clear(); // long jump
@@ -331,18 +345,25 @@ void CFilesWindow::Execute(int index)
                 int caretIndex = GetCaretIndex();
 
                 // new path
-                strcpy(fullName, path);
-                if (!SalPathAppend(fullName, dir->Name, fullName.Size()))
+                std::wstring fullNameW = sally::unicode::BuildPanelChildPathW(GetPathW(), dir->Name, dir->NameW);
+                if (fullNameW.length() >= SAL_MAX_LONG_PATH - 2)
                 {
                     gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), LoadStrW(IDS_TOOLONGNAME));
                     EndStopRefresh();
                     return;
                 }
+                std::string fullNameA;
+                BOOL fullNameHasExactAnsi = sally::unicode::TryExactAnsiFallback(fullNameW, fullNameA) ? TRUE : FALSE;
+                if (fullNameHasExactAnsi)
+                    fullName.Assign(fullNameA.c_str());
+                else
+                    fullName[0] = 0;
 
                 // Vista: we handle unlistable junction points: change path to junction point target
                 CPathBuffer junctTgtPath;
                 int repPointType;
-                if (GetPathDriveType() == DRIVE_FIXED && (dir->Attr & FILE_ATTRIBUTE_REPARSE_POINT) &&
+                if (fullNameHasExactAnsi &&
+                    GetPathDriveType() == DRIVE_FIXED && (dir->Attr & FILE_ATTRIBUTE_REPARSE_POINT) &&
                     GetReparsePointDestination(fullName, junctTgtPath, junctTgtPath.Size(), &repPointType, TRUE) &&
                     repPointType == 2 /* JUNCTION POINT */ &&
                     SalPathAppend(fullName, "*", fullName.Size()))
@@ -368,7 +389,7 @@ void CFilesWindow::Execute(int index)
 
                 BOOL noChange;
                 BOOL refresh = TRUE;
-                if (ChangePathToDisk(HWindow, fullName, -1, NULL, &noChange, FALSE))
+                if (ChangePathToDiskW(HWindow, fullNameW.c_str(), -1, NULL, &noChange, FALSE))
                 {
                     TopIndexMem.Push(path, topIndex); // we remember top index for return
                 }
@@ -421,7 +442,10 @@ void CFilesWindow::Execute(int index)
 
                             // actual path change
                             BOOL noChange;
-                            if (!ChangePathToDisk(HWindow, GetPath(), topIndex, path, &noChange))
+                            BOOL exitedArchive = (sally::unicode::HasWidePathW(GetPathW()))
+                                                     ? ChangePathToDiskW(HWindow, GetPathW(), topIndex, path, &noChange)
+                                                     : ChangePathToDisk(HWindow, GetPath(), topIndex, path, &noChange);
+                            if (!exitedArchive)
                             { // failed to shorten the path - reject-close-archive or long jump
                                 if (!noChange)
                                     TopIndexMem.Clear(); // long jump
@@ -461,8 +485,16 @@ void CFilesWindow::Execute(int index)
                             topIndex = -1;
 
                         // actual path change
-                        if (!ChangePathToArchive(GetZIPArchive(), path, topIndex, prevDir)) // "always false"
-                        {                                                                   // failed to shorten path - long jump
+                        BOOL shortenedArchPath;
+                        if (sally::unicode::HasWidePathW(GetZIPArchiveW()))
+                        {
+                            std::wstring zipPathW = AnsiToWide(path);
+                            shortenedArchPath = ChangePathToArchiveW(GetZIPArchiveW(), zipPathW.c_str(), topIndex, prevDir);
+                        }
+                        else
+                            shortenedArchPath = ChangePathToArchive(GetZIPArchive(), path, topIndex, prevDir);
+                        if (!shortenedArchPath) // "always false"
+                        {                       // failed to shorten path - long jump
                             TopIndexMem.Clear();
                         }
                     }
@@ -483,7 +515,15 @@ void CFilesWindow::Execute(int index)
                     else
                     {
                         BOOL noChange;
-                        if (ChangePathToArchive(GetZIPArchive(), fullName, -1, NULL, FALSE, &noChange)) // "always true"
+                        BOOL enteredSubdir;
+                        if (sally::unicode::HasWidePathW(GetZIPArchiveW()))
+                        {
+                            std::wstring fullNameW = AnsiToWide(fullName);
+                            enteredSubdir = ChangePathToArchiveW(GetZIPArchiveW(), fullNameW.c_str(), -1, NULL, FALSE, &noChange);
+                        }
+                        else
+                            enteredSubdir = ChangePathToArchive(GetZIPArchive(), fullName, -1, NULL, FALSE, &noChange);
+                        if (enteredSubdir) // "always true"
                         {
                             TopIndexMem.Push(doublePath, topIndex); // we remember top index for return
                         }
@@ -1361,7 +1401,8 @@ void CFilesWindow::CloseCurrentPath(HWND parent, BOOL cancel, BOOL detachFS, BOO
             {
                 const char* path = GetPath();
                 // HICON hIcon = GetFileOrPathIconAux(path, FALSE, TRUE); // we retrieve the icon
-                MainWindow->DirHistoryAddPathUnique(0, path, NULL, NULL /*hIcon*/, NULL, NULL);
+                MainWindow->DirHistoryAddPathUnique(0, path, NULL, NULL /*hIcon*/, NULL, NULL,
+                                                    GetPathW(), nullptr);
                 if (!newPathIsTheSame)
                     UserWorkedOnThisPath = FALSE;
             }
@@ -1388,7 +1429,8 @@ void CFilesWindow::CloseCurrentPath(HWND parent, BOOL cancel, BOOL detachFS, BOO
             {
                 if (UserWorkedOnThisPath)
                 {
-                    MainWindow->DirHistoryAddPathUnique(1, GetZIPArchive(), GetZIPPath(), NULL, NULL, NULL);
+                    MainWindow->DirHistoryAddPathUnique(1, GetZIPArchive(), GetZIPPath(), NULL, NULL, NULL,
+                                                        GetZIPArchiveW(), GetZIPPathW());
                     if (!newPathIsTheSame)
                         UserWorkedOnThisPath = FALSE;
                 }
@@ -1533,13 +1575,15 @@ void CFilesWindow::RefreshPathHistoryData()
         // we try to record a new top-index and focus-name
         if (Is(ptZIPArchive))
         {
-            PathHistory->ChangeActualPathData(1, GetZIPArchive(), GetZIPPath(), NULL, NULL, topIndex, file->Name);
+            PathHistory->ChangeActualPathData(1, GetZIPArchive(), GetZIPPath(), NULL, NULL, topIndex, file->Name,
+                                              GetZIPArchiveW(), GetZIPPathW());
         }
         else
         {
             if (Is(ptDisk))
             {
-                PathHistory->ChangeActualPathData(0, GetPath(), NULL, NULL, NULL, topIndex, file->Name);
+                PathHistory->ChangeActualPathData(0, GetPath(), NULL, NULL, NULL, topIndex, file->Name,
+                                                  GetPathW(), nullptr);
             }
             else
             {
@@ -1564,13 +1608,14 @@ void CFilesWindow::RemoveCurrentPathFromHistory()
 
     if (Is(ptZIPArchive))
     {
-        PathHistory->RemoveActualPath(1, GetZIPArchive(), GetZIPPath(), NULL, NULL);
+        PathHistory->RemoveActualPath(1, GetZIPArchive(), GetZIPPath(), NULL, NULL,
+                                      GetZIPArchiveW(), GetZIPPathW());
     }
     else
     {
         if (Is(ptDisk))
         {
-            PathHistory->RemoveActualPath(0, GetPath(), NULL, NULL, NULL);
+            PathHistory->RemoveActualPath(0, GetPath(), NULL, NULL, NULL, GetPathW(), nullptr);
         }
         else
         {
@@ -1620,6 +1665,17 @@ BOOL CFilesWindow::ChangePathToDisk(HWND parent, const char* path, int suggested
                         shorterPathWarning, tryCloseReason);
 
     //TRACE_I("change-to-disk: begin");
+
+    if (Is(ptDisk) && path != NULL)
+    {
+        std::wstring mappedWidePath = sally::unicode::MapRelatedAnsiPathToWidePath(path, GetPath(), GetPathW());
+        if (!mappedWidePath.empty() && mappedWidePath != AnsiToWide(path))
+        {
+            return ChangePathToDiskW(parent, mappedWidePath.c_str(), suggestedTopIndex, suggestedFocusName, noChange,
+                                     refreshListBox, canForce, isRefresh, failReason,
+                                     shorterPathWarning, tryCloseReason);
+        }
+    }
 
     if (strlen(path) >= SAL_MAX_LONG_PATH - 2)
     {
@@ -1960,6 +2016,155 @@ BOOL CFilesWindow::ChangePathToDisk(HWND parent, const char* path, int suggested
     return ret;
 }
 
+BOOL CFilesWindow::ChangePathToDiskW(HWND parent, const wchar_t* path, int suggestedTopIndex,
+                                     const char* suggestedFocusName, BOOL* noChange,
+                                     BOOL refreshListBox, BOOL canForce, BOOL isRefresh, int* failReason,
+                                     BOOL shorterPathWarning, int tryCloseReason)
+{
+    (void)shorterPathWarning;
+
+    std::wstring requestedPath = path != NULL ? path : L"";
+    std::string tracePath = WideToAnsi(requestedPath);
+    CALL_STACK_MESSAGE9("CFilesWindow::ChangePathToDiskW(, %s, %d, %s, , %d, %d, %d, , %d, %d)", tracePath.c_str(),
+                        suggestedTopIndex, suggestedFocusName, refreshListBox, canForce, isRefresh,
+                        shorterPathWarning, tryCloseReason);
+
+    if (requestedPath.length() >= SAL_MAX_LONG_PATH - 2)
+    {
+        gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), LoadStrW(IDS_TOOLONGNAME));
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+
+    RefreshPathHistoryData();
+
+    if (noChange != NULL)
+        *noChange = TRUE;
+
+    if (!isRefresh)
+        MainWindow->CancelPanelsUI();
+    MainWindow->UpdateDefaultDir(TRUE);
+
+    int errTextID;
+    if (!SalGetFullNameW(requestedPath, &errTextID, Is(ptDisk) ? GetPathW() : NULL))
+    {
+        gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), LoadStrW(errTextID));
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+
+    std::wstring changedPath = requestedPath;
+    BOOL tryNet = !CriticalShutdown;
+    DWORD err, lastErr;
+    BOOL pathInvalid, cut;
+    if (!SalCheckAndRestorePathWithCutW(parent, changedPath, tryNet, err, lastErr, pathInvalid, cut, FALSE))
+    {
+        if (pathInvalid || err == ERROR_USER_TERMINATED)
+            return FALSE;
+        SalCheckPathW(TRUE, requestedPath.c_str(), lastErr != ERROR_SUCCESS ? lastErr : err, TRUE, parent);
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+    if (cut)
+    {
+        suggestedTopIndex = -1;
+        suggestedFocusName = NULL;
+    }
+
+    BOOL setWait = (GetCursor() != LoadCursor(NULL, IDC_WAIT));
+    HCURSOR oldCur = NULL;
+    if (setWait)
+        oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
+    BeginStopRefresh();
+
+    BOOL detachFS;
+    if (!PrepareCloseCurrentPath(parent, canForce, TRUE, detachFS, tryCloseReason))
+    {
+        EndStopRefresh();
+        if (setWait)
+            SetCursor(oldCur);
+        if (failReason != NULL)
+            *failReason = CHPPFR_CANNOTCLOSEPATH;
+        return FALSE;
+    }
+
+    BOOL updateIcon = TRUE;
+    if (UseSystemIcons || UseThumbnails)
+        SleepIconCacheThread();
+
+    CloseCurrentPath(parent, FALSE, detachFS, FALSE, isRefresh, TRUE);
+
+    if (DirectoryLine != NULL)
+        DirectoryLine->HideThrobberAndSecurityIcon();
+
+    SetPanelType(ptDisk);
+    SetPathW(changedPath.c_str());
+
+    if (updateIcon || !GetNetworkDrive())
+        UpdateDriveIcon(FALSE);
+
+    if (noChange != NULL)
+        *noChange = FALSE;
+
+    BOOL cannotList = !CommonRefresh(parent, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
+    if (isRefresh && !cannotList && GetMonitorChanges() && !AutomaticRefresh)
+    {
+        Sleep(400);
+        cannotList = !CommonRefresh(parent, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
+    }
+
+    if (cannotList)
+    {
+        // Mirror ANSI ChangePathToDisk recovery: shorten to the nearest accessible parent;
+        // if no parent is reachable, fall back to the user-configured rescue path or the first fixed drive.
+        BOOL recovered = FALSE;
+        std::wstring tryPath = changedPath;
+        while (CutDirectoryW(tryPath))
+        {
+            DWORD probeErr = SalCheckPathW(FALSE, tryPath.c_str(), ERROR_SUCCESS, FALSE, parent);
+            if (probeErr != ERROR_SUCCESS)
+                continue;
+            SetPathW(tryPath.c_str());
+            BOOL stillCannot = !CommonRefresh(parent, -1, NULL, refreshListBox, TRUE, isRefresh);
+            if (!stillCannot)
+            {
+                recovered = TRUE;
+                break;
+            }
+        }
+
+        EndStopRefresh();
+        if (setWait)
+            SetCursor(oldCur);
+
+        if (recovered)
+        {
+            if (failReason != NULL)
+                *failReason = CHPPFR_SHORTERPATH;
+            return FALSE;
+        }
+
+        // No accessible parent was found within the same root; long-jump out via the rescue/fixed-drive helper.
+        TopIndexMem.Clear();
+        ChangeToRescuePathOrFixedDrive(parent, noChange, refreshListBox, canForce, tryCloseReason, failReason);
+        if (failReason != NULL && *failReason == CHPPFR_SUCCESS)
+            *failReason = CHPPFR_SHORTERPATH;
+        return FALSE;
+    }
+
+    EndStopRefresh();
+    if (setWait)
+        SetCursor(oldCur);
+
+    BOOL openedRequestedPath = IsTheSamePathW(GetPathW(), requestedPath.c_str());
+    if (failReason != NULL)
+        *failReason = openedRequestedPath ? CHPPFR_SUCCESS : CHPPFR_SHORTERPATH;
+    return openedRequestedPath;
+}
+
 BOOL CFilesWindow::ChangePathToArchive(const char* archive, const char* archivePath,
                                        int suggestedTopIndex, const char* suggestedFocusName,
                                        BOOL forceUpdate, BOOL* noChange, BOOL refreshListBox,
@@ -2048,7 +2253,10 @@ BOOL CFilesWindow::ChangePathToArchive(const char* archive, const char* archiveP
                 if (forceUpdateInt) // a path change is required; opening the archive failed, go back to disk
                 {                   // we're certainly in an archive (it's a panel refresh of an archive)
                     // if possible, exit the archive (possibly all the way to the "fixed-drive")
-                    ChangePathToDisk(HWindow, GetPath(), -1, NULL, noChange, refreshListBox, FALSE, isRefresh);
+                    if (sally::unicode::HasWidePathW(GetPathW()))
+                        ChangePathToDiskW(HWindow, GetPathW(), -1, NULL, noChange, refreshListBox, FALSE, isRefresh);
+                    else
+                        ChangePathToDisk(HWindow, GetPath(), -1, NULL, noChange, refreshListBox, FALSE, isRefresh);
                 }
                 else
                 {
@@ -2256,7 +2464,10 @@ BOOL CFilesWindow::ChangePathToArchive(const char* archive, const char* archiveP
                 if (err != ERROR_USER_TERMINATED)
                 {
                     // if possible, exit the archive (possibly all the way to the "fixed-drive")
-                    ChangePathToDisk(HWindow, GetPath(), -1, NULL, noChange, refreshListBox, FALSE, isRefresh);
+                    if (sally::unicode::HasWidePathW(GetPathW()))
+                        ChangePathToDiskW(HWindow, GetPathW(), -1, NULL, noChange, refreshListBox, FALSE, isRefresh);
+                    else
+                        ChangePathToDisk(HWindow, GetPath(), -1, NULL, noChange, refreshListBox, FALSE, isRefresh);
                 }
                 else // user pressed ESC -> the path is probably inaccessible, we go straight to the "fixed-drive"
                 {
@@ -2366,7 +2577,14 @@ BOOL CFilesWindow::ChangePathToArchive(const char* archive, const char* archiveP
     {
         if (UserWorkedOnThisPath)
         {
-            MainWindow->DirHistoryAddPathUnique(1, GetZIPArchive(), currentPath, NULL, NULL, NULL);
+            // Archive root is wide-correct via GetZIPArchiveW(); the internal path
+            // 'currentPath' is the saved ANSI from before the change so wide it
+            // through AnsiToWide (typical ZIP entries are ASCII; Unicode-only
+            // internal entries would still be lossy, matching the existing ANSI
+            // fidelity).
+            std::wstring currentPathW = AnsiToWide(currentPath);
+            MainWindow->DirHistoryAddPathUnique(1, GetZIPArchive(), currentPath, NULL, NULL, NULL,
+                                                GetZIPArchiveW(), currentPathW.c_str());
             UserWorkedOnThisPath = FALSE;
         }
 
@@ -2376,6 +2594,58 @@ BOOL CFilesWindow::ChangePathToArchive(const char* archive, const char* archiveP
     }
 
     return ok;
+}
+
+BOOL CFilesWindow::ChangePathToArchiveW(const wchar_t* archive, const wchar_t* archivePath,
+                                        int suggestedTopIndex, const char* suggestedFocusName,
+                                        BOOL forceUpdate, BOOL* noChange, BOOL refreshListBox,
+                                        int* failReason, BOOL isRefresh, BOOL canFocusFileName,
+                                        BOOL isHistory)
+{
+    std::wstring archiveW = archive != NULL ? archive : L"";
+    std::wstring archivePathW = archivePath != NULL ? archivePath : L"";
+    int errTextID;
+    if (!SalGetFullNameW(archiveW, &errTextID, Is(ptDisk) ? GetPathW() : NULL))
+    {
+        gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), LoadStrW(errTextID));
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+
+    std::string archiveA;
+    if (!sally::unicode::TryExactAnsiFallback(archiveW, archiveA))
+    {
+        std::wstring shortArchiveW = GetShortPathW(archiveW.c_str());
+        if (shortArchiveW.empty() || !sally::unicode::TryExactAnsiFallback(shortArchiveW, archiveA))
+        {
+            gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), archiveW.c_str());
+            if (failReason != NULL)
+                *failReason = CHPPFR_INVALIDPATH;
+            return FALSE;
+        }
+    }
+
+    std::string archivePathA;
+    if (!sally::unicode::TryExactAnsiFallback(archivePathW, archivePathA))
+    {
+        gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), archivePathW.c_str());
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+
+    BOOL ret = ChangePathToArchive(archiveA.c_str(), archivePathA.c_str(), suggestedTopIndex,
+                                   suggestedFocusName, forceUpdate, noChange, refreshListBox,
+                                   failReason, isRefresh, canFocusFileName, isHistory);
+    if (ret && Is(ptZIPArchive))
+    {
+        SetZIPArchiveW(archiveW.c_str());
+        std::wstring archiveDirW = GetDirectoryW(archiveW.c_str());
+        if (!archiveDirW.empty())
+            SetPathW(archiveDirW.c_str());
+    }
+    return ret;
 }
 
 BOOL CFilesWindow::ChangeAndListPathOnFS(const char* fsName, int fsNameIndex, const char* fsUserPart,
@@ -2781,7 +3051,7 @@ BOOL CFilesWindow::ChangePathToPluginFS(const char* fsName, const char* fsUserPa
                                 DirectoryLine->HideThrobberAndSecurityIcon();
 
                             SetPanelType(ptPluginFS);
-                            SetPath(GetPath()); // detach the path from Snooper (stop monitoring changes on Path)
+                            SetPathW(GetPathW()); // detach the path from Snooper (stop monitoring changes on Path)
                             SetPluginFS(pluginFS.GetInterface(), plugin->DLLName.c_str(), plugin->Version.c_str(),
                                         plugin->GetPluginInterfaceForFS()->GetInterface(),
                                         plugin->GetPluginInterface()->GetInterface(),
@@ -3163,6 +3433,27 @@ BOOL CFilesWindow::ChangePathToPluginFS(const char* fsName, const char* fsUserPa
     }
 }
 
+BOOL CFilesWindow::ChangePathToPluginFSW(const wchar_t* fsName, const wchar_t* fsUserPart, int suggestedTopIndex,
+                                         const char* suggestedFocusName, BOOL forceUpdate, int mode,
+                                         BOOL* noChange, BOOL refreshListBox, int* failReason, BOOL isRefresh,
+                                         BOOL canFocusFileName, BOOL convertPathToInternal)
+{
+    std::string fsNameA;
+    std::string fsUserPartA;
+    if (!sally::unicode::TryExactAnsiFallback(fsName != NULL ? fsName : L"", fsNameA) ||
+        !sally::unicode::TryExactAnsiFallback(fsUserPart != NULL ? fsUserPart : L"", fsUserPartA))
+    {
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), fsUserPart != NULL ? fsUserPart : L"");
+        return FALSE;
+    }
+
+    return ChangePathToPluginFS(fsNameA.c_str(), fsUserPartA.c_str(), suggestedTopIndex,
+                                suggestedFocusName, forceUpdate, mode, noChange, refreshListBox,
+                                failReason, isRefresh, canFocusFileName, convertPathToInternal);
+}
+
 BOOL CFilesWindow::ChangePathToDetachedFS(int fsIndex, int suggestedTopIndex,
                                           const char* suggestedFocusName, BOOL refreshListBox,
                                           int* failReason, const char* newFSName,
@@ -3313,7 +3604,7 @@ BOOL CFilesWindow::ChangePathToDetachedFS(int fsIndex, int suggestedTopIndex,
                 DirectoryLine->HideThrobberAndSecurityIcon();
 
             SetPanelType(ptPluginFS);
-            SetPath(GetPath()); // detach the path from Snooper (stop monitoring changes on Path)
+            SetPathW(GetPathW()); // detach the path from Snooper (stop monitoring changes on Path)
             SetPluginFS(pluginFS->GetInterface(), plugin->DLLName.c_str(), plugin->Version.c_str(),
                         plugin->GetPluginInterfaceForFS()->GetInterface(),
                         plugin->GetPluginInterface()->GetInterface(),
@@ -3683,26 +3974,57 @@ void CFilesWindow::RefreshListBox(int suggestedXOffset,
             //--- name
             BOOL extIsInExtColumn = extColumnIsVisible && (!isDir || Configuration.SortDirsByExt) &&
                                     f->Ext[0] != 0 && f->Ext > f->Name + 1; // exception for names like ".htaccess"; they appear in Name even though they are extensions
+            sally::unicode::NameWidthMeasurementPlan widthPlan =
+                sally::unicode::BuildNameWidthMeasurementPlan(
+                    f->Name,
+                    f->NameLen,
+                    f->Ext,
+                    f->NameW,
+                    isDir != FALSE,
+                    Configuration.SortDirsByExt != FALSE,
+                    extIsInExtColumn != FALSE);
             if (Columns[0].FixedWidth == 0 || (autoWidthColumns & VIEW_SHOW_EXTENSION) && extIsInExtColumn)
             {
-                AlterFileName(formatedFileName, f->Name, f->NameLen, // preparation of the formatted name to also compute the width of the separate Ext column
-                              Configuration.FileNameFormat, 0, isDir);
                 if (Columns[0].FixedWidth == 0)
                 {
-                    nameLen = extIsInExtColumn ? (int)(f->Ext - f->Name - 1) : f->NameLen;
-
-                    GetTextExtentPoint32(dc, formatedFileName, nameLen, &act);
+                    if (widthPlan.UseWide)
+                    {
+                        GetTextExtentPoint32W(dc, f->NameW, widthPlan.NameLength, &act);
+                    }
+                    else
+                    {
+                        AlterFileName(formatedFileName, f->Name, f->NameLen, // preparation of the formatted name to also compute the width of the separate Ext column
+                                      Configuration.FileNameFormat, 0, isDir);
+                        nameLen = widthPlan.NameLength;
+                        GetTextExtentPoint32(dc, formatedFileName, nameLen, &act);
+                    }
                     act.cx += 1 + IconSizes[ICONSIZE_16] + 1 + 2 + SPACE_WIDTH;
                     if (columnWidthName < act.cx)
                         columnWidthName = act.cx;
                     if (nameColWidths != NULL)
                         nameColWidths[i] = act.cx;
                 }
+                else if (!f->UseWideName())
+                {
+                    AlterFileName(formatedFileName, f->Name, f->NameLen, // preparation of the formatted name to also compute the width of the separate Ext column
+                                  Configuration.FileNameFormat, 0, isDir);
+                }
             }
             //--- extension
             if ((autoWidthColumns & VIEW_SHOW_EXTENSION) && extIsInExtColumn)
             {
-                GetTextExtentPoint32(dc, formatedFileName + (int)(f->Ext - f->Name), (int)(f->NameLen - (f->Ext - f->Name)), &act);
+                if (widthPlan.UseWide)
+                {
+                    const wchar_t* extPosW = sally::unicode::GetWideExtensionStart(f->NameW);
+                    if (extPosW != NULL && widthPlan.ExtensionLength > 0)
+                        GetTextExtentPoint32W(dc, extPosW, widthPlan.ExtensionLength, &act);
+                    else
+                        act.cx = 0;
+                }
+                else
+                {
+                    GetTextExtentPoint32(dc, formatedFileName + (int)(f->Ext - f->Name), widthPlan.ExtensionLength, &act);
+                }
                 act.cx += SPACE_WIDTH;
                 if (columnWidthExt < act.cx)
                     columnWidthExt = act.cx;

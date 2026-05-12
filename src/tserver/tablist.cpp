@@ -618,10 +618,10 @@ void CTabList::GetText(int iItem, int index, WCHAR* buff, int buffMax, BOOL pref
         const WCHAR* s = Data.Messages[iItem].Message;
         if (preferEndOfText) // we want to return the end of the text (e.g., for a tooltip)
         {
-            int len = wcslen(s);
-            if (len + 1 > buffMax)
+            size_t len = wcslen(s);
+            if (len + 1 > (size_t)buffMax)
             {
-                s += len - (buffMax - 1);
+                s += len - ((size_t)buffMax - 1);
                 if (IS_LOW_SURROGATE(*s))
                     s++; // UTF-16 can contain surrogate pairs; skip the second code unit so the text does not start in the middle of a character
             }
@@ -835,7 +835,7 @@ CTabList::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 // draw ERRORS in red
                 if (cd->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM))
                 {
-                    int index = cd->nmcd.dwItemSpec;
+                    int index = (int)cd->nmcd.dwItemSpec;
                     if (index >= 0 && index < Data.Messages.Count)
                     {
                         if (IsErrorMsg(Data.Messages[index].Type))

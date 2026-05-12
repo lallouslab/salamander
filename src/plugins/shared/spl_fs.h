@@ -231,6 +231,43 @@ public:
 
 #define SALCMDLINE_MAXLEN 8192 // maximum length of command from Salamander command line
 
+inline BOOL SPLFSWideToAnsiExact(const wchar_t* src, char* dst, int dstSize)
+{
+    if (dst == NULL || dstSize <= 0)
+        return FALSE;
+    dst[0] = 0;
+    if (src == NULL)
+        return TRUE;
+
+    BOOL usedDefaultChar = FALSE;
+    int converted = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, src, -1, dst, dstSize, NULL, &usedDefaultChar);
+    if (converted == 0 || usedDefaultChar)
+    {
+        dst[0] = 0;
+        return FALSE;
+    }
+    dst[dstSize - 1] = 0;
+    return TRUE;
+}
+
+inline BOOL SPLFSAnsiToWide(const char* src, wchar_t* dst, int dstSize)
+{
+    if (dst == NULL || dstSize <= 0)
+        return FALSE;
+    dst[0] = 0;
+    if (src == NULL)
+        return TRUE;
+
+    int converted = MultiByteToWideChar(CP_ACP, 0, src, -1, dst, dstSize);
+    if (converted == 0)
+    {
+        dst[0] = 0;
+        return FALSE;
+    }
+    dst[dstSize - 1] = 0;
+    return TRUE;
+}
+
 class CPluginFSInterfaceAbstract
 {
 #ifdef INSIDE_SALAMANDER
@@ -752,6 +789,91 @@ public:
     // the user clicked on the security icon (see CSalamanderGeneralAbstract::ShowSecurityIcon;
     // e.g. FTPS displays a dialog with the server certificate); 'parent' is the suggested parent of the dialog
     virtual void WINAPI ShowSecurityInfo(HWND parent) = 0;
+
+    // Optional wide path ABI. Plugins built for SALLY_PLUGIN_WIDE_FS_VERSION or newer may
+    // override these methods to preserve exact UTF-16 paths. The default implementations
+    // bridge to the legacy ANSI methods only when the conversion is exact.
+    virtual BOOL WINAPI GetCurrentPathW(wchar_t* userPart, int userPartSize)
+    {
+        char userPartA[MAX_PATH];
+        if (!GetCurrentPath(userPartA))
+            return FALSE;
+        return SPLFSAnsiToWide(userPartA, userPart, userPartSize);
+    }
+
+    virtual BOOL WINAPI GetFullNameW(CFileData& file, int isDir, wchar_t* buf, int bufSize)
+    {
+        char bufA[MAX_PATH];
+        if (!GetFullName(file, isDir, bufA, MAX_PATH))
+            return FALSE;
+        return SPLFSAnsiToWide(bufA, buf, bufSize);
+    }
+
+    virtual BOOL WINAPI GetFullFSPathW(HWND parent, const wchar_t* fsName, wchar_t* path, int pathSize,
+                                       BOOL& success)
+    {
+        char fsNameA[MAX_PATH];
+        char pathA[MAX_PATH];
+        if (!SPLFSWideToAnsiExact(fsName, fsNameA, MAX_PATH) ||
+            !SPLFSWideToAnsiExact(path, pathA, MAX_PATH))
+        {
+            success = FALSE;
+            return FALSE;
+        }
+        BOOL ret = GetFullFSPath(parent, fsNameA, pathA, MAX_PATH, success);
+        if (ret && success)
+            return SPLFSAnsiToWide(pathA, path, pathSize);
+        return ret;
+    }
+
+    virtual BOOL WINAPI GetRootPathW(wchar_t* userPart, int userPartSize)
+    {
+        char userPartA[MAX_PATH];
+        if (!GetRootPath(userPartA))
+            return FALSE;
+        return SPLFSAnsiToWide(userPartA, userPart, userPartSize);
+    }
+
+    virtual BOOL WINAPI IsCurrentPathW(int currentFSNameIndex, int fsNameIndex, const wchar_t* userPart)
+    {
+        char userPartA[MAX_PATH];
+        return SPLFSWideToAnsiExact(userPart, userPartA, MAX_PATH) &&
+               IsCurrentPath(currentFSNameIndex, fsNameIndex, userPartA);
+    }
+
+    virtual BOOL WINAPI IsOurPathW(int currentFSNameIndex, int fsNameIndex, const wchar_t* userPart)
+    {
+        char userPartA[MAX_PATH];
+        return SPLFSWideToAnsiExact(userPart, userPartA, MAX_PATH) &&
+               IsOurPath(currentFSNameIndex, fsNameIndex, userPartA);
+    }
+
+    virtual BOOL WINAPI ChangePathW(int currentFSNameIndex, wchar_t* fsName, int fsNameIndex,
+                                    const wchar_t* userPart, wchar_t* cutFileName, int cutFileNameSize,
+                                    BOOL* pathWasCut, BOOL forceRefresh, int mode)
+    {
+        char fsNameA[MAX_PATH];
+        char userPartA[MAX_PATH];
+        char cutFileNameA[MAX_PATH];
+        if (!SPLFSWideToAnsiExact(fsName, fsNameA, MAX_PATH) ||
+            !SPLFSWideToAnsiExact(userPart, userPartA, MAX_PATH))
+        {
+            if (cutFileName != NULL && cutFileNameSize > 0)
+                cutFileName[0] = 0;
+            return FALSE;
+        }
+        cutFileNameA[0] = 0;
+        BOOL ret = ChangePath(currentFSNameIndex, fsNameA, fsNameIndex, userPartA,
+                              cutFileName != NULL ? cutFileNameA : NULL,
+                              pathWasCut, forceRefresh, mode);
+        if (ret)
+        {
+            SPLFSAnsiToWide(fsNameA, fsName, MAX_PATH);
+            if (cutFileName != NULL)
+                SPLFSAnsiToWide(cutFileNameA, cutFileName, cutFileNameSize);
+        }
+        return ret;
+    }
 
     /* remaining to be completed:
 // calculate occupied space on FS (Alt+F10 + Ctrl+Shift+F10 + calc. needed space + spacebar key in panel)

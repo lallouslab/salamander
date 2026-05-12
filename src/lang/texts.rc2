@@ -1248,10 +1248,12 @@ STRINGTABLE
  IDS_REINSTALLPLUGIN, "%s plugin (%s) has been changed. Please reinstall (remove and add) this plugin (in menu Plugins / Plugins Manager)."
  IDS_PLUGININVALID, "%s plugin (%s) has not been loaded. Plugin is not valid Sally Plugin or some plugin internal error has occurred."
  IDS_PLUGININVALID2, "This plugin (%s) has not been loaded. Plugin is not valid Sally Plugin or some plugin internal error has occurred."
- IDS_OLDPLUGINVERSION, "%s plugin (%s) is not supported by this version of Sally. Please get updated version of this plugin."
- IDS_OLDPLUGINVERSION2, "The plugin (%s) is not supported by this version of Sally. Please get updated version of this plugin."
- IDS_OLDPLUGINVERSION_CONFIRM, "%s plugin (%s) targets legacy commercial SDK version 4.0 (required version 102).\nIt may be ABI-incompatible with this Sally build and can be unstable.\n\nDo you want to load this plugin anyway?\nChoosing YES permanently trusts this plugin path."
- IDS_OLDPLUGINVERSION_CONFIRM2, "The plugin (%s) targets legacy commercial SDK version 4.0 (required version 102).\nIt may be ABI-incompatible with this Sally build and can be unstable.\n\nDo you want to load this plugin anyway?\nChoosing YES permanently trusts this plugin path."
+IDS_OLDPLUGINVERSION, "%s plugin (%s) is not supported by this version of Sally. Please get updated version of this plugin."
+IDS_OLDPLUGINVERSION2, "The plugin (%s) is not supported by this version of Sally. Please get updated version of this plugin."
+IDS_OLDPLUGINVERSION_CONFIRM, "%s plugin (%s) targets legacy commercial SDK version 4.0 (required version 102).\nIt may be ABI-incompatible with this Sally build and can be unstable.\n\nDo you want to load this plugin anyway?\nChoosing YES permanently trusts this plugin path."
+IDS_OLDPLUGINVERSION_CONFIRM2, "The plugin (%s) targets legacy commercial SDK version 4.0 (required version 102).\nIt may be ABI-incompatible with this Sally build and can be unstable.\n\nDo you want to load this plugin anyway?\nChoosing YES permanently trusts this plugin path."
+IDS_BROKENFSPLUGINVERSION, "%s plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
+IDS_BROKENFSPLUGINVERSION2, "The plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
 
  IDS_UPDATEFAILED, "Packing of updated file(s) into archive has failed. Do you want to try it again? If you choose NO, you'll get back to the Archive Update dialog, so you'll be able to copy updated file(s) to chosen disk folder (for later packing into the archive)."
 

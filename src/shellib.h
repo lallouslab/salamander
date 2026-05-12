@@ -43,11 +43,14 @@ void OpenFolderAndFocusItem(HWND hOwnerWindow, const char* dir, const char* item
 // hCenterWindow - window to which the dialog will be centered
 BOOL GetTargetDirectory(HWND parent, HWND hCenterWindow, const char* title, const char* comment,
                         char* path, BOOL onlyNet = FALSE, const char* initDir = NULL);
+BOOL GetTargetDirectoryW(HWND parent, HWND hCenterWindow, const wchar_t* title, const wchar_t* comment,
+                         std::wstring& path, BOOL onlyNet = FALSE, const wchar_t* initDir = NULL);
 
 // detects whether it is a NetHood path (directory with target.lnk),
 // optionally resolves target.lnk and returns the path in 'path'; 'path' is an in/out path
 // (min. MAX_PATH characters)
 void ResolveNetHoodPath(char* path);
+void ResolveNetHoodPathW(std::wstring& path);
 
 class CMenuNew;
 

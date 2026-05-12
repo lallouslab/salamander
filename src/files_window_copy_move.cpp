@@ -19,6 +19,7 @@
 #include "ui/IPrompter.h"
 #include "common/unicode/helpers.h"
 #include "common/unicode/CopyNamePolicy.h"
+#include "common/unicode/PanelPathPolicy.h"
 #include "common/IEnvironment.h"
 #include "common/widepath.h"
 
@@ -30,7 +31,7 @@ CSelectionSnapshot CFilesWindow::TakeSnapshot(CActionType type, int selCount,
 {
     CSelectionSnapshot snap;
     snap.SourcePath = GetPath();
-    // TODO: snap.SourcePathW when wide path is available
+    snap.SourcePathW = GetPathW();
 
     // Map CActionType to EActionType
     switch (type)
@@ -402,6 +403,7 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
             }
 
             BOOL scriptOK = TRUE; // result of script creation, success?
+            std::wstring sourceDirW = AnsiToWide(sourceDir);
             do
             {
                 if (file.cFileName[0] != 0 &&
@@ -416,7 +418,7 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
                                             targetPathState, targetSupADS, targetIsFAT32, NULL,
                                             fileNameA, NULL, NULL, NULL, file.dwFileAttributes, NULL,
                                             TRUE, FALSE, fastDirectoryMove, NULL, NULL, &file.ftLastWriteTime,
-                                            srcAndTgtPathsFlags, file.cFileName))
+                                            srcAndTgtPathsFlags, sourceDirW.c_str(), file.cFileName))
                         {
                             scriptOK = FALSE;
                             break;
@@ -429,7 +431,7 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
                                              fileNameA, NULL,
                                              CQuadWord(file.nFileSizeLow, file.nFileSizeHigh),
                                              NULL, NULL, file.dwFileAttributes, NULL, FALSE, NULL,
-                                             srcAndTgtPathsFlags, file.cFileName))
+                                             srcAndTgtPathsFlags, file.cFileName, AnsiToWide(sourceDir).c_str()))
                         {
                             scriptOK = FALSE;
                             break;
@@ -551,7 +553,7 @@ void AddStringToNames(TIndirectArray<char>* usedNames, const char* txt)
 }
 
 BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* targetDir,
-                                    CCopyMoveData* data)
+                                    const wchar_t* targetDirW, CCopyMoveData* data)
 {
     CALL_STACK_MESSAGE3("CFilesWindow::BuildScriptMain2(, %d, %s, )", copy, targetDir);
     if (!script->IsGood())
@@ -643,6 +645,11 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     CPathBuffer mapNameBuf;  // Heap-allocated for long path support
     strcpy(targetPath, targetDir);
     SalPathAddBackslash(targetPath, targetPath.Size());
+    std::wstring targetPathWide = (targetDirW != NULL && targetDirW[0] != L'\0')
+                                      ? std::wstring(targetDirW)
+                                      : (Is(ptDisk) ? std::wstring(GetPathW()) : AnsiToWide(targetPath));
+    if (!targetPathWide.empty() && targetPathWide[targetPathWide.length() - 1] != L'\\')
+        targetPathWide += L'\\';
     BOOL targetIsFAT32 /*, targetSupEFS*/;
     BOOL targetSupADS = IsPathOnVolumeSupADS(targetPath, &targetIsFAT32);
     script->TargetPathSupADS = targetSupADS;
@@ -650,7 +657,14 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     //  script->TargetPathSupEFS = targetSupEFS;
     CTargetPathState targetPathState = GetTargetPathState(tpsUnknown, targetPath);
     char* targetName = targetPath + strlen(targetPath);
-    const std::wstring targetDirWithBackslashW = AnsiToWide(targetPath);
+    const std::wstring& targetDirWithBackslashW = targetPathWide;
+    auto targetCandidateExistsW = [&](const char* candidateNameA) -> bool
+    {
+        if (candidateNameA == NULL)
+            return false;
+        std::wstring candidateW = targetDirWithBackslashW + AnsiToWide(candidateNameA);
+        return GetFileAttributesW(candidateW.c_str()) != INVALID_FILE_ATTRIBUTES;
+    };
     BOOL makeCopyOfName = data->MakeCopyOfName;
     std::unique_ptr<TIndirectArray<char>> usedNames; // RAII: auto-deleted when scope exits
     std::vector<std::wstring> usedNamesW;
@@ -673,6 +687,14 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
         const wchar_t* mapNameW = NULL;
         std::wstring mapNameWide;
         wchar_t* fileNameW = data->At(i)->FileNameW;  // Wide filename for Unicode support
+        std::wstring itemSourcePathW;
+        const wchar_t* itemSourcePathWPtr = NULL;
+        if (fileNameW != NULL)
+        {
+            itemSourcePathW = fileNameW;
+            CutDirectoryW(itemSourcePathW);
+            itemSourcePathWPtr = itemSourcePathW.c_str();
+        }
 
         // Extract just the filename part from the wide path (if available)
         wchar_t* wideNameOnly = NULL;
@@ -734,8 +756,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                     // mapName must be NULL here, otherwise data->MakeCopyOfName could not be TRUE
                     if (!handledWideCopyName &&
                         ((isKnown = ContainsString(usedNames.get(), targetName)) != 0 ||
-                        GetFileAttributesW(AnsiToWide(targetPath).c_str()) != INVALID_FILE_ATTRIBUTES)
-                    )
+                         targetCandidateExistsW(targetName)))
                     { // name already exists, we must generate a new one
                         if (!isKnown)
                             AddStringToNames(usedNames.get(), targetName);
@@ -830,7 +851,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                             if (strlen(targetName) < MAX_PATH) // name assembly succeeded, otherwise we ignore the result
                             {
                                 if ((isKnown = ContainsString(usedNames.get(), targetName)) != 0 ||
-                                    GetFileAttributesW(AnsiToWide(targetPath).c_str()) != INVALID_FILE_ATTRIBUTES)
+                                    targetCandidateExistsW(targetName))
                                 {
                                     if (!isKnown)
                                         AddStringToNames(usedNames.get(), targetName);
@@ -863,7 +884,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                     if (strlen(targetName) < MAX_PATH)                                                            // name assembly succeeded, otherwise we ignore the result
                                     {
                                         if ((isKnown = ContainsString(usedNames.get(), targetName)) != 0 ||
-                                            GetFileAttributesW(AnsiToWide(targetPath).c_str()) != INVALID_FILE_ATTRIBUTES)
+                                            targetCandidateExistsW(targetName))
                                         {
                                             if (!isKnown)
                                                 AddStringToNames(usedNames.get(), targetName);
@@ -918,7 +939,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                     if (strlen(targetName) < MAX_PATH) // name assembly succeeded, otherwise we ignore the result
                                     {
                                         if ((isKnown = ContainsString(usedNames.get(), targetName)) != 0 ||
-                                            GetFileAttributesW(AnsiToWide(targetPath).c_str()) != INVALID_FILE_ATTRIBUTES)
+                                            targetCandidateExistsW(targetName))
                                         {
                                             if (!isKnown)
                                                 AddStringToNames(usedNames.get(), targetName);
@@ -952,7 +973,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                 if (strlen(targetName) < MAX_PATH)                                                        // name assembly succeeded, otherwise we ignore the result
                                 {
                                     if ((isKnown = ContainsString(usedNames.get(), targetName)) != 0 ||
-                                        GetFileAttributesW(AnsiToWide(targetPath).c_str()) != INVALID_FILE_ATTRIBUTES)
+                                        targetCandidateExistsW(targetName))
                                     {
                                         if (!isKnown)
                                             AddStringToNames(usedNames.get(), targetName);
@@ -983,7 +1004,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                         targetPathState, targetSupADS, targetIsFAT32, NULL,
                                         s + 1, NULL, NULL, mapName, attrs, NULL, TRUE, TRUE,
                                         fastDirectoryMove, NULL, NULL, NULL, srcAndTgtPathsFlags,
-                                        wideNameOnly))
+                                        itemSourcePathWPtr, wideNameOnly))
                     {
                         SetCurrentDirectoryToSystem();
                         return FALSE; // usedNames auto-deleted by unique_ptr
@@ -1016,7 +1037,9 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                             if (!BuildScriptFile(script, type, sourcePath, sourceSupADS, targetPath,
                                                  targetPathState, targetSupADS, targetIsFAT32, NULL,
                                                  s + 1, NULL, size, NULL, mapName, attrs, NULL, TRUE,
-                                                 NULL, srcAndTgtPathsFlags, wideNameOnly, mapNameW))
+                                                 NULL, srcAndTgtPathsFlags, wideNameOnly,
+                                                 itemSourcePathWPtr, mapNameW,
+                                                 targetDirWithBackslashW.c_str()))
                             {
                                 SetCurrentDirectoryToSystem();
                                 return FALSE; // usedNames auto-deleted by unique_ptr
@@ -1065,7 +1088,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     return TRUE;
 }
 
-void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data)
+void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targetPathW, CCopyMoveData* data)
 {
     CALL_STACK_MESSAGE3("CFilesWindow::DropCopyMove(%d, %s, )", copy, targetPath);
     if (!FilesActionInProgress)
@@ -1105,7 +1128,7 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
 
             HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
 
-            BOOL res = BuildScriptMain2(script, copy, targetPath, data);
+            BOOL res = BuildScriptMain2(script, copy, targetPath, targetPathW, data);
 
             // swapped so the main window can be activated (must not be disabled), otherwise it switches to another app
             EnableWindow(MainWindow->HWindow, TRUE);
@@ -1185,7 +1208,8 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                                    char* targetPath, char* mask, int selCount,
                                    int* selection, CFileData* oneFile,
                                    CAttrsData* attrsData, CChangeCaseData* chCaseData,
-                                   BOOL onlySize, CCriteriaData* filterCriteria)
+                                   BOOL onlySize, CCriteriaData* filterCriteria,
+                                   const wchar_t* targetPathW)
 {
     CALL_STACK_MESSAGE5("CFilesWindow::BuildScriptMain(, %d, %s, %s, %d, , , , , ,)",
                         type, targetPath, mask, selCount);
@@ -1284,6 +1308,8 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
 
     CPathBuffer sourcePath; // Heap-allocated for long path support
     strcpy(sourcePath, GetPath());
+    std::wstring sourcePathWide = sally::unicode::EffectivePanelPathW(GetPath(), GetPathW());
+    const wchar_t* sourcePathWArg = !sourcePathWide.empty() ? sourcePathWide.c_str() : NULL;
 
     BOOL sourceSupADS = FALSE;
     BOOL targetSupADS = FALSE;
@@ -1397,7 +1423,7 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                                         useName, useDOSName, attrsData, NULL, oneFile->Attr,
                                         chCaseData, TRUE, onlySize, fastDirectoryMove,
                                         filterCriteria, NULL, &oneFile->LastWrite,
-                                        srcAndTgtPathsFlags, useNameW))
+                                        srcAndTgtPathsFlags, sourcePathWArg, useNameW, targetPathW))
                     {
                         SetCurrentDirectoryToSystem();
                         return FALSE;
@@ -1469,7 +1495,8 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                                          targetPathState, targetSupADS, targetIsFAT32, mask,
                                          useName, useDOSName, oneFile->Size, attrsData, NULL,
                                          oneFile->Attr, chCaseData, onlySize, NULL,
-                                         srcAndTgtPathsFlags, useNameW))
+                                         srcAndTgtPathsFlags, useNameW,
+                                         sourcePathWArg, NULL, targetPathW))
                     {
                         SetCurrentDirectoryToSystem();
                         return FALSE;
@@ -1561,7 +1588,8 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                                   DWORD sourceDirAttr, CChangeCaseData* chCaseData, BOOL firstLevelDir,
                                   BOOL onlySize, BOOL fastDirectoryMove, CCriteriaData* filterCriteria,
                                   BOOL* canDelUpperDirAfterMove, FILETIME* sourceDirTime,
-                                  DWORD srcAndTgtPathsFlags, wchar_t* dirNameW)
+                                  DWORD srcAndTgtPathsFlags, const wchar_t* sourcePathW,
+                                  wchar_t* dirNameW, const wchar_t* targetPathW)
 {
     SLOW_CALL_STACK_MESSAGE16("CFilesWindow::BuildScriptDir(, %d, %s, %d, %s, %d, %d, %d, %s, %s, , , %s, 0x%X, , %d, %d, %d, , , , 0x%X)",
                               type, sourcePath, sourcePathSupADS, targetPath,
@@ -1571,6 +1599,10 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
     CPathBuffer text;
     CPathBuffer finalName;                                      // +200 is a reserve (Windows creates paths longer than MAX_PATH)
     BOOL sourcePathIsNet = (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) != 0; // valid only for atCopy and atMove
+    const std::wstring effectiveSourcePathW = (sourcePathW != NULL && sourcePathW[0] != L'\0') ? std::wstring(sourcePathW) : std::wstring();
+    const std::wstring effectiveTargetPathW = (targetPathW != NULL && targetPathW[0] != L'\0') ? std::wstring(targetPathW) : std::wstring();
+    const std::wstring effectiveDirNameW = (dirNameW != NULL) ? std::wstring(dirNameW) : AnsiToWide(dirName != NULL ? dirName : "");
+    std::wstring currentSourcePathW;
 
     script->DirsCount++;
     COperation op;
@@ -1608,6 +1640,20 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
     while (*s != 0)
         *st++ = *s++;
     *st = 0;
+    if (!effectiveSourcePathW.empty())
+        currentSourcePathW = sally::unicode::BuildPanelChildPathW(effectiveSourcePathW, dirName, dirNameW);
+    auto setCurrentDirSourceNameW = [&](COperation& operation) {
+        if (!currentSourcePathW.empty())
+        {
+            operation.SetSourceNameW(currentSourcePathW, std::wstring());
+            return;
+        }
+        if (!effectiveDirNameW.empty())
+        {
+            std::string parentSourcePath(sourcePath, sourceEnd - sourcePath);
+            operation.SetSourceNameW(parentSourcePath.c_str(), effectiveDirNameW);
+        }
+    };
     //---  build the path to targetDirName
     char* targetEnd = NULL;
     BOOL checkNewDirName = FALSE;
@@ -1748,6 +1794,12 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                     op.SourceName = NULL;
                     goto _ERROR;
                 }
+                if (!currentSourcePathW.empty() || dirNameW != NULL)
+                {
+                    setCurrentDirSourceNameW(op);
+                    if (!effectiveTargetPathW.empty())
+                        op.SetTargetNameW(effectiveTargetPathW, effectiveDirNameW);
+                }
                 *sourceEnd = 0; // restoring sourcePath
                 *targetEnd = 0; // restoring targetPath
                 script->Add(op);
@@ -1820,6 +1872,12 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                             free(op.SourceName);
                             op.SourceName = NULL;
                             goto _ERROR;
+                        }
+                        if (!currentSourcePathW.empty() || dirNameW != NULL)
+                        {
+                            setCurrentDirSourceNameW(op);
+                            if (!effectiveTargetPathW.empty())
+                                op.SetTargetNameW(effectiveTargetPathW, effectiveDirNameW);
                         }
                         createDirIndex = script->Add(op);
                         if (!script->IsGood())
@@ -1968,6 +2026,12 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                 op.SourceName = NULL;
                 goto _ERROR;
             }
+            if (!currentSourcePathW.empty() || dirNameW != NULL)
+            {
+                setCurrentDirSourceNameW(op);
+                if (!effectiveTargetPathW.empty())
+                    op.SetTargetNameW(effectiveTargetPathW, effectiveDirNameW);
+            }
             createDirIndex = script->Add(op);
             if (!script->IsGood())
             {
@@ -2079,7 +2143,18 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
     {
         WIN32_FIND_DATAW f;
         strcpy(st, "\\*");
-        HANDLE search = SalFindFirstFileHW(sourcePath, &f);
+        std::wstring searchPathW;
+        HANDLE search;
+        if (!currentSourcePathW.empty())
+        {
+            searchPathW = currentSourcePathW;
+            if (!sally::unicode::HasTrailingSlashW(searchPathW))
+                searchPathW += L'\\';
+            searchPathW += L"*";
+            search = SalFindFirstFileWideH(searchPathW.c_str(), &f);
+        }
+        else
+            search = SalFindFirstFileHW(sourcePath, &f);
         *st = 0; // remove "\\*"
         if (search == INVALID_HANDLE_VALUE)
         {
@@ -2187,7 +2262,9 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                                         cAltNameA[0] != 0 ? cAltNameA : NULL,
                                         attrsData, NULL, f.dwFileAttributes, chCaseData, FALSE,
                                         onlySize, fastDirectoryMove, filterCriteria, &canDelDirAfterMove,
-                                        &f.ftLastWriteTime, srcAndTgtPathsFlags, f.cFileName))
+                                        &f.ftLastWriteTime, srcAndTgtPathsFlags,
+                                        !currentSourcePathW.empty() ? currentSourcePathW.c_str() : NULL,
+                                        f.cFileName))
                     {
                     BUILD_ERROR:
                         HANDLES(FindClose(search));
@@ -2207,7 +2284,8 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                                              cAltNameA[0] != 0 ? cAltNameA : NULL,
                                              CQuadWord(f.nFileSizeLow, f.nFileSizeHigh), attrsData, NULL,
                                              f.dwFileAttributes, chCaseData, onlySize, &f.ftLastWriteTime,
-                                             srcAndTgtPathsFlags, f.cFileName))
+                                             srcAndTgtPathsFlags, f.cFileName,
+                                             !currentSourcePathW.empty() ? currentSourcePathW.c_str() : NULL))
                             goto BUILD_ERROR;
                     }
                     else
@@ -2270,11 +2348,20 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
         BOOL sameName = strcmp(op.SourceName + offset, op.TargetName + offset) == 0;
         if (!sameName)
         {
-            if (dirNameW != NULL)
+            if (!currentSourcePathW.empty() || dirNameW != NULL)
             {
-                op.SetSourceNameW(sourcePath, dirNameW);
-                std::wstring alteredW = AlterFileNameW(dirNameW, chCaseData->FileNameFormat, chCaseData->Change, TRUE);
-                op.SetTargetNameW(sourcePath, alteredW);
+                setCurrentDirSourceNameW(op);
+                std::wstring alteredW = AlterFileNameW(effectiveDirNameW.c_str(), chCaseData->FileNameFormat, chCaseData->Change, TRUE);
+                if (!currentSourcePathW.empty())
+                {
+                    std::wstring parentSourcePathW = effectiveSourcePathW;
+                    op.SetTargetNameW(parentSourcePathW, alteredW);
+                }
+                else
+                {
+                    std::string parentSourcePath(sourcePath, sourceEnd - sourcePath);
+                    op.SetTargetNameW(parentSourcePath.c_str(), alteredW);
+                }
             }
             script->Add(op);
         }
@@ -2361,8 +2448,8 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
             if (!skipTooLongSrcNameErr)
             {
                 op.TargetName = NULL;
-                if (dirNameW != NULL)
-                    op.SetSourceNameW(sourcePath, dirNameW);
+                if (!currentSourcePathW.empty() || dirNameW != NULL)
+                    setCurrentDirSourceNameW(op);
                 script->Add(op);
                 if (!script->IsGood())
                 {
@@ -2455,7 +2542,9 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
                                    CAttrsData* attrsData, char* mapName, DWORD sourceFileAttr,
                                    CChangeCaseData* chCaseData, BOOL onlySize,
                                    FILETIME* fileLastWriteTime, DWORD srcAndTgtPathsFlags,
-                                   wchar_t* fileNameW, const wchar_t* mapNameW)
+                                   wchar_t* fileNameW, const wchar_t* sourcePathW,
+                                   const wchar_t* mapNameW,
+                                   const wchar_t* targetPathW)
 {
     SLOW_CALL_STACK_MESSAGE14("CFilesWindow::BuildScriptFile(, %d, %s, %d, %s, %d, %d, %d, %s, %s, , , , %s, 0x%X, , %d, , 0x%X)",
                               type, sourcePath, sourcePathSupADS, targetPath, targetPathState, targetPathSupADS,
@@ -2465,6 +2554,45 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
     CQuadWord fileSizeLoc = fileSize;
     CPathBuffer message;
     COperation op;
+    const std::wstring effectiveSourcePathW = (sourcePathW != NULL && sourcePathW[0] != L'\0')
+                                                  ? std::wstring(sourcePathW)
+                                                  : std::wstring();
+    const std::wstring effectiveTargetPathW = (targetPathW != NULL && targetPathW[0] != L'\0')
+                                                  ? std::wstring(targetPathW)
+                                                  : std::wstring();
+    // Only fall back to AnsiToWide when the ANSI mirror is round-trip clean
+    // (no '?' substitution chars). Otherwise the wide name would gain literal
+    // '?' characters and CreateFileW later fails with error 123 -- the exact
+    // symptom of the Unicode-leaf F5 bug. When refusing the fallback we leave
+    // effectiveFileNameW empty; the downstream gate at !effectiveFileNameW.empty()
+    // already skips SetSourceNameW in that case (op proceeds with SourceName only,
+    // SourceNameW is widened by PopulateWidePathsFromAnsi from the still-lossy
+    // ANSI, and the existing error path surfaces clearly).
+    const std::wstring effectiveFileNameW = [&]() -> std::wstring {
+        if (fileNameW != NULL)
+            return std::wstring(fileNameW);
+        if (fileName == NULL || fileName[0] == '\0')
+            return std::wstring();
+        if (strchr(fileName, '?') != NULL)
+            return std::wstring();
+        return AnsiToWide(fileName);
+    }();
+    auto setFileSourceNameW = [&](COperation& operation) {
+        if (effectiveFileNameW.empty())
+            return;
+        if (!effectiveSourcePathW.empty())
+            operation.SetSourceNameW(effectiveSourcePathW, effectiveFileNameW);
+        else
+            operation.SetSourceNameW(sourcePath, effectiveFileNameW);
+    };
+    auto setFileTargetNameW = [&](COperation& operation, const std::wstring& wideFileName) {
+        if (wideFileName.empty())
+            return;
+        if (!effectiveSourcePathW.empty())
+            operation.SetTargetNameW(effectiveSourcePathW, wideFileName);
+        else
+            operation.SetTargetNameW(sourcePath, wideFileName);
+    };
     switch (type)
     {
     case atCopy:
@@ -2533,17 +2661,30 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
             }
         }
 
-        // Set wide paths early (before ADS handling) if Unicode filename is provided
-        if (fileNameW != NULL)
+        // Set wide paths early whenever we have a usable wide directory path.
+        if (!effectiveFileNameW.empty())
         {
-            op.SetSourceNameW(sourcePath, fileNameW);
+            if (!effectiveSourcePathW.empty())
+                op.SetSourceNameW(effectiveSourcePathW, effectiveFileNameW);
+            else
+                op.SetSourceNameW(sourcePath, effectiveFileNameW);
             if (mapNameW != NULL && mapNameW[0] != L'\0')
-                op.SetTargetNameW(targetPath, mapNameW);
+            {
+                if (!effectiveTargetPathW.empty())
+                    op.SetTargetNameW(effectiveTargetPathW, mapNameW);
+                else
+                    op.SetTargetNameW(targetPath, mapNameW);
+            }
             else
             {
                 // For target, use the same wide filename if mask is NULL or "*.*"
                 if (mapName == NULL && (mask == NULL || strcmp(mask, "*.*") == 0))
-                    op.SetTargetNameW(targetPath, fileNameW);
+                {
+                    if (!effectiveTargetPathW.empty())
+                        op.SetTargetNameW(effectiveTargetPathW, effectiveFileNameW);
+                    else
+                        op.SetTargetNameW(targetPath, effectiveFileNameW);
+                }
             }
         }
 
@@ -2856,8 +2997,7 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
             return skip;
         }
         op.TargetName = NULL;
-        if (fileNameW != NULL)
-            op.SetSourceNameW(sourcePath, fileNameW);
+        setFileSourceNameW(op);
         script->Add(op);
         if (!script->IsGood())
         {
@@ -2885,14 +3025,20 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
         if (name[l - 1] != '\\')
             name[l++] = '\\';
         memmove(name + l, fileName, 1 + strlen(fileName)); // name is always < MAX_PATH
+        std::wstring nameW;
+        if (!effectiveSourcePathW.empty() && !effectiveFileNameW.empty())
+            nameW = sally::unicode::BuildPanelChildPathW(effectiveSourcePathW, fileName, fileNameW);
         CQuadWord s;
         DWORD err = NO_ERROR;
         if (FileBasedCompression && !onlySize &&                                         // if compression is even possible
             (sourceFileAttr & (FILE_ATTRIBUTE_COMPRESSED | FILE_ATTRIBUTE_SPARSE_FILE))) // if the file is compressed or sparse (sparse file)
         {
-            s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
+            if (!nameW.empty())
+                s.LoDWord = GetCompressedFileSizeW(nameW.c_str(), &s.HiDWord);
+            else
+                s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
             err = GetLastError();
-            if (err == ERROR_FILE_NOT_FOUND && fileDOSName != NULL && strcmp(fileName, fileDOSName) != 0)
+            if (nameW.empty() && err == ERROR_FILE_NOT_FOUND && fileDOSName != NULL && strcmp(fileName, fileDOSName) != 0)
             {                                                            // workaround for computing the size of a file that must be accessed via DOS-name when we cannot do it via the UNICODE name (the multibyte version of the name converted back to UNICODE doesn't match the original file name)
                 memmove(name + l, fileDOSName, 1 + strlen(fileDOSName)); // name is always < MAX_PATH
                 s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
@@ -2910,7 +3056,8 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
             if (!script->SkipAllCountSizeErrors)
             {
                 // TODO: Use wide format string when IDS_GETCOMPRFILESIZEERROR supports %ls
-                std::wstring nameW = AnsiToWide(name);
+                if (nameW.empty())
+                    nameW = AnsiToWide(name);
                 script->SkipAllCountSizeErrors =
                     gPrompter->AskYesNo(LoadStrW(IDS_ERRORTITLE),
                         (nameW + L": " + GetErrorTextW(err)).c_str()).type == PromptResult::kYes;
@@ -2965,8 +3112,7 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
             op.Size = fileSizeLoc;
         else
             op.Size = CONVERT_MIN_FILE_SIZE; // zero/small files take at least as long as files of size CONVERT_MIN_FILE_SIZE
-        if (fileNameW != NULL)
-            op.SetSourceNameW(sourcePath, fileNameW);
+        setFileSourceNameW(op);
         script->Add(op);
         if (!script->IsGood())
         {
@@ -2992,10 +3138,9 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
         {
             return skip;
         }
-        op.TargetName = (char*)(DWORD_PTR)((GetFileAttributesW(AnsiToWide(op.SourceName).c_str()) & attrsData->AttrAnd) | attrsData->AttrOr);
+        setFileSourceNameW(op);
+        op.TargetName = (char*)(DWORD_PTR)((op.GetSourceAttributes() & attrsData->AttrAnd) | attrsData->AttrOr);
         op.OwnsTargetName = false;  // TargetName stores attributes, not a pointer
-        if (fileNameW != NULL)
-            op.SetSourceNameW(sourcePath, fileNameW);
         script->Add(op);
         if (!script->IsGood())
         {
@@ -3033,11 +3178,11 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
         BOOL sameName = strcmp(op.SourceName + offset, op.TargetName + offset) == 0;
         if (!sameName)
         {
-            if (fileNameW != NULL)
+            setFileSourceNameW(op);
+            if (!effectiveFileNameW.empty())
             {
-                op.SetSourceNameW(sourcePath, fileNameW);
-                std::wstring alteredW = AlterFileNameW(fileNameW, chCaseData->FileNameFormat, chCaseData->Change, FALSE);
-                op.SetTargetNameW(sourcePath, alteredW);
+                std::wstring alteredW = AlterFileNameW(effectiveFileNameW.c_str(), chCaseData->FileNameFormat, chCaseData->Change, FALSE);
+                setFileTargetNameW(op, alteredW);
             }
             script->Add(op);
         }

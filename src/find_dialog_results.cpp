@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -6,7 +6,9 @@
 
 #include "menu.h"
 #include "ui/IPrompter.h"
+#include "common/unicode/ComboSyncPolicy.h"
 #include "common/unicode/helpers.h"
+#include "common/find/FindDialogSeed.h"
 #include "cfgdlg.h"
 #include "mainwnd.h"
 #include "plugins.h"
@@ -21,12 +23,940 @@
 #include "darkmode.h"
 
 #include <shlwapi.h>
+#include <uxtheme.h>
 
 const char* MINIMIZED_FINDING_CAPTION = "(%d) %s [%s %s]";
 const char* NORMAL_FINDING_CAPTION = "%s [%s %s]";
 
 BOOL FindManageInUse = FALSE;
 BOOL FindIgnoreInUse = FALSE;
+
+static const UINT_PTR FIND_COMBO_SKIN_SUBCLASS_ID = 1;
+static const UINT_PTR FIND_COMBO_EDIT_SKIN_SUBCLASS_ID = 2;
+static const UINT_PTR FIND_ADVANCED_TEXT_SKIN_SUBCLASS_ID = 3;
+static const UINT_PTR FIND_STATUS_SKIN_SUBCLASS_ID = 1;
+static const UINT WM_USER_FIND_DELAYED_THEME = WM_APP + 413;
+// Replace the "Look in" combo with a Unicode combo after the framework's
+// TransferData(ttDataToWindow) runs. The legacy Transfer path is ANSI and may
+// already have populated the combo with lossy text such as "zz??"; by posting
+// this work we can copy that history and then make the wide seed visible.
+static const UINT WM_USER_FIND_LOOKIN_W_OVERRIDE = WM_APP + 414;
+static const COLORREF FIND_DARK_LINE = RGB(55, 55, 58);
+static const COLORREF FIND_DARK_FRAME = RGB(62, 62, 66);
+static const COLORREF FIND_DARK_BUTTON = RGB(52, 52, 56);
+static const COLORREF FIND_DARK_SECTION_LINE = RGB(82, 82, 86);
+
+struct CFindComboSkinState
+{
+    LONG_PTR ComboStyle;
+    LONG_PTR ComboExStyle;
+    LONG_PTR EditStyle;
+    LONG_PTR EditExStyle;
+    HWND HEdit;
+    BOOL EditStyleKnown;
+    BOOL EditExStyleKnown;
+    BOOL ApplyingTheme;
+    BOOL ThemeKnown;
+    BOOL LastUseDark;
+};
+
+struct CFindAdvancedTextSkinState
+{
+    LONG_PTR Style;
+    LONG_PTR ExStyle;
+};
+
+static LRESULT CALLBACK FindComboSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+static LRESULT CALLBACK FindComboEditSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+static LRESULT CALLBACK FindAdvancedTextSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+static LRESULT CALLBACK FindStatusSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+static void ApplyFindComboEditSkin(HWND hEdit, BOOL useDark);
+
+static void CopyWideLookInToAnsiMirror(const std::wstring& textW, CPathBuffer& textA)
+{
+    int bufferSize = (int)textA.Size();
+    if (bufferSize <= 0)
+        return;
+
+    BOOL usedDefaultChar = FALSE;
+    int copied = WideCharToMultiByte(CP_ACP, 0, textW.c_str(), -1,
+                                     textA.Get(), bufferSize, "?", &usedDefaultChar);
+    if (copied <= 0)
+        textA[0] = 0;
+    textA[bufferSize - 1] = 0;
+}
+
+static BOOL IsFindLookInFocus(HWND hFocus, HWND hCombo)
+{
+    if (hFocus == NULL || hCombo == NULL)
+        return FALSE;
+    if (hFocus == hCombo)
+        return TRUE;
+
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    return GetComboBoxInfo(hCombo, &cbi) && hFocus == cbi.hwndItem;
+}
+
+static void EscapeFindLookInPathSeparatorsW(std::wstring& text)
+{
+    for (size_t pos = 0; pos < text.length(); pos++)
+    {
+        if (text[pos] == L';')
+        {
+            text.insert(pos, 1, L';');
+            pos++;
+        }
+    }
+}
+
+static void ReplaceFindLookInSelectionW(CUnicodeNameInputController& input,
+                                        const std::wstring& replacement,
+                                        DWORD start, DWORD end)
+{
+    std::wstring text = input.GetText();
+    size_t startPos = start;
+    size_t endPos = end;
+    if (startPos > text.length())
+        startPos = text.length();
+    if (endPos > text.length())
+        endPos = text.length();
+    if (endPos < startPos)
+        endPos = startPos;
+
+    std::wstring insert = replacement;
+    EscapeFindLookInPathSeparatorsW(insert);
+
+    if (startPos > 0)
+    {
+        size_t leftIndex = startPos - 1;
+        size_t scan = leftIndex;
+        while (scan < text.length() && text[scan] == L';')
+        {
+            if (scan == 0)
+            {
+                scan = text.length();
+                break;
+            }
+            scan--;
+        }
+        size_t semicolonCount = (scan == text.length()) ? leftIndex + 1 : leftIndex - scan;
+        if ((semicolonCount & 1) == 0)
+            insert.insert(0, L"; ");
+    }
+    if (endPos < text.length() &&
+        (text[endPos] != L';' || endPos + 1 < text.length() && text[endPos + 1] == L';'))
+    {
+        insert.append(L"; ");
+    }
+
+    text.replace(startPos, endPos - startPos, insert);
+    input.SetText(text);
+
+    DWORD caret = (DWORD)(startPos + insert.length());
+    SendMessage(input.GetControlHandle(), CB_SETEDITSEL, 0, MAKELPARAM(caret, caret));
+    SetFocus(input.GetControlHandle());
+}
+
+static int CompareFindTextW(const std::wstring& left, const std::wstring& right)
+{
+    if (Configuration.SortDetectNumbers)
+        return StrCmpLogicalW(left.c_str(), right.c_str());
+    if (Configuration.SortUsesLocale)
+    {
+        int ret = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE,
+                                 left.c_str(), -1, right.c_str(), -1);
+        if (ret != 0)
+            return ret - CSTR_EQUAL;
+    }
+    return _wcsicmp(left.c_str(), right.c_str());
+}
+
+static BOOL FindTextMatchesW(const std::wstring& text, const wchar_t* pattern, BOOL partial)
+{
+    if (pattern == NULL)
+        return FALSE;
+
+    if (!partial)
+        return CompareFindTextW(text, pattern) == 0;
+
+    size_t patternLen = wcslen(pattern);
+    if (patternLen == 0)
+        return TRUE;
+    if (text.length() < patternLen)
+        return FALSE;
+
+    int ret = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE,
+                             text.c_str(), (int)patternLen, pattern, (int)patternLen);
+    if (ret != 0)
+        return ret == CSTR_EQUAL;
+    return _wcsnicmp(text.c_str(), pattern, patternLen) == 0;
+}
+
+static int FindListItemByNameW(CFoundFilesListView* listView, int startIndex, UINT flags, const wchar_t* pattern)
+{
+    int ret = -1;
+    if ((flags & LVFI_STRING) == 0 && (flags & LVFI_PARTIAL) == 0)
+        return ret;
+
+    // The control normally sends LVFI_STRING only, so keep the historical
+    // prefix-search behavior while comparing against the wide item name.
+    BOOL partial = TRUE;
+    int count = listView->GetCount();
+    if (startIndex < 0)
+        startIndex = 0;
+    if (startIndex > count)
+        startIndex = count;
+    int i;
+    for (i = startIndex; i < count; i++)
+    {
+        const CFoundFilesData* item = listView->At(i);
+        if (FindTextMatchesW(item->NameW, pattern, partial))
+            return i;
+    }
+
+    if (flags & LVFI_WRAP)
+    {
+        for (i = 0; i < startIndex; i++)
+        {
+            const CFoundFilesData* item = listView->At(i);
+            if (FindTextMatchesW(item->NameW, pattern, partial))
+                return i;
+        }
+    }
+    return ret;
+}
+
+static void RedrawFindResultItem(HWND hListView, int itemIndex)
+{
+    if (hListView == NULL || itemIndex < 0 || itemIndex >= ListView_GetItemCount(hListView))
+        return;
+
+    ListView_RedrawItems(hListView, itemIndex, itemIndex);
+
+    RECT itemRect;
+    if (ListView_GetItemRect(hListView, itemIndex, &itemRect, LVIR_BOUNDS))
+        InvalidateRect(hListView, &itemRect, TRUE);
+}
+
+static void FindFillRectSolid(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldColor = SetDCBrushColor(hdc, color);
+    FillRect(hdc, rect, (HBRUSH)GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+}
+
+static void FindDrawRectOutline(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    COLORREF oldColor = SetDCPenColor(hdc, color);
+    Rectangle(hdc, rect->left, rect->top, rect->right, rect->bottom);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static void FindDrawComboArrow(HDC hdc, const RECT* rect, COLORREF color)
+{
+    int centerX = (rect->left + rect->right) / 2;
+    int centerY = (rect->top + rect->bottom) / 2;
+    POINT arrow[3] = {
+        {centerX - 3, centerY - 1},
+        {centerX + 4, centerY - 1},
+        {centerX, centerY + 3},
+    };
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldPenColor = SetDCPenColor(hdc, color);
+    COLORREF oldBrushColor = SetDCBrushColor(hdc, color);
+    Polygon(hdc, arrow, 3);
+    SetDCBrushColor(hdc, oldBrushColor);
+    SetDCPenColor(hdc, oldPenColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static BOOL GetChildRectInParent(HWND hParent, HWND hChild, RECT* rect)
+{
+    if (hParent == NULL || hChild == NULL || rect == NULL || !IsWindow(hParent) || !IsWindow(hChild))
+        return FALSE;
+
+    if (!GetWindowRect(hChild, rect))
+        return FALSE;
+    MapWindowPoints(NULL, hParent, (POINT*)rect, 2);
+    return TRUE;
+}
+
+static BOOL GetFindChildRectInDialog(HWND hDialog, int ctrlID, RECT* rect)
+{
+    HWND hChild = GetDlgItem(hDialog, ctrlID);
+    return GetChildRectInParent(hDialog, hChild, rect);
+}
+
+static void SetFindWindowExStyle(HWND hwnd, LONG_PTR exStyle)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) == exStyle)
+        return;
+
+    SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static void SetFindWindowStyle(HWND hwnd, LONG_PTR style)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    if (GetWindowLongPtr(hwnd, GWL_STYLE) == style)
+        return;
+
+    SetWindowLongPtr(hwnd, GWL_STYLE, style);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static void UpdateFindComboSkin(HWND hCombo, CFindComboSkinState* state)
+{
+    if (hCombo == NULL || state == NULL || !IsWindow(hCombo))
+        return;
+
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    GetComboBoxInfo(hCombo, &cbi);
+
+    BOOL editChanged = cbi.hwndItem != NULL && cbi.hwndItem != state->HEdit;
+    if (editChanged)
+    {
+        state->HEdit = cbi.hwndItem;
+        state->EditStyle = GetWindowLongPtr(cbi.hwndItem, GWL_STYLE);
+        state->EditExStyle = GetWindowLongPtr(cbi.hwndItem, GWL_EXSTYLE);
+        state->EditStyleKnown = TRUE;
+        state->EditExStyleKnown = TRUE;
+    }
+
+    DarkModeColors colors;
+    BOOL useDark = DarkMode_GetColors(&colors);
+    LONG_PTR darkStyleMask = WS_BORDER;
+    LONG_PTR darkEdgeMask = WS_EX_CLIENTEDGE | WS_EX_STATICEDGE;
+    SetFindWindowStyle(hCombo, useDark ? (state->ComboStyle & ~darkStyleMask) : state->ComboStyle);
+    SetFindWindowExStyle(hCombo, useDark ? (state->ComboExStyle & ~darkEdgeMask) : state->ComboExStyle);
+
+    if (state->HEdit != NULL && state->EditStyleKnown && IsWindow(state->HEdit))
+        SetFindWindowStyle(state->HEdit, useDark ? (state->EditStyle & ~darkStyleMask) : state->EditStyle);
+    if (state->HEdit != NULL && state->EditExStyleKnown && IsWindow(state->HEdit))
+        SetFindWindowExStyle(state->HEdit, useDark ? (state->EditExStyle & ~darkEdgeMask) : state->EditExStyle);
+
+    if (!state->ApplyingTheme &&
+        (!state->ThemeKnown || state->LastUseDark != useDark || editChanged))
+    {
+        state->ApplyingTheme = TRUE;
+        SetWindowTheme(hCombo, useDark ? L"" : NULL, NULL);
+        ApplyFindComboEditSkin(state->HEdit, useDark);
+        if (cbi.hwndList != NULL && IsWindow(cbi.hwndList))
+            SetWindowTheme(cbi.hwndList, useDark ? L"DarkMode_Explorer" : NULL, NULL);
+        state->ThemeKnown = TRUE;
+        state->LastUseDark = useDark;
+        state->ApplyingTheme = FALSE;
+    }
+
+    RedrawWindow(hCombo, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+static void ApplyFindComboSkin(HWND hCombo)
+{
+    if (hCombo == NULL || !IsWindow(hCombo))
+        return;
+
+    DWORD_PTR data = 0;
+    CFindComboSkinState* state = NULL;
+    if (GetWindowSubclass(hCombo, FindComboSkinSubclassProc, FIND_COMBO_SKIN_SUBCLASS_ID, &data))
+        state = (CFindComboSkinState*)data;
+    else
+    {
+        state = new CFindComboSkinState;
+        if (state == NULL)
+            return;
+        state->ComboStyle = GetWindowLongPtr(hCombo, GWL_STYLE);
+        state->ComboExStyle = GetWindowLongPtr(hCombo, GWL_EXSTYLE);
+        state->EditStyle = 0;
+        state->EditExStyle = 0;
+        state->HEdit = NULL;
+        state->EditStyleKnown = FALSE;
+        state->EditExStyleKnown = FALSE;
+        state->ApplyingTheme = FALSE;
+        state->ThemeKnown = FALSE;
+        state->LastUseDark = FALSE;
+        if (!SetWindowSubclass(hCombo, FindComboSkinSubclassProc, FIND_COMBO_SKIN_SUBCLASS_ID, (DWORD_PTR)state))
+        {
+            delete state;
+            return;
+        }
+    }
+
+    UpdateFindComboSkin(hCombo, state);
+}
+
+static void ApplyFindComboSkins(HWND hDialog)
+{
+    int comboIDs[] = {IDC_FIND_NAMED, IDC_FIND_LOOKIN, IDC_FIND_CONTAINING};
+    for (int i = 0; i < _countof(comboIDs); i++)
+        ApplyFindComboSkin(GetDlgItem(hDialog, comboIDs[i]));
+}
+
+static void ApplyFindSeparatorLines(HWND hDialog)
+{
+    int lineIDs[] = {IDC_FIND_LINE1, IDC_FIND_LINE2};
+    BOOL useDark = DarkMode_ShouldUseDark();
+    for (int i = 0; i < _countof(lineIDs); i++)
+    {
+        HWND hLine = GetDlgItem(hDialog, lineIDs[i]);
+        if (hLine != NULL && IsWindow(hLine))
+            ShowWindow(hLine, useDark ? SW_HIDE : SW_SHOWNA);
+    }
+}
+
+static BOOL PaintFindDialogSeparatorLines(HWND hDialog, HDC paintDC)
+{
+    if (!DarkMode_ShouldUseDark())
+        return FALSE;
+
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = GetDC(hDialog);
+    if (hdc == NULL)
+        return FALSE;
+
+    int lineIDs[] = {IDC_FIND_LINE1, IDC_FIND_LINE2};
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldColor = SetDCPenColor(hdc, FIND_DARK_SECTION_LINE);
+    for (int i = 0; i < _countof(lineIDs); i++)
+    {
+        RECT rect;
+        if (!GetFindChildRectInDialog(hDialog, lineIDs[i], &rect))
+            continue;
+        int y = max(rect.top, min(rect.bottom - 1, (rect.top + rect.bottom) / 2));
+        MoveToEx(hdc, rect.left, y, NULL);
+        LineTo(hdc, rect.right, y);
+    }
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldPen);
+
+    if (paintDC == NULL)
+        ReleaseDC(hDialog, hdc);
+    return TRUE;
+}
+
+static BOOL PaintFindDarkCombo(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    if (client.right <= client.left || client.bottom <= client.top)
+        return TRUE;
+
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    GetComboBoxInfo(hwnd, &cbi);
+
+    RECT editRect;
+    BOOL haveEditRect = GetChildRectInParent(hwnd, cbi.hwndItem, &editRect);
+
+    int savedDC = SaveDC(paintDC);
+    if (haveEditRect)
+        ExcludeClipRect(paintDC, editRect.left, editRect.top, editRect.right, editRect.bottom);
+
+    FindFillRectSolid(paintDC, &client, colors.InputBackground);
+
+    int buttonWidth = max(GetSystemMetrics(SM_CXVSCROLL), client.bottom - client.top);
+    RECT button = client;
+    button.left = max(client.left + 1, client.right - buttonWidth - 1);
+    button.top = client.top + 1;
+    button.right = client.right - 1;
+    button.bottom = client.bottom - 1;
+    if (button.right > button.left && button.bottom > button.top)
+    {
+        FindFillRectSolid(paintDC, &button, FIND_DARK_BUTTON);
+        HGDIOBJ oldPen = SelectObject(paintDC, GetStockObject(DC_PEN));
+        COLORREF oldPenColor = SetDCPenColor(paintDC, FIND_DARK_LINE);
+        MoveToEx(paintDC, button.left, button.top, NULL);
+        LineTo(paintDC, button.left, button.bottom);
+        SetDCPenColor(paintDC, oldPenColor);
+        SelectObject(paintDC, oldPen);
+        FindDrawComboArrow(paintDC, &button, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+    }
+
+    RestoreDC(paintDC, savedDC);
+    FindDrawRectOutline(paintDC, &client, FIND_DARK_FRAME);
+    return TRUE;
+}
+
+static void PaintFindDarkComboFrame(HWND hwnd)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return;
+
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+
+    RECT rect;
+    GetWindowRect(hwnd, &rect);
+    OffsetRect(&rect, -rect.left, -rect.top);
+    FindDrawRectOutline(hdc, &rect, FIND_DARK_FRAME);
+    ReleaseDC(hwnd, hdc);
+}
+
+static void PaintFindDarkComboEditFrame(HWND hwnd)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return;
+
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+
+    RECT window;
+    GetWindowRect(hwnd, &window);
+    OffsetRect(&window, -window.left, -window.top);
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    MapWindowPoints(hwnd, NULL, (POINT*)&client, 2);
+    RECT screenWindow;
+    GetWindowRect(hwnd, &screenWindow);
+    OffsetRect(&client, -screenWindow.left, -screenWindow.top);
+
+    int savedDC = SaveDC(hdc);
+    ExcludeClipRect(hdc, client.left, client.top, client.right, client.bottom);
+    FindFillRectSolid(hdc, &window, colors.InputBackground);
+    RestoreDC(hdc, savedDC);
+
+    FindDrawRectOutline(hdc, &window, FIND_DARK_FRAME);
+    ReleaseDC(hwnd, hdc);
+}
+
+static void ApplyFindComboEditSkin(HWND hEdit, BOOL useDark)
+{
+    if (hEdit == NULL || !IsWindow(hEdit))
+        return;
+
+    SetWindowSubclass(hEdit, FindComboEditSkinSubclassProc, FIND_COMBO_EDIT_SKIN_SUBCLASS_ID, 0);
+    SetWindowTheme(hEdit, useDark ? L"" : NULL, NULL);
+    RedrawWindow(hEdit, NULL, NULL, RDW_INVALIDATE | RDW_FRAME);
+}
+
+static LRESULT CALLBACK FindComboEditSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PaintFindDarkComboEditFrame(hwnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (DarkMode_ShouldUseDark())
+            PaintFindDarkComboEditFrame(hwnd);
+        return ret;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        DarkModeColors colors;
+        if (DarkMode_GetColors(&colors))
+        {
+            RECT client;
+            GetClientRect(hwnd, &client);
+            FindFillRectSolid((HDC)wParam, &client, colors.InputBackground);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    case WM_ENABLE:
+    case WM_SIZE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, FindComboEditSkinSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+static LRESULT CALLBACK FindComboSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    CFindComboSkinState* state = (CFindComboSkinState*)dwRefData;
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PaintFindDarkComboFrame(hwnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PAINTSTRUCT ps;
+            HDC hdc = HANDLES(BeginPaint(hwnd, &ps));
+            if (hdc != NULL)
+                PaintFindDarkCombo(hwnd, hdc);
+            HANDLES(EndPaint(hwnd, &ps));
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintFindDarkCombo(hwnd, (HDC)wParam))
+            return 0;
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (DarkMode_ShouldUseDark())
+            return TRUE;
+        break;
+    }
+
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    {
+        HBRUSH hBrush = DarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (LRESULT)hBrush;
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    case WM_ENABLE:
+    case WM_SIZE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (state != NULL && !state->ApplyingTheme)
+            UpdateFindComboSkin(hwnd, state);
+        else
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, FindComboSkinSubclassProc, uIdSubclass);
+        delete state;
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+static LRESULT CALLBACK FindAdvancedTextSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    CFindAdvancedTextSkinState* state = (CFindAdvancedTextSkinState*)dwRefData;
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PaintFindDarkComboEditFrame(hwnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (DarkMode_ShouldUseDark())
+            PaintFindDarkComboEditFrame(hwnd);
+        return ret;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        DarkModeColors colors;
+        if (DarkMode_GetColors(&colors))
+        {
+            RECT client;
+            GetClientRect(hwnd, &client);
+            FindFillRectSolid((HDC)wParam, &client, colors.InputBackground);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_ENABLE:
+    case WM_SETTEXT:
+    case WM_SIZE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, FindAdvancedTextSkinSubclassProc, uIdSubclass);
+        delete state;
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+static void ApplyFindAdvancedTextSkin(HWND hDialog)
+{
+    HWND hEdit = GetDlgItem(hDialog, IDC_FIND_ADVANCED_TEXT);
+    if (hEdit == NULL || !IsWindow(hEdit))
+        return;
+
+    DWORD_PTR data = 0;
+    CFindAdvancedTextSkinState* state = NULL;
+    if (GetWindowSubclass(hEdit, FindAdvancedTextSkinSubclassProc, FIND_ADVANCED_TEXT_SKIN_SUBCLASS_ID, &data))
+        state = (CFindAdvancedTextSkinState*)data;
+    else
+    {
+        state = new CFindAdvancedTextSkinState;
+        if (state == NULL)
+            return;
+        state->Style = GetWindowLongPtr(hEdit, GWL_STYLE);
+        state->ExStyle = GetWindowLongPtr(hEdit, GWL_EXSTYLE);
+        if (!SetWindowSubclass(hEdit, FindAdvancedTextSkinSubclassProc, FIND_ADVANCED_TEXT_SKIN_SUBCLASS_ID, (DWORD_PTR)state))
+        {
+            delete state;
+            return;
+        }
+    }
+
+    BOOL useDark = DarkMode_ShouldUseDark();
+    SetFindWindowStyle(hEdit, useDark ? (state->Style & ~WS_BORDER) : state->Style);
+    SetFindWindowExStyle(hEdit, useDark ? (state->ExStyle & ~(WS_EX_CLIENTEDGE | WS_EX_STATICEDGE)) : state->ExStyle);
+    SetWindowTheme(hEdit, useDark ? L"" : NULL, NULL);
+    RedrawWindow(hEdit, NULL, NULL, RDW_INVALIDATE | RDW_FRAME);
+}
+
+static void DrawFindStatusSizeGrip(HDC hdc, const RECT* client)
+{
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldColor = SetDCPenColor(hdc, FIND_DARK_LINE);
+    int right = client->right - 4;
+    int bottom = client->bottom - 4;
+    for (int i = 0; i < 3; i++)
+    {
+        int offset = i * 4;
+        MoveToEx(hdc, right - offset - 8, bottom, NULL);
+        LineTo(hdc, right, bottom - offset - 8);
+    }
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldPen);
+}
+
+static BOOL PaintFindDarkStatusBar(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = HANDLES(BeginPaint(hwnd, &ps));
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    FindFillRectSolid(hdc, &client, colors.DialogBackground);
+
+    HFONT hFont = (HFONT)SendMessage(hwnd, WM_GETFONT, 0, 0);
+    HFONT hOldFont = NULL;
+    if (hFont != NULL)
+        hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+    COLORREF oldTextColor = SetTextColor(hdc, colors.DialogText);
+
+    int partCount = (int)SendMessage(hwnd, SB_GETPARTS, 0, 0);
+    if (partCount <= 0)
+        partCount = 1;
+
+    for (int i = 0; i < partCount; i++)
+    {
+        RECT part = client;
+        if (partCount > 1)
+            SendMessage(hwnd, SB_GETRECT, i, (LPARAM)&part);
+        part.left += 4;
+        part.right -= 4;
+        if (part.right <= part.left)
+            continue;
+
+        char text[1024] = {0};
+        DWORD textInfo = (DWORD)SendMessage(hwnd, SB_GETTEXT, i, (LPARAM)text);
+        if ((HIWORD(textInfo) & SBT_OWNERDRAW) != 0)
+        {
+            DRAWITEMSTRUCT di = {0};
+            di.CtlType = ODT_STATIC;
+            di.CtlID = IDC_FIND_STATUS;
+            di.itemID = i;
+            di.itemAction = ODA_DRAWENTIRE;
+            di.hwndItem = hwnd;
+            di.hDC = hdc;
+            di.rcItem = part;
+            SendMessage(GetParent(hwnd), WM_DRAWITEM, IDC_FIND_STATUS, (LPARAM)&di);
+        }
+        else if (text[0] != 0)
+        {
+            DrawText(hdc, text, -1, &part, DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_PATH_ELLIPSIS);
+        }
+    }
+
+    if ((GetWindowLongPtr(hwnd, GWL_STYLE) & SBARS_SIZEGRIP) != 0)
+        DrawFindStatusSizeGrip(hdc, &client);
+
+    SetTextColor(hdc, oldTextColor);
+    SetBkMode(hdc, oldBkMode);
+    if (hOldFont != NULL)
+        SelectObject(hdc, hOldFont);
+
+    if (paintDC == NULL)
+        HANDLES(EndPaint(hwnd, &ps));
+    return TRUE;
+}
+
+static void PaintFindDarkStatusFrame(HWND hwnd)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return;
+
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+
+    RECT rect;
+    GetWindowRect(hwnd, &rect);
+    OffsetRect(&rect, -rect.left, -rect.top);
+    FindFillRectSolid(hdc, &rect, colors.DialogBackground);
+    ReleaseDC(hwnd, hdc);
+}
+
+static LRESULT CALLBACK FindStatusSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintFindDarkStatusBar(hwnd, NULL))
+            return 0;
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintFindDarkStatusBar(hwnd, (HDC)wParam))
+            return 0;
+        break;
+    }
+
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PaintFindDarkStatusFrame(hwnd);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (DarkMode_ShouldUseDark())
+            return TRUE;
+        break;
+    }
+
+    case SB_SETTEXTA:
+    case SB_SETTEXTW:
+    case SB_SETPARTS:
+    case WM_SIZE:
+    case WM_ENABLE:
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (DarkMode_ShouldUseDark())
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, FindStatusSkinSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
 
 static void ApplyFindResultsListColors(HWND hDialog)
 {
@@ -40,11 +970,46 @@ static void ApplyFindResultsListColors(HWND hDialog)
         return;
     }
 
+    SetWindowTheme(hListView, L"Explorer", NULL);
+    HWND hHeader = ListView_GetHeader(hListView);
+    if (hHeader != NULL)
+        SetWindowTheme(hHeader, L"Explorer", NULL);
+
     COLORREF bgColor = GetSysColor(COLOR_WINDOW);
     ListView_SetBkColor(hListView, bgColor);
     ListView_SetTextBkColor(hListView, bgColor);
     ListView_SetTextColor(hListView, GetSysColor(COLOR_WINDOWTEXT));
+    if (hHeader != NULL)
+        InvalidateRect(hHeader, NULL, TRUE);
     InvalidateRect(hListView, NULL, TRUE);
+}
+
+static void ApplyFindStatusBarColors(HWND hStatusBar)
+{
+    if (hStatusBar == NULL || !IsWindow(hStatusBar))
+        return;
+
+    DarkModeColors colors;
+    BOOL useDark = DarkMode_GetColors(&colors);
+    SetWindowSubclass(hStatusBar, FindStatusSkinSubclassProc, FIND_STATUS_SKIN_SUBCLASS_ID, 0);
+    SetWindowTheme(hStatusBar, useDark ? L"" : NULL, NULL);
+    SendMessage(hStatusBar, SB_SETBKCOLOR, 0, useDark ? colors.DialogBackground : CLR_DEFAULT);
+    RedrawWindow(hStatusBar, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+static void ApplyFindDialogTheme(HWND hDialog, HWND hStatusBar)
+{
+    if (hDialog == NULL || !IsWindow(hDialog))
+        return;
+
+    DarkMode_ApplyTitleBar(hDialog);
+    DarkMode_ApplyListTreeThemeRecursive(hDialog);
+    ApplyFindComboSkins(hDialog);
+    ApplyFindSeparatorLines(hDialog);
+    ApplyFindAdvancedTextSkin(hDialog);
+    ApplyFindResultsListColors(hDialog);
+    ApplyFindStatusBarColors(hStatusBar);
+    RedrawWindow(hDialog, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 //****************************************************************************
@@ -95,10 +1060,18 @@ void CFindOptions::InitMenu(CMenuPopup* popup, BOOL enabled, int originalCount)
 BOOL CFoundFilesData::Set(const char* path, const char* name, const CQuadWord& size, DWORD attr,
                           const FILETIME* lastWrite, BOOL isDir)
 {
+    return Set(path, name, NULL, NULL, size, attr, lastWrite, isDir);
+}
+
+BOOL CFoundFilesData::Set(const char* path, const char* name, const wchar_t* pathW, const wchar_t* nameW,
+                          const CQuadWord& size, DWORD attr, const FILETIME* lastWrite, BOOL isDir)
+{
     CALL_STACK_MESSAGE_NONE
     //  CALL_STACK_MESSAGE5("CFoundFilesData::Set(%s, %s, %g, 0x%X, )", path, name, size.GetDouble(), attr);
     Path = path;
     Name = name;
+    PathW = pathW != NULL && pathW[0] != L'\0' ? pathW : AnsiToWide(path);
+    NameW = nameW != NULL && nameW[0] != L'\0' ? nameW : AnsiToWide(name);
     Size = size;
     Attr = attr;
     LastWrite = *lastWrite;
@@ -167,6 +1140,90 @@ char* CFoundFilesData::GetText(int i, char* text, int fileNameFormat)
     }
     }
     return text;
+}
+
+std::wstring CFoundFilesData::GetNameTextW(int fileNameFormat) const
+{
+    return AlterFileNameW(NameW.c_str(), fileNameFormat, 0, IsDir != 0);
+}
+
+std::wstring CFoundFilesData::GetFullNameW() const
+{
+    std::wstring fullName = PathW;
+    if (!fullName.empty() && fullName[fullName.length() - 1] != L'\\')
+        fullName += L'\\';
+    fullName += NameW;
+    return fullName;
+}
+
+std::wstring CFoundFilesData::GetFullNameTextW(int fileNameFormat) const
+{
+    std::wstring fullName = PathW;
+    if (!fullName.empty() && fullName[fullName.length() - 1] != L'\\')
+        fullName += L'\\';
+    fullName += GetNameTextW(fileNameFormat);
+    return fullName;
+}
+
+std::wstring CFoundFilesData::GetTextW(int i, int fileNameFormat) const
+{
+    switch (i)
+    {
+    case 0:
+        return GetNameTextW(fileNameFormat);
+
+    case 1:
+        return PathW;
+
+    case 2:
+    {
+        if (IsDir)
+            return AnsiToWide(DirColumnStr.c_str());
+
+        char number[50];
+        NumberToStr(number, Size);
+        return AnsiToWide(number);
+    }
+
+    case 3:
+    {
+        wchar_t buffer[100];
+        SYSTEMTIME st;
+        FILETIME ft;
+        if (FileTimeToLocalFileTime(&LastWrite, &ft) &&
+            FileTimeToSystemTime(&ft, &st))
+        {
+            if (GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, buffer, _countof(buffer)) == 0)
+                swprintf_s(buffer, L"%u.%u.%u", st.wDay, st.wMonth, st.wYear);
+        }
+        else
+            wcscpy_s(buffer, LoadStrW(IDS_INVALID_DATEORTIME));
+        return buffer;
+    }
+
+    case 4:
+    {
+        wchar_t buffer[100];
+        SYSTEMTIME st;
+        FILETIME ft;
+        if (FileTimeToLocalFileTime(&LastWrite, &ft) &&
+            FileTimeToSystemTime(&ft, &st))
+        {
+            if (GetTimeFormatW(LOCALE_USER_DEFAULT, 0, &st, NULL, buffer, _countof(buffer)) == 0)
+                swprintf_s(buffer, L"%u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
+        }
+        else
+            wcscpy_s(buffer, LoadStrW(IDS_INVALID_DATEORTIME));
+        return buffer;
+    }
+
+    default:
+    {
+        char attrs[20];
+        GetAttrsString(attrs, Attr);
+        return AnsiToWide(attrs);
+    }
+    }
 }
 
 //****************************************************************************
@@ -368,16 +1425,8 @@ void CFoundFilesListView::CheckAndRemoveSelectedItems(BOOL forceRemove, int last
             BOOL remove = forceRemove;
             if (!forceRemove)
             {
-                CPathBuffer fullPath; // Heap-allocated for long path support
-                int pathLen = lstrlen(ptr->Path.c_str());
-                memmove(fullPath.Get(), ptr->Path.c_str(), pathLen + 1);
-                if (ptr->Path.c_str()[pathLen - 1] != '\\')
-                {
-                    fullPath[pathLen] = '\\';
-                    fullPath[pathLen + 1] = '\0';
-                }
-                lstrcat(fullPath, ptr->Name.c_str());
-                remove = (GetFileAttributesW(AnsiToWide(fullPath).c_str()) == -1);
+                std::wstring fullPath = ptr->GetFullNameW();
+                remove = (GetFileAttributesW(fullPath.c_str()) == INVALID_FILE_ATTRIBUTES);
             }
             if (remove)
             {
@@ -404,8 +1453,8 @@ void CFoundFilesListView::CheckAndRemoveSelectedItems(BOOL forceRemove, int last
                 {
                     CFoundFilesData* ptr = Data[i];
                     if (lastFocusedItem != NULL &&
-                        !lastFocusedItem->Name.empty() && strcmp(ptr->Name.c_str(), lastFocusedItem->Name.c_str()) == 0 &&
-                        !lastFocusedItem->Path.empty() && strcmp(ptr->Path.c_str(), lastFocusedItem->Path.c_str()) == 0)
+                        !lastFocusedItem->NameW.empty() && CompareFindTextW(ptr->NameW, lastFocusedItem->NameW) == 0 &&
+                        !lastFocusedItem->PathW.empty() && CompareFindTextW(ptr->PathW, lastFocusedItem->PathW) == 0)
                     {
                         selectIndex = i;
                         break;
@@ -630,14 +1679,13 @@ int CFoundFilesListView::CompareFunc(CFoundFilesData* f1, CFoundFilesData* f2, i
             {
             case 0:
             {
-                res = RegSetStrICmp(f1->Name.c_str(), f2->Name.c_str());
+                res = CompareFindTextW(f1->NameW, f2->NameW);
                 break;
             }
 
             case 1:
             {
-                res = RegSetStrICmp(f1->Path.c_str(), f2->Path.c_str());
-                break;
+                res = CompareFindTextW(f1->PathW, f2->PathW);
                 break;
             }
 
@@ -751,7 +1799,7 @@ int CFoundFilesListView::CompareDuplicatesFunc(CFoundFilesData* f1, CFoundFilesD
     if (byName)
     {
         // by name
-        res = RegSetStrICmp(f1->Name.c_str(), f2->Name.c_str());
+        res = CompareFindTextW(f1->NameW, f2->NameW);
         if (res == 0)
         {
             // by size
@@ -787,7 +1835,7 @@ int CFoundFilesListView::CompareDuplicatesFunc(CFoundFilesData* f1, CFoundFilesD
             if (f1->Size == f2->Size)
             {
                 // by name
-                res = RegSetStrICmp(f1->Name.c_str(), f2->Name.c_str());
+                res = CompareFindTextW(f1->NameW, f2->NameW);
                 if (res == 0)
                 {
                     // by group
@@ -807,7 +1855,7 @@ int CFoundFilesListView::CompareDuplicatesFunc(CFoundFilesData* f1, CFoundFilesD
         }
     }
     if (res == 0)
-        res = RegSetStrICmp(f1->Path.c_str(), f2->Path.c_str());
+        res = CompareFindTextW(f1->PathW, f2->PathW);
     return res;
 }
 
@@ -1315,10 +2363,18 @@ BOOL CFoundFilesListView::InitColumns()
 // CFindDialog
 //
 
-CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath)
+CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath, const wchar_t* initPathW)
     : CCommonDialog(HLanguage, IDD_FIND, NULL, ooStandard, hCenterAgainst),
       SearchForData(50, 10)
 {
+#ifndef _UNICODE
+    // Open as a Unicode dialog so the dialog template parses W and child
+    // controls are registered Unicode. Without this, CDialog::Execute uses
+    // DialogBoxParam (ANSI) and the Look-in replacement combo starts life
+    // behind an ANSI dialog boundary.
+    UnicodeWnd = TRUE;
+#endif
+
     // data needed to lay out the dialog
     FirstWMSize = TRUE;
     VMargin = 0;
@@ -1365,7 +2421,14 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath)
     ZeroOnDestroy = NULL;
     OleInitialized = FALSE;
     ProcessingEscape = FALSE;
+#ifndef _UNICODE
+    // Keep the legacy edit subclass Unicode-capable for the fallback path.
+    // The non-CP_ACP Look-in case now uses CUnicodeNameInputController so it
+    // does not depend on this subclass for visible Unicode text.
+    EditLine = new CComboboxEdit(TRUE);
+#else
     EditLine = new CComboboxEdit();
+#endif
     OKButton = NULL;
 
     FileNameFormat = Configuration.FileNameFormat;
@@ -1387,6 +2450,14 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath)
         }
 
     // data for controls
+    //
+    // The seed is stashed (not consumed here) so the deferred
+    // WM_USER_FIND_LOOKIN_W_OVERRIDE handler can decide whether to enable the
+    // Unicode edit control. We deliberately do NOT plant the wide form into
+    // LookInTextW from the constructor: LookInTextW is authoritative only
+    // when the Unicode control is enabled, and the override handler is the
+    // sole site that flips both states together.
+    InitialLookInSeed = sally::find::BuildLookInSeed(initPath, initPathW);
     if (Data.NamedText[0] == 0)
         lstrcpy(Data.NamedText, "*.*");
     if (Data.LookInText[0] == 0)
@@ -1622,6 +2693,8 @@ void CFindDialog::LayoutControls()
         HANDLES(EndDeferWindowPos(hdwp));
     }
     SetTwoStatusParts(TwoParts);
+    ApplyFindComboSkins(HWindow);
+    ApplyFindStatusBarColors(HStatusBar);
 }
 
 void CFindDialog::SetContentVisible(BOOL visible)
@@ -1717,7 +2790,10 @@ void CFindDialog::Validate(CTransferInfo& ti)
 
         if (ti.IsGood())
         {
-            SendMessage(hLookInWnd, WM_GETTEXT, Data.LookInText.Size(), (LPARAM)Data.LookInText.Get());
+            if (LookInUnicodeInput.IsEnabled())
+                CopyWideLookInToAnsiMirror(LookInUnicodeInput.GetText(), Data.LookInText);
+            else
+                SendMessage(hLookInWnd, WM_GETTEXT, Data.LookInText.Size(), (LPARAM)Data.LookInText.Get());
 
             BuildSerchForData();
             if (SearchForData.Count == 0)
@@ -1737,8 +2813,35 @@ void CFindDialog::Transfer(CTransferInfo& ti)
 {
     HistoryComboBox(HWindow, ti, IDC_FIND_NAMED, Data.NamedText, Data.NamedText.Size(),
                     FALSE, FIND_NAMED_HISTORY_SIZE, FindNamedHistory);
-    HistoryComboBox(HWindow, ti, IDC_FIND_LOOKIN, Data.LookInText, Data.LookInText.Size(),
-                    FALSE, FIND_LOOKIN_HISTORY_SIZE, FindLookInHistory);
+    if (LookInUnicodeInput.IsEnabled())
+    {
+        if (ti.Type == ttDataToWindow)
+        {
+            SendMessage(LookInUnicodeInput.GetControlHandle(), CB_LIMITTEXT,
+                        Data.LookInText.Size() - 1, 0);
+            LookInUnicodeInput.SetText(LookInTextW.empty()
+                                           ? AnsiToWide(Data.LookInText.Get())
+                                           : LookInTextW);
+        }
+        else
+        {
+            LookInTextW = LookInUnicodeInput.GetText();
+            CopyWideLookInToAnsiMirror(LookInTextW, Data.LookInText);
+            if (ti.IsGood() && Data.LookInText[0] != 0)
+                AddValueToStdHistoryValues(FindLookInHistory, FIND_LOOKIN_HISTORY_SIZE,
+                                           Data.LookInText.Get(), FALSE);
+        }
+    }
+    else
+    {
+        HistoryComboBox(HWindow, ti, IDC_FIND_LOOKIN, Data.LookInText, Data.LookInText.Size(),
+                        FALSE, FIND_LOOKIN_HISTORY_SIZE, FindLookInHistory);
+        // When the Unicode edit control is not active, the wide cache must
+        // not outlive its authoritative window: drop it on the way out so
+        // any unguarded future reader cannot pick up a stale seed.
+        if (ti.Type == ttDataFromWindow)
+            LookInTextW.clear();
+    }
 
     ti.CheckBox(IDC_FIND_INCLUDE_SUBDIR, Data.SubDirectories);
     HistoryComboBox(HWindow, ti, IDC_FIND_CONTAINING, Data.GrepText, GREP_TEXT_LEN,
@@ -1763,12 +2866,26 @@ void CFindDialog::LoadControls(int index)
 {
     CALL_STACK_MESSAGE2("CFindDialog::LoadControls(0x%X)", index);
     Data = *FindOptions.At(index);
+    BOOL keepCurrentLookIn = Data.LookInText[0] == 0;
 
     // if any edit line is empty, keep its previous value
     if (Data.NamedText[0] == 0)
         GetDlgItemText(HWindow, IDC_FIND_NAMED, Data.NamedText, Data.NamedText.Size());
-    if (Data.LookInText[0] == 0)
-        GetDlgItemText(HWindow, IDC_FIND_LOOKIN, Data.LookInText, Data.LookInText.Size());
+    if (keepCurrentLookIn)
+    {
+        if (LookInUnicodeInput.IsEnabled())
+        {
+            LookInTextW = LookInUnicodeInput.GetText();
+            CopyWideLookInToAnsiMirror(LookInTextW, Data.LookInText);
+        }
+        else
+        {
+            GetDlgItemText(HWindow, IDC_FIND_LOOKIN, Data.LookInText, Data.LookInText.Size());
+            LookInTextW.clear();
+        }
+    }
+    else
+        LookInTextW.clear();
     if (Data.GrepText[0] == 0)
         GetDlgItemText(HWindow, IDC_FIND_CONTAINING, Data.GrepText, GREP_TEXT_LEN);
 
@@ -1853,68 +2970,42 @@ void CFindDialog::BuildSerchForData()
 
     SearchForData.DestroyMembers();
 
-    CPathBuffer path; // Heap-allocated for long path support
-    lstrcpy(path, Data.LookInText);
-    begin = path;
-    do
+    // LookInTextW is authoritative only while the Unicode edit control is
+    // active. When that control is disabled, the ANSI combo (Data.LookInText,
+    // just refreshed from the control by Validate via WM_GETTEXT) is the
+    // source of truth; consulting LookInTextW here would prefer the
+    // constructor-seeded panel path over the user's edited target.
+    std::wstring lookInTextW;
+    if (LookInUnicodeInput.IsEnabled())
     {
-        end = begin;
-        while (*end != 0)
-        {
-            if (*end == ';')
-            {
-                if (*(end + 1) != ';')
-                    break;
-                else
-                    memmove(end, end + 1, strlen(end + 1) + 1); // shift left (";;" -> ";")
-            }
-            end++;
-        }
-        char* tmp = end - 1;
-        if (*end == ';')
-        {
-            *end = 0;
-            end++;
-        }
-        // while (*end == ';') end++;   // always false because ";;" -> ";" and it's a regular character, not a separator
+        lookInTextW = LookInUnicodeInput.GetText();
+        LookInTextW = lookInTextW;
+    }
+    else
+        lookInTextW = AnsiToWide(Data.LookInText.Get());
 
-        // remove spaces before the path
-        while (*begin == ' ')
-            begin++;
-        // remove spaces after the path
-        if (tmp > begin)
-        {
-            while (tmp > begin && *tmp <= ' ')
-                tmp--;
-            *(tmp + 1) = 0; // there might already be '\0'; otherwise add it
-        }
-        // remove redundant slashes/backslashes at the end of the path (keep at most one)
-        if (tmp > begin)
-        {
-            while (tmp > begin && (*tmp == '/' || *tmp == '\\'))
-                tmp--;
-            if (*(tmp + 1) == '/' || *(tmp + 1) == '\\')
-                tmp++;      // leave one
-            *(tmp + 1) = 0; // there might already be '\0'; otherwise add it
-        }
+    std::vector<std::wstring> paths = sally::find::SplitLookInPathsW(lookInTextW);
+    for (size_t i = 0; i < paths.size(); i++)
+    {
+        if (paths[i].empty())
+            continue;
 
-        if (*begin != 0)
+        std::string pathA = WideToAnsi(paths[i]);
+        if (pathA.empty())
+            pathA = "?";
+
+        CSearchForData* item = new CSearchForData(pathA.c_str(), paths[i].c_str(), named, Data.SubDirectories);
+        if (item != NULL)
         {
-            CSearchForData* item = new CSearchForData(begin, named, Data.SubDirectories);
-            if (item != NULL)
+            SearchForData.Add(item);
+            if (!SearchForData.IsGood())
             {
-                SearchForData.Add(item);
-                if (!SearchForData.IsGood())
-                {
-                    SearchForData.ResetState();
-                    delete item;
-                    return;
-                }
+                SearchForData.ResetState();
+                delete item;
+                return;
             }
         }
-        if (*end != 0)
-            begin = end;
-    } while (*end != 0);
+    }
 }
 
 void CFindDialog::StartSearch(WORD command)
@@ -2326,11 +3417,14 @@ void CFindDialog::UpdateListViewItems()
                                 LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
         // for the first added data, select the first item
         if (GrepData.FoundVisibleCount == 0 && count > 0)
+        {
             ListView_SetItemState(FoundFilesListView->HWindow, 0,
                                   LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED)
+            RedrawFindResultItem(FoundFilesListView->HWindow, 0);
+        }
 
-                // write the number of items above the list view
-                TBHeader->SetFoundCount(count);
+        // write the number of items above the list view
+        TBHeader->SetFoundCount(count);
         TBHeader->SetErrorsInfosCount(Log.GetErrorCount(), Log.GetInfoCount());
 
         // when minimized, display the item count in the title
@@ -2698,41 +3792,37 @@ void CFindDialog::OnCopyNameToClipboard(CCopyNameToClipboardModeEnum mode)
     if (index < 0)
         return;
     CFoundFilesData* data = FoundFilesListView->At(index);
-    CPathBuffer buff;
-    buff[0] = 0;
+    std::wstring textW;
     switch (mode)
     {
     case cntcmFullName:
     {
-        lstrcpyn(buff, data->Path.c_str(), buff.Size());
-        int len = (int)strlen(buff);
-        if (len > 0 && buff[len - 1] != '\\')
-            strcat(buff, "\\");
-        AlterFileName(buff + strlen(buff), data->Name.c_str(), -1, FileNameFormat, 0, data->IsDir);
+        textW = data->GetFullNameTextW(FileNameFormat);
         break;
     }
 
     case cntcmName:
     {
-        AlterFileName(buff, data->Name.c_str(), -1, FileNameFormat, 0, data->IsDir);
+        textW = data->GetNameTextW(FileNameFormat);
         break;
     }
 
     case cntcmFullPath:
     {
-        lstrcpyn(buff, data->Path.c_str(), buff.Size());
+        textW = data->PathW;
         break;
     }
 
     case cntcmUNCName:
     {
+        CPathBuffer buff;
         AlterFileName(buff, data->Name.c_str(), -1, FileNameFormat, 0, data->IsDir);
         CopyUNCPathToClipboard(data->Path.c_str(), buff, data->IsDir, HWindow);
-        break;
+        return;
     }
     }
     if (mode != cntcmUNCName)
-        CopyTextToClipboard(buff);
+        CopyTextToClipboardW(textW.c_str());
 }
 
 BOOL CFindDialog::IsMenuBarMessage(CONST MSG* lpMsg)
@@ -2884,6 +3974,20 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     SLOW_CALL_STACK_MESSAGE4("CFindDialog::DialogProc(0x%X, 0x%IX, 0x%IX)", uMsg, wParam, lParam);
     switch (uMsg)
     {
+    case WM_PAINT:
+    {
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+        PaintFindDialogSeparatorLines(HWindow, NULL);
+        return ret;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+        PaintFindDialogSeparatorLines(HWindow, (HDC)wParam);
+        return ret;
+    }
+
     case WM_INITDIALOG:
     {
         FindDialogQueue.Add(new CWindowQueueItem(HWindow));
@@ -2918,6 +4022,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         // construct the list view
         FoundFilesListView = new CFoundFilesListView(HWindow, IDC_FIND_RESULTS, this);
+        ListView_SetUnicodeFormat(FoundFilesListView->HWindow, TRUE);
 
         SetFullRowSelect(Configuration.FindFullRowSelect);
 
@@ -2976,7 +4081,6 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         LayoutControls();
         FoundFilesListView->InitColumns();
         SetContentVisible(Configuration.SearchFileContent);
-        ApplyFindResultsListColors(HWindow);
 
         // remove WS_TABSTOP from IDC_FIND_ADVANCED_TEXT
         DWORD style = (DWORD)GetWindowLongPtr(GetDlgItem(HWindow, IDC_FIND_ADVANCED_TEXT), GWL_STYLE);
@@ -3007,6 +4111,10 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         ShowWindow(GetDlgItem(HWindow, IDC_FIND_INCLUDE_ARCHIVES), FALSE);
 
         EnableControls();
+        ApplyFindDialogTheme(HWindow, HStatusBar);
+        PostMessage(HWindow, WM_USER_FIND_DELAYED_THEME, 0, 0);
+        // Defer the wide "Look in" override past the framework's ANSI Transfer.
+        PostMessage(HWindow, WM_USER_FIND_LOOKIN_W_OVERRIDE, 0, 0);
         break;
     }
 
@@ -3047,6 +4155,50 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_USER_COLORCHANGEFIND:
     {
         OnColorsChange();
+        ApplyFindDialogTheme(HWindow, HStatusBar);
+        return TRUE;
+    }
+
+    case WM_USER_FIND_DELAYED_THEME:
+    {
+        ApplyFindDialogTheme(HWindow, HStatusBar);
+        return TRUE;
+    }
+
+    case WM_USER_FIND_LOOKIN_W_OVERRIDE:
+    {
+        // Replace the ANSI-rendered "Look in" combo when the round-trip
+        // predicate says the Transfer-populated text is lossy. ASCII-only
+        // paths skip the replacement; the dialog renders exactly as before.
+        //
+        // Only fire when the current ANSI text still matches the seed we
+        // captured at construction. If AutoLoad or LoadControls swapped in a
+        // different preset, the user implicitly chose that preset's text and
+        // we must not override it with the panel's wide form. This mirrors
+        // the gating the constructor used to do before LookInTextW was made
+        // a strictly-IsEnabled-coupled cache.
+        if (InitialLookInSeed.ansi != Data.LookInText.Get())
+            return TRUE;
+        const sally::find::LookInSeed& seed = InitialLookInSeed;
+        if (sally::find::ShouldOverrideEditWithWide(seed))
+        {
+            HWND hLegacyCombo = GetDlgItem(HWindow, IDC_FIND_LOOKIN);
+            HWND hFocus = GetFocus();
+            BOOL focusWasLookIn = IsFindLookInFocus(hFocus, hLegacyCombo);
+            if (LookInUnicodeInput.EnableForCombo(HWindow, IDC_FIND_LOOKIN, seed.wide,
+                                                  NULL, 0, Data.LookInText.Size(), -1))
+            {
+                ApplyFindComboSkin(LookInUnicodeInput.GetControlHandle());
+                if (!focusWasLookIn && hFocus != NULL && IsWindow(hFocus))
+                    SetFocus(hFocus);
+                // Plant the wide cache only now that the Unicode control is
+                // live: the cache must be authoritative iff the control is
+                // active, so the two are populated in the same step.
+                LookInTextW = seed.wide;
+            }
+            else
+                SetDlgItemTextW(HWindow, IDC_FIND_LOOKIN, seed.wide.c_str());
+        }
         return TRUE;
     }
 
@@ -3068,7 +4220,14 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_USER_CLEARHISTORY:
     {
         ClearComboboxListbox(GetDlgItem(HWindow, IDC_FIND_NAMED));
-        ClearComboboxListbox(GetDlgItem(HWindow, IDC_FIND_LOOKIN));
+        if (LookInUnicodeInput.IsEnabled())
+        {
+            std::wstring lookInText = LookInUnicodeInput.GetText();
+            SendMessageW(LookInUnicodeInput.GetControlHandle(), CB_RESETCONTENT, 0, 0);
+            LookInUnicodeInput.SetText(lookInText);
+        }
+        else
+            ClearComboboxListbox(GetDlgItem(HWindow, IDC_FIND_LOOKIN));
         ClearComboboxListbox(GetDlgItem(HWindow, IDC_FIND_CONTAINING));
         return TRUE;
     }
@@ -3265,6 +4424,16 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         if (FoundFilesListView != NULL && ListView_GetEditControl(FoundFilesListView->HWindow) != NULL)
             return 0; // the list view sends some commands while editing
+        if (LOWORD(wParam) == IDC_FIND_LOOKIN && LookInUnicodeInput.IsEnabled())
+        {
+            HWND hCombo = (HWND)lParam;
+            if (hCombo == LookInUnicodeInput.GetControlHandle())
+            {
+                BOOL isDropdownOpen = (BOOL)SendMessage(hCombo, CB_GETDROPPEDSTATE, 0, 0);
+                if (sally::unicode::ShouldSyncUnicodeComboSelection(HIWORD(wParam), isDropdownOpen))
+                    LookInUnicodeInput.SyncSelectionToEdit();
+            }
+        }
         if (LOWORD(wParam) >= CM_FIND_OPTIONS_FIRST && LOWORD(wParam) <= CM_FIND_OPTIONS_LAST)
         {
             LoadControls(LOWORD(wParam) - CM_FIND_OPTIONS_FIRST);
@@ -3547,6 +4716,33 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                 if (cmd == 1)
                 {
                     // Browse...
+                    if (LookInUnicodeInput.IsEnabled())
+                    {
+                        HWND hCombo = LookInUnicodeInput.GetControlHandle();
+                        std::wstring current = LookInUnicodeInput.GetText();
+                        DWORD start = 0;
+                        DWORD end = 0;
+                        SendMessage(hCombo, CB_GETEDITSEL, (WPARAM)&start, (LPARAM)&end);
+
+                        std::wstring pathW;
+                        size_t startPos = start;
+                        size_t endPos = end;
+                        if (startPos > current.length())
+                            startPos = current.length();
+                        if (endPos > current.length())
+                            endPos = current.length();
+                        if (endPos > startPos)
+                            pathW.assign(current, startPos, endPos - startPos);
+
+                        if (GetTargetDirectoryW(HWindow, HWindow, LoadStrW(IDS_CHANGE_DIRECTORY),
+                                                LoadStrW(IDS_BROWSECHANGEDIRTEXT), pathW, FALSE, pathW.c_str()))
+                        {
+                            ReplaceFindLookInSelectionW(LookInUnicodeInput, pathW, start, end);
+                            LookInTextW = LookInUnicodeInput.GetText();
+                        }
+                        return TRUE;
+                    }
+
                     CPathBuffer path;
                     char buff[1024];
                     DWORD start, end;
@@ -3595,7 +4791,14 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                     return TRUE;
                 }
                 if (cmd == 3 || cmd == 4)
-                    InsertDrives(EditLine->HWindow, cmd == 4); // local drives (3) || all drives (4)
+                {
+                    HWND hLookIn = LookInUnicodeInput.IsEnabled()
+                                       ? LookInUnicodeInput.GetControlHandle()
+                                       : EditLine->HWindow;
+                    InsertDrives(hLookIn, cmd == 4); // local drives (3) || all drives (4)
+                    if (LookInUnicodeInput.IsEnabled())
+                        LookInTextW = LookInUnicodeInput.GetText();
+                }
             }
             return 0;
         }
@@ -3815,6 +5018,13 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
         if (wParam == IDC_FIND_STATUS)
         {
             DRAWITEMSTRUCT* di = (DRAWITEMSTRUCT*)lParam;
+            DarkModeColors colors;
+            BOOL useDark = DarkMode_GetColors(&colors);
+            if (useDark)
+            {
+                FindFillRectSolid(di->hDC, &di->rcItem, colors.DialogBackground);
+                SetTextColor(di->hDC, colors.DialogText);
+            }
             int prevBkMode = SetBkMode(di->hDC, TRANSPARENT);
             CPathBuffer buff;
             SearchingText.Get(buff, buff.Size());
@@ -3859,6 +5069,19 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
     case WM_NOTIFY:
     {
+        if (wParam == IDC_FIND_STATUS && ((LPNMHDR)lParam)->code == NM_CUSTOMDRAW)
+        {
+            LPNMCUSTOMDRAW cd = (LPNMCUSTOMDRAW)lParam;
+            DarkModeColors colors;
+            if (cd->dwDrawStage == CDDS_PREPAINT && DarkMode_GetColors(&colors))
+            {
+                SetTextColor(cd->hdc, colors.DialogText);
+                SetBkColor(cd->hdc, colors.DialogBackground);
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_DODEFAULT);
+                return TRUE;
+            }
+        }
+
         if (wParam == IDC_FIND_RESULTS)
         {
             switch (((LPNMHDR)lParam)->code)
@@ -3907,116 +5130,163 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
                 if (cd->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
                 {
-                    // request notification of CDDS_ITEMPREPAINT | CDDS_SUBITEM
+                    // Ask for subitem notifications: the Name/icon column stays
+                    // native, while the Path column gets upstream-style compaction.
                     SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_NOTIFYSUBITEMDRAW);
                     return TRUE;
                 }
 
                 if (cd->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM))
                 {
-                    CFoundFilesData* item = FoundFilesListView->At((int)cd->nmcd.dwItemSpec);
+                    int itemIndex = (int)cd->nmcd.dwItemSpec;
+                    CFoundFilesData* item = FoundFilesListView->At(itemIndex);
+                    if (item == NULL)
+                    {
+                        SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_DODEFAULT);
+                        return TRUE;
+                    }
 
-                    // we'd like to draw the Path column ourselves (with ellipsis for paths)
+                    BOOL selected = (ListView_GetItemState(FoundFilesListView->HWindow, itemIndex, LVIS_SELECTED) & LVIS_SELECTED) != 0;
+                    BOOL duplicate = GrepData.FindDuplicates && item->Different == 1;
+
+                    // Draw only the Path column ourselves, just like upstream.
+                    // This keeps the Name/icon column's focus and selection UX native.
                     if (cd->iSubItem == 1)
                     {
                         HDC hDC = cd->nmcd.hdc;
 
-                        // if the cache DC does not exist yet, try to create it
                         if (CacheBitmap == NULL)
                         {
                             CacheBitmap = new CBitmap();
-                            if (CacheBitmap != NULL)
-                                CacheBitmap->CreateBmp(hDC, 1, 1);
+                            if (CacheBitmap != NULL && !CacheBitmap->CreateBmp(hDC, 1, 1))
+                            {
+                                delete CacheBitmap;
+                                CacheBitmap = NULL;
+                            }
                         }
                         if (CacheBitmap == NULL)
-                            break; // out of memory; let the list view draw it; we're done
+                        {
+                            SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_DODEFAULT);
+                            return TRUE;
+                        }
 
-                        RECT r; // rectangle around the sub item
-                        ListView_GetSubItemRect(FoundFilesListView->HWindow, cd->nmcd.dwItemSpec, cd->iSubItem, LVIR_BOUNDS, &r);
-                        RECT r2; // rectangle same size as r but shifted to origin
+                        RECT r;
+                        if (!ListView_GetSubItemRect(FoundFilesListView->HWindow, itemIndex, cd->iSubItem, LVIR_BOUNDS, &r))
+                        {
+                            SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_DODEFAULT);
+                            return TRUE;
+                        }
+
+                        RECT r2;
                         r2.left = 0;
                         r2.top = 0;
                         r2.right = r.right - r.left;
                         r2.bottom = r.bottom - r.top;
 
-                        // enlarge the cache bitmap if necessary
-                        if (CacheBitmap->NeedEnlarge(r2.right, r2.bottom))
-                            CacheBitmap->Enlarge(r2.right, r2.bottom);
-
-                        // fill the background with the default color
-                        DarkModeColors colors;
-                        DarkMode_GetColors(&colors);
-                        COLORREF bkColor = (GrepData.FindDuplicates && item->Different == 1) ? colors.InactiveSelection : colors.InputBackground;
-                        COLORREF textColor = colors.InputText;
-
-                        if (Configuration.FindFullRowSelect)
+                        if (CacheBitmap->NeedEnlarge(r2.right, r2.bottom) && !CacheBitmap->Enlarge(r2.right, r2.bottom))
                         {
-                            if (ListView_GetItemState(FoundFilesListView->HWindow, cd->nmcd.dwItemSpec, LVIS_SELECTED) & LVIS_SELECTED)
+                            SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_DODEFAULT);
+                            return TRUE;
+                        }
+
+                        DarkModeColors colors;
+                        BOOL useDark = DarkMode_GetColors(&colors);
+                        COLORREF bkColor = useDark ? (duplicate ? colors.InactiveSelection : colors.InputBackground)
+                                                   : GetSysColor(duplicate ? COLOR_3DFACE : COLOR_WINDOW);
+                        COLORREF textColor = useDark ? colors.InputText : GetSysColor(COLOR_WINDOWTEXT);
+
+                        if (Configuration.FindFullRowSelect && selected)
+                        {
+                            if (GetFocus() == FoundFilesListView->HWindow)
                             {
-                                if (GetFocus() == FoundFilesListView->HWindow)
-                                {
-                                    bkColor = colors.Highlight;
-                                    textColor = colors.HighlightText;
-                                }
-                                else
+                                bkColor = useDark ? colors.Highlight : GetSysColor(COLOR_HIGHLIGHT);
+                                textColor = useDark ? colors.HighlightText : GetSysColor(COLOR_HIGHLIGHTTEXT);
+                            }
+                            else
+                            {
+                                if (useDark)
                                 {
                                     if (colors.InactiveSelection != colors.InputBackground)
                                         bkColor = colors.InactiveSelection;
                                     else
                                     {
-                                        // for high contrast color schemes
                                         bkColor = colors.Highlight;
                                         textColor = colors.HighlightText;
+                                    }
+                                }
+                                else
+                                {
+                                    if (GetSysColor(COLOR_3DFACE) != GetSysColor(COLOR_WINDOW))
+                                        bkColor = GetSysColor(COLOR_3DFACE);
+                                    else
+                                    {
+                                        // high-contrast color schemes may not distinguish 3DFACE
+                                        bkColor = GetSysColor(COLOR_HIGHLIGHT);
+                                        textColor = GetSysColor(COLOR_HIGHLIGHTTEXT);
                                     }
                                 }
                             }
                         }
 
-                        SetBkColor(CacheBitmap->HMemDC, bkColor);
-                        ExtTextOut(CacheBitmap->HMemDC, 0, 0, ETO_OPAQUE, &r2, "", 0, NULL);
-                        SetBkMode(CacheBitmap->HMemDC, TRANSPARENT);
+                        COLORREF oldBkColor = SetBkColor(CacheBitmap->HMemDC, bkColor);
+                        int oldBkMode = SetBkMode(CacheBitmap->HMemDC, TRANSPARENT);
+                        ExtTextOutW(CacheBitmap->HMemDC, 0, 0, ETO_OPAQUE, &r2, L"", 0, NULL);
 
-                        // draw the text with path shortening
                         r2.left += 5;
                         r2.right -= 5;
-                        CFoundFilesData* item2 = FoundFilesListView->At((int)cd->nmcd.dwItemSpec);
-                        SelectObject(CacheBitmap->HMemDC, (HFONT)SendMessage(FoundFilesListView->HWindow, WM_GETFONT, 0, 0));
-                        int oldTextColor = SetTextColor(CacheBitmap->HMemDC, textColor);
 
-                        // DT_PATH_ELLIPSIS doesn't work on some strings and causing clipped text to be printed
-                        // PathCompactPath() requires a copy in a local buffer but doesn't clip text
-                        CPathBuffer buff;
-                        strncpy_s(buff, buff.Size(), item2->Path.c_str(), _TRUNCATE);
-                        PathCompactPath(CacheBitmap->HMemDC, buff, r2.right - r2.left);
-                        DrawText(CacheBitmap->HMemDC, buff, -1, &r2,
-                                 DT_VCENTER | DT_LEFT | DT_NOPREFIX | DT_SINGLELINE);
-                        //                DrawText(CacheBitmap->HMemDC, item2->Path, -1, &r2,
-                        //                         DT_VCENTER | DT_LEFT | DT_NOPREFIX | DT_SINGLELINE | DT_PATH_ELLIPSIS);
+                        HFONT font = (HFONT)SendMessage(FoundFilesListView->HWindow, WM_GETFONT, 0, 0);
+                        HGDIOBJ oldFont = NULL;
+                        if (font != NULL)
+                            oldFont = SelectObject(CacheBitmap->HMemDC, font);
+                        COLORREF oldTextColor = SetTextColor(CacheBitmap->HMemDC, textColor);
+
+                        if (r2.right > r2.left)
+                        {
+                            CWidePathBuffer buff(item->PathW.c_str());
+                            PathCompactPathW(CacheBitmap->HMemDC, buff, (UINT)(r2.right - r2.left));
+                            DrawTextW(CacheBitmap->HMemDC, buff, -1, &r2,
+                                      DT_VCENTER | DT_LEFT | DT_NOPREFIX | DT_SINGLELINE);
+                        }
+
                         SetTextColor(CacheBitmap->HMemDC, oldTextColor);
+                        if (oldFont != NULL)
+                            SelectObject(CacheBitmap->HMemDC, oldFont);
+                        SetBkMode(CacheBitmap->HMemDC, oldBkMode);
+                        SetBkColor(CacheBitmap->HMemDC, oldBkColor);
 
-                        // copy the cache to the list view
                         BitBlt(hDC, r.left, r.top, r.right - r.left, r.bottom - r.top,
                                CacheBitmap->HMemDC, 0, 0, SRCCOPY);
 
-                        // disable default drawing
                         SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_SKIPDEFAULT);
                         return TRUE;
                     }
 
-                    if (GrepData.FindDuplicates && item->Different == 1)
+                    if (duplicate && !selected)
                     {
                         DarkModeColors colors;
-                        DarkMode_GetColors(&colors);
-                        cd->clrTextBk = colors.InactiveSelection;
+                        if (DarkMode_GetColors(&colors))
+                        {
+                            cd->clrTextBk = colors.InactiveSelection;
+                            cd->clrText = colors.InputText;
+                        }
+                        else
+                        {
+                            cd->clrTextBk = GetSysColor(COLOR_3DFACE);
+                            cd->clrText = GetSysColor(COLOR_WINDOWTEXT);
+                        }
                         SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_NEWFONT);
                         return TRUE;
                     }
-                    break;
+
+                    SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_DODEFAULT);
+                    return TRUE;
                 }
 
                 break;
             }
 
+#ifndef _UNICODE
             case LVN_ODFINDITEM:
             {
                 // assist the list view with quick search
@@ -4081,6 +5351,17 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                 SetWindowLongPtr(HWindow, DWLP_MSGRESULT, ret);
                 return TRUE;
             }
+#endif
+
+            case LVN_ODFINDITEMW:
+            {
+                NMLVFINDITEMW* pFindInfo = (NMLVFINDITEMW*)lParam;
+                int ret = FindListItemByNameW(FoundFilesListView, pFindInfo->iStart,
+                                              pFindInfo->lvfi.flags, pFindInfo->lvfi.psz);
+
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, ret);
+                return TRUE;
+            }
 
             case LVN_COLUMNCLICK:
             {
@@ -4090,6 +5371,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                 break;
             }
 
+#ifndef _UNICODE
             case LVN_GETDISPINFO:
             {
                 LV_DISPINFO* info = (LV_DISPINFO*)lParam;
@@ -4100,9 +5382,32 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                     info->item.pszText = item->GetText(info->item.iSubItem, FoundFilesDataTextBuffer, FileNameFormat);
                 break;
             }
+#endif
+
+            case LVN_GETDISPINFOW:
+            {
+                NMLVDISPINFOW* info = (NMLVDISPINFOW*)lParam;
+                CFoundFilesData* item = FoundFilesListView->At(info->item.iItem);
+                if (info->item.mask & LVIF_IMAGE)
+                    info->item.iImage = item->IsDir ? 0 : 1;
+                if (info->item.mask & LVIF_TEXT)
+                {
+                    FoundFilesDataTextBufferW = item->GetTextW(info->item.iSubItem, FileNameFormat);
+                    info->item.pszText = const_cast<LPWSTR>(FoundFilesDataTextBufferW.c_str());
+                }
+                break;
+            }
 
             case LVN_ITEMCHANGED:
             {
+                NMLISTVIEW* lv = (NMLISTVIEW*)lParam;
+                if (lv->iItem >= 0 &&
+                    (lv->uChanged & LVIF_STATE) != 0 &&
+                    ((lv->uOldState ^ lv->uNewState) & (LVIS_SELECTED | LVIS_FOCUSED)) != 0)
+                {
+                    RedrawFindResultItem(FoundFilesListView->HWindow, lv->iItem);
+                }
+
                 EnableToolBar();
                 if (!IsSearchInProgress())
                     UpdateStatusBar = TRUE; // the text will be set during Idle time
@@ -4317,6 +5622,8 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
         if (SearchInProgress)
             StopSearch();
 
+        LookInUnicodeInput.Reset();
+
         if (!DlgFailed)
         {
             // store the width of the Name column
@@ -4390,7 +5697,8 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
     case WM_THEMECHANGED:
     case WM_SYSCOLORCHANGE:
     {
-        ApplyFindResultsListColors(HWindow);
+        OnColorsChange();
+        ApplyFindDialogTheme(HWindow, HStatusBar);
         break;
     }
     }

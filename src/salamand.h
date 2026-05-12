@@ -136,8 +136,14 @@ class CPathHistoryItem
 {
 protected:
     int Type;                             // type: 0 is a disk, 1 is an archive, 2 is FS
-    std::string PathOrArchiveOrFSName;    // disk path or archive name or FS name
+    std::string PathOrArchiveOrFSName;    // disk path or archive name or FS name (legacy ANSI mirror)
     std::string ArchivePathOrFSUserPart;  // path in an archive or the user part of an FS path
+    // Wide source-of-truth twins. Populated for Type==0 (disk) and Type==1 (archive)
+    // when the recorder has the panel's PathW / ZIPArchiveW / ZIPPathW available.
+    // Empty for Type==2 (plugin FS) until plugin FS user-parts gain wide support.
+    // Empty also when populated from an old code path that only had ANSI bytes.
+    std::wstring PathOrArchiveOrFSNameW;
+    std::wstring ArchivePathOrFSUserPartW;
     HICON HIcon;                          // icon corresponding to the path (may be NULL); the icon will be destroyed in the destructor
     CPluginFSInterfaceAbstract* PluginFS; // only for Type==2: the last used interface for the FS path
 
@@ -147,7 +153,9 @@ protected:
 public:
     CPathHistoryItem(int type, const char* pathOrArchiveOrFSName,
                      const char* archivePathOrFSUserPart, HICON hIcon,
-                     CPluginFSInterfaceAbstract* pluginFS);
+                     CPluginFSInterfaceAbstract* pluginFS,
+                     const wchar_t* pathOrArchiveOrFSNameW = nullptr,
+                     const wchar_t* archivePathOrFSUserPartW = nullptr);
     ~CPathHistoryItem();
 
     // change of top index and focused name (repeated addition of one path to the history)
@@ -180,14 +188,23 @@ public:
     // clears all history entries
     void ClearHistory();
 
-    // adds a path to the history
+    // adds a path to the history.
+    // pathOrArchiveOrFSNameW / archivePathOrFSUserPartW carry the wide source-of-truth
+    // when available (disk: panel->GetPathW(); archive: panel->GetZIPArchiveW() and
+    // panel->GetZIPPathW()); pass nullptr for plugin FS or when only ANSI bytes are
+    // available. The wide twins are what Execute() replays through ChangePathToDiskW /
+    // ChangePathToArchiveW so that Unicode-only roots survive round-tripping.
     void AddPath(int type, const char* pathOrArchiveOrFSName, const char* archivePathOrFSUserPart,
-                 CPluginFSInterfaceAbstract* pluginFS, CPluginFSInterfaceEncapsulation* curPluginFS);
+                 CPluginFSInterfaceAbstract* pluginFS, CPluginFSInterfaceEncapsulation* curPluginFS,
+                 const wchar_t* pathOrArchiveOrFSNameW = nullptr,
+                 const wchar_t* archivePathOrFSUserPartW = nullptr);
 
     // adds a path to the history only if the path is not already present (see Alt+F12; for FS it overwrites pluginFS with the newest one)
     void AddPathUnique(int type, const char* pathOrArchiveOrFSName, const char* archivePathOrFSUserPart,
                        HICON hIcon, CPluginFSInterfaceAbstract* pluginFS,
-                       CPluginFSInterfaceEncapsulation* curPluginFS);
+                       CPluginFSInterfaceEncapsulation* curPluginFS,
+                       const wchar_t* pathOrArchiveOrFSNameW = nullptr,
+                       const wchar_t* archivePathOrFSUserPartW = nullptr);
 
     // changes the data (top index and focused name) of the current path only if the given path
     // matches the current path in the history
@@ -195,14 +212,18 @@ public:
                               const char* archivePathOrFSUserPart,
                               CPluginFSInterfaceAbstract* pluginFS,
                               CPluginFSInterfaceEncapsulation* curPluginFS,
-                              int topIndex, const char* focusedName);
+                              int topIndex, const char* focusedName,
+                              const wchar_t* pathOrArchiveOrFSNameW = nullptr,
+                              const wchar_t* archivePathOrFSUserPartW = nullptr);
 
     // deletes the current path from the history only if the given path matches the current
     // path in the history
     void RemoveActualPath(int type, const char* pathOrArchiveOrFSName,
                           const char* archivePathOrFSUserPart,
                           CPluginFSInterfaceAbstract* pluginFS,
-                          CPluginFSInterfaceEncapsulation* curPluginFS);
+                          CPluginFSInterfaceEncapsulation* curPluginFS,
+                          const wchar_t* pathOrArchiveOrFSNameW = nullptr,
+                          const wchar_t* archivePathOrFSUserPartW = nullptr);
 
     // populates the menu with items
     // IDs will start from one and correspond to the index parameter when calling the Execute() method
@@ -1116,9 +1137,11 @@ BOOL FindLanguageFromPrevVerOfSal(char* slgName);                               
 BOOL CreateKeyForwarder(HWND hDialog, int ctrlID);
 // call after receiving the WM_USER_KEYDOWN message; returns TRUE if the key was processed
 DWORD OnDirectoryKeyDown(DWORD keyCode, HWND hDialog, int editID, int editBufSize, int buttonID);
+DWORD OnDirectoryKeyDownW(DWORD keyCode, HWND hDialog, int editID, int editBufSize, int buttonID, HWND hUnicodeCtrl);
 // call after receiving the WM_USER_BUTTON message; ensures the menu behind the 'buttonID' button is opened
 // and subsequently fills the 'editID' edit line
 void OnDirectoryButton(HWND hDialog, int editID, int editBufSize, int buttonID, WPARAM wParam, LPARAM lParam);
+void OnDirectoryButtonW(HWND hDialog, int editID, int editBufSize, int buttonID, WPARAM wParam, LPARAM lParam, HWND hUnicodeCtrl);
 
 // call after receiving the WM_USER_BUTTON message; ensures Ctrl+A works on systems up to Windows Vista,
 // where the shortcut is already supported system-wide

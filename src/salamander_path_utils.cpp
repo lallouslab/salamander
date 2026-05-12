@@ -16,10 +16,15 @@
 #include "shellib.h"
 #include "menu.h"
 #include "common/widepath.h"
+#include "common/fsutil.h"
+#include "common/WorkdirsHistorySerializer.h"
+
+#include <vector>
 #include "ui/IPrompter.h"
 #include "common/IFileSystem.h"
 #include "common/IEnvironment.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 
 CUserMenuIconBkgndReader UserMenuIconBkgndReader;
 
@@ -1703,7 +1708,9 @@ CToolTipWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 CPathHistoryItem::CPathHistoryItem(int type, const char* pathOrArchiveOrFSName,
                                    const char* archivePathOrFSUserPart, HICON hIcon,
-                                   CPluginFSInterfaceAbstract* pluginFS)
+                                   CPluginFSInterfaceAbstract* pluginFS,
+                                   const wchar_t* pathOrArchiveOrFSNameW,
+                                   const wchar_t* archivePathOrFSUserPartW)
 {
     Type = type;
     HIcon = hIcon;
@@ -1727,6 +1734,24 @@ CPathHistoryItem::CPathHistoryItem(int type, const char* pathOrArchiveOrFSName,
         {
             PathOrArchiveOrFSName = root.Get();
         }
+        if (pathOrArchiveOrFSNameW != nullptr && pathOrArchiveOrFSNameW[0] != L'\0')
+        {
+            // Mirror the ANSI normalization above for the wide twin: drop the
+            // trailing backslash unless the path is exactly a root.
+            std::wstring rootW = GetRootPathW(pathOrArchiveOrFSNameW);
+            const wchar_t* eW = pathOrArchiveOrFSNameW + wcslen(pathOrArchiveOrFSNameW);
+            if ((int)rootW.size() < eW - pathOrArchiveOrFSNameW ||
+                pathOrArchiveOrFSNameW[0] == L'\\')
+            {
+                if (eW > pathOrArchiveOrFSNameW && *(eW - 1) == L'\\')
+                    --eW;
+                PathOrArchiveOrFSNameW.assign(pathOrArchiveOrFSNameW, eW - pathOrArchiveOrFSNameW);
+            }
+            else
+            {
+                PathOrArchiveOrFSNameW = std::move(rootW);
+            }
+        }
     }
     else
     {
@@ -1736,6 +1761,10 @@ CPathHistoryItem::CPathHistoryItem(int type, const char* pathOrArchiveOrFSName,
                 PluginFS = pluginFS;
             PathOrArchiveOrFSName = pathOrArchiveOrFSName;
             ArchivePathOrFSUserPart = archivePathOrFSUserPart;
+            if (pathOrArchiveOrFSNameW != nullptr && pathOrArchiveOrFSNameW[0] != L'\0')
+                PathOrArchiveOrFSNameW = pathOrArchiveOrFSNameW;
+            if (archivePathOrFSUserPartW != nullptr && archivePathOrFSUserPartW[0] != L'\0')
+                ArchivePathOrFSUserPartW = archivePathOrFSUserPartW;
         }
         else
             TRACE_E("CPathHistoryItem::CPathHistoryItem(): unknown 'type'");
@@ -1889,8 +1918,19 @@ BOOL CPathHistoryItem::Execute(CFilesWindow* panel)
         BOOL clear = TRUE;
         if (Type == 0) // disk
         {
-            if (!panel->ChangePathToDisk(panel->HWindow, PathOrArchiveOrFSName.c_str(), TopIndex, FocusedName.empty() ? NULL : FocusedName.c_str(), NULL,
-                                         TRUE, FALSE, FALSE, &failReason))
+            BOOL diskOk;
+            if (sally::unicode::HasWidePathW(PathOrArchiveOrFSNameW.c_str()))
+            {
+                diskOk = panel->ChangePathToDiskW(panel->HWindow, PathOrArchiveOrFSNameW.c_str(), TopIndex,
+                                                  FocusedName.empty() ? NULL : FocusedName.c_str(), NULL,
+                                                  TRUE, FALSE, FALSE, &failReason);
+            }
+            else
+            {
+                diskOk = panel->ChangePathToDisk(panel->HWindow, PathOrArchiveOrFSName.c_str(), TopIndex, FocusedName.empty() ? NULL : FocusedName.c_str(), NULL,
+                                                 TRUE, FALSE, FALSE, &failReason);
+            }
+            if (!diskOk)
             {
                 if (failReason == CHPPFR_CANNOTCLOSEPATH)
                 {
@@ -1903,8 +1943,19 @@ BOOL CPathHistoryItem::Execute(CFilesWindow* panel)
         {
             if (Type == 1) // archive
             {
-                if (!panel->ChangePathToArchive(PathOrArchiveOrFSName.c_str(), ArchivePathOrFSUserPart.c_str(), TopIndex,
-                                                FocusedName.empty() ? NULL : FocusedName.c_str(), FALSE, NULL, TRUE, &failReason, FALSE, FALSE, TRUE))
+                BOOL archOk;
+                if (sally::unicode::HasWidePathW(PathOrArchiveOrFSNameW.c_str()))
+                {
+                    const wchar_t* archivePathW = ArchivePathOrFSUserPartW.empty() ? L"" : ArchivePathOrFSUserPartW.c_str();
+                    archOk = panel->ChangePathToArchiveW(PathOrArchiveOrFSNameW.c_str(), archivePathW, TopIndex,
+                                                         FocusedName.empty() ? NULL : FocusedName.c_str(), FALSE, NULL, TRUE, &failReason, FALSE, FALSE, TRUE);
+                }
+                else
+                {
+                    archOk = panel->ChangePathToArchive(PathOrArchiveOrFSName.c_str(), ArchivePathOrFSUserPart.c_str(), TopIndex,
+                                                        FocusedName.empty() ? NULL : FocusedName.c_str(), FALSE, NULL, TRUE, &failReason, FALSE, FALSE, TRUE);
+                }
+                if (!archOk)
                 {
                     if (failReason == CHPPFR_CANNOTCLOSEPATH)
                     {
@@ -2260,8 +2311,19 @@ void CPathHistory::Execute(int index, BOOL forward, CFilesWindow* panel, BOOL al
 
     if (NewItem != NULL)
     {
+        // Forward the wide twins NewItem already carries. Without these the
+        // unlock flush would silently degrade a Unicode-only history entry
+        // back to its lossy ANSI mirror — see DeferredHistoryWidePointers in
+        // PanelPathPolicy.h for the rationale.
+        sally::unicode::DeferredHistoryWideTwins twins{
+            NewItem->PathOrArchiveOrFSNameW,
+            NewItem->ArchivePathOrFSUserPartW};
+        const wchar_t* nameW = nullptr;
+        const wchar_t* userPartW = nullptr;
+        sally::unicode::DeferredHistoryWidePointers(twins, nameW, userPartW);
         AddPathUnique(NewItem->Type, NewItem->PathOrArchiveOrFSName.c_str(), NewItem->ArchivePathOrFSUserPart.c_str(),
-                      NewItem->HIcon, NewItem->PluginFS, NULL);
+                      NewItem->HIcon, NewItem->PluginFS, NULL,
+                      nameW, userPartW);
         NewItem->HIcon = NULL; // AddPathUnique method took over responsibility for icon destruction
         delete NewItem;
         NewItem = NULL;
@@ -2294,11 +2356,14 @@ void CPathHistory::ChangeActualPathData(int type, const char* pathOrArchiveOrFSN
                                         const char* archivePathOrFSUserPart,
                                         CPluginFSInterfaceAbstract* pluginFS,
                                         CPluginFSInterfaceEncapsulation* curPluginFS,
-                                        int topIndex, const char* focusedName)
+                                        int topIndex, const char* focusedName,
+                                        const wchar_t* pathOrArchiveOrFSNameW,
+                                        const wchar_t* archivePathOrFSUserPartW)
 {
     if (Paths.Count > 0)
     {
-        CPathHistoryItem n(type, pathOrArchiveOrFSName, archivePathOrFSUserPart, NULL, pluginFS);
+        CPathHistoryItem n(type, pathOrArchiveOrFSName, archivePathOrFSUserPart, NULL, pluginFS,
+                           pathOrArchiveOrFSNameW, archivePathOrFSUserPartW);
         CPathHistoryItem* n2 = NULL;
         if (ForwardIndex != -1)
         {
@@ -2318,7 +2383,9 @@ void CPathHistory::ChangeActualPathData(int type, const char* pathOrArchiveOrFSN
 void CPathHistory::RemoveActualPath(int type, const char* pathOrArchiveOrFSName,
                                     const char* archivePathOrFSUserPart,
                                     CPluginFSInterfaceAbstract* pluginFS,
-                                    CPluginFSInterfaceEncapsulation* curPluginFS)
+                                    CPluginFSInterfaceEncapsulation* curPluginFS,
+                                    const wchar_t* pathOrArchiveOrFSNameW,
+                                    const wchar_t* archivePathOrFSUserPartW)
 {
     if (Lock)
         return;
@@ -2326,7 +2393,8 @@ void CPathHistory::RemoveActualPath(int type, const char* pathOrArchiveOrFSName,
     {
         if (ForwardIndex == -1)
         {
-            CPathHistoryItem n(type, pathOrArchiveOrFSName, archivePathOrFSUserPart, NULL, pluginFS);
+            CPathHistoryItem n(type, pathOrArchiveOrFSName, archivePathOrFSUserPart, NULL, pluginFS,
+                               pathOrArchiveOrFSNameW, archivePathOrFSUserPartW);
             CPathHistoryItem* n2 = Paths[Paths.Count - 1];
             if (n.IsTheSamePath(*n2, curPluginFS)) // same paths -> delete record
                 Paths.Delete(Paths.Count - 1);
@@ -2337,13 +2405,16 @@ void CPathHistory::RemoveActualPath(int type, const char* pathOrArchiveOrFSName,
 }
 
 void CPathHistory::AddPath(int type, const char* pathOrArchiveOrFSName, const char* archivePathOrFSUserPart,
-                           CPluginFSInterfaceAbstract* pluginFS, CPluginFSInterfaceEncapsulation* curPluginFS)
+                           CPluginFSInterfaceAbstract* pluginFS, CPluginFSInterfaceEncapsulation* curPluginFS,
+                           const wchar_t* pathOrArchiveOrFSNameW,
+                           const wchar_t* archivePathOrFSUserPartW)
 {
     if (Lock)
         return;
 
     CPathHistoryItem* n = new CPathHistoryItem(type, pathOrArchiveOrFSName, archivePathOrFSUserPart,
-                                               NULL, pluginFS);
+                                               NULL, pluginFS,
+                                               pathOrArchiveOrFSNameW, archivePathOrFSUserPartW);
     if (n == NULL)
     {
         TRACE_E(LOW_MEMORY);
@@ -2392,10 +2463,13 @@ void CPathHistory::AddPath(int type, const char* pathOrArchiveOrFSName, const ch
 
 void CPathHistory::AddPathUnique(int type, const char* pathOrArchiveOrFSName, const char* archivePathOrFSUserPart,
                                  HICON hIcon, CPluginFSInterfaceAbstract* pluginFS,
-                                 CPluginFSInterfaceEncapsulation* curPluginFS)
+                                 CPluginFSInterfaceEncapsulation* curPluginFS,
+                                 const wchar_t* pathOrArchiveOrFSNameW,
+                                 const wchar_t* archivePathOrFSUserPartW)
 {
     CPathHistoryItem* n = new CPathHistoryItem(type, pathOrArchiveOrFSName, archivePathOrFSUserPart,
-                                               hIcon, pluginFS);
+                                               hIcon, pluginFS,
+                                               pathOrArchiveOrFSNameW, archivePathOrFSUserPartW);
     if (Lock)
     {
         if (NewItem != NULL)
@@ -2472,46 +2546,68 @@ void CPathHistory::SaveToRegistry(HKEY hKey, const char* name, BOOL onlyClear)
 
         if (!onlyClear) // if key should not just be cleared, save values from history
         {
-            int index = 0;
-            char buf[10];
-            CPathBuffer path;
-            int i;
-            for (i = 0; i < Paths.Count; i++)
+            // Project the in-memory CPathHistoryItem list into the plain-data
+            // sally::path::history::Entry stream the serializer consumes. Wide
+            // twins are preferred when populated; ANSI mirrors are widened
+            // through CP_ACP for plugin FS items (still ANSI-only today).
+            std::vector<sally::path::history::Entry> entries;
+            entries.reserve(Paths.Count);
+            for (int i = 0; i < Paths.Count; i++)
             {
                 CPathHistoryItem* item = Paths[i];
+                sally::path::history::Entry entry;
                 switch (item->Type)
                 {
-                case 0: // disk
-                {
-                    strcpy(path, item->PathOrArchiveOrFSName.c_str());
+                case 0:
+                    entry.kind = sally::path::history::EntryKind::Disk;
                     break;
-                }
-
-                // archive & FS: use ':' character as separator of two path parts
-                // during load we'll determine path type based on this character
-                case 1: // archive
-                case 2: // FS
-                {
-                    lstrcpyn(path, item->PathOrArchiveOrFSName.c_str(), path.Size());
-                    StrNCat(path, ":", path.Size());
-                    if (!item->ArchivePathOrFSUserPart.empty())
-                        StrNCat(path, item->ArchivePathOrFSUserPart.c_str(), path.Size());
+                case 1:
+                    entry.kind = sally::path::history::EntryKind::Archive;
                     break;
-                }
+                case 2:
+                    entry.kind = sally::path::history::EntryKind::PluginFS;
+                    break;
                 default:
-                {
-                    TRACE_E("CPathHistory::SaveToRegistry() uknown path type");
+                    TRACE_E("CPathHistory::SaveToRegistry() unknown path type");
                     continue;
                 }
+                entry.nameW = !item->PathOrArchiveOrFSNameW.empty()
+                                  ? item->PathOrArchiveOrFSNameW
+                                  : AnsiToWide(item->PathOrArchiveOrFSName.c_str());
+                if (entry.kind != sally::path::history::EntryKind::Disk)
+                {
+                    entry.userPartW = !item->ArchivePathOrFSUserPartW.empty()
+                                          ? item->ArchivePathOrFSUserPartW
+                                          : AnsiToWide(item->ArchivePathOrFSUserPart.c_str());
                 }
-                itoa(index + 1, buf, 10);
-                SetValue(historyKey, buf, REG_SZ, path, (DWORD)strlen(path) + 1);
-                index++;
+                entries.push_back(std::move(entry));
             }
+
+            sally::path::history::WriteEntries(gRegistry, historyKey, entries);
         }
         CloseKey(historyKey);
     }
 }
+
+namespace
+{
+// Bridge: the serializer's plugin-FS detector callback delegates to the
+// existing ANSI IsPluginFSPath helper. Lives in this TU rather than in the
+// serializer itself so the headless test target doesn't need to link any
+// of consts.h's plugin-FS machinery.
+bool PluginFSPathDetectorBridge(const char* path,
+                                std::string& outFsName,
+                                std::string& outUserPart)
+{
+    char fsName[256] = {0};
+    const char* userPart = nullptr;
+    if (!IsPluginFSPath(path, fsName, &userPart))
+        return false;
+    outFsName.assign(fsName);
+    outUserPart.assign(userPart != nullptr ? userPart : "");
+    return true;
+}
+} // namespace
 
 void CPathHistory::LoadFromRegistry(HKEY hKey, const char* name)
 {
@@ -2519,59 +2615,31 @@ void CPathHistory::LoadFromRegistry(HKEY hKey, const char* name)
     HKEY historyKey;
     if (OpenKey(hKey, name, historyKey))
     {
-        CPathBuffer path;
-        CPathBuffer fsName;
-        const char* pathOrArchiveOrFSName = path;
-        const char* archivePathOrFSUserPart = NULL;
-        char buf[10];
-        int type;
-        int i;
-        for (i = 0;; i++)
+        // Read the wide REG_SZ stream through the serializer; plugin FS
+        // detection is bridged through PluginFSPathDetectorBridge so the
+        // serializer module itself stays decoupled from consts.h.
+        std::vector<sally::path::history::Entry> entries;
+        sally::path::history::ReadEntries(gRegistry, historyKey, entries,
+                                          &PluginFSPathDetectorBridge);
+
+        for (const sally::path::history::Entry& entry : entries)
         {
-            itoa(i + 1, buf, 10);
-            if (GetValue(historyKey, buf, REG_SZ, path, path.Size()))
-            {
-                if (strlen(path) >= 2)
-                {
-                    // path can be of type
-                    // 0 (disk): "C:\???" or "\\server\???"
-                    // 1 (archive): "C:\???:" or "\\server\???:"
-                    // 2 (FS): "XY:???"
-                    type = -1; // don't add
-                    if ((path[0] == '\\' && path[1] == '\\') || path[1] == ':')
-                    {
-                        // it's type==0 (disk) or type==1 (archive)
-                        pathOrArchiveOrFSName = path;
-                        char* separator = strchr(path + 2, ':');
-                        if (separator == NULL)
-                        {
-                            type = 0;
-                            archivePathOrFSUserPart = NULL;
-                        }
-                        else
-                        {
-                            *separator = 0;
-                            type = 1;
-                            archivePathOrFSUserPart = separator + 1;
-                        }
-                    }
-                    else
-                    {
-                        // candidate for FS path
-                        if (IsPluginFSPath(path, fsName, &archivePathOrFSUserPart))
-                        {
-                            pathOrArchiveOrFSName = fsName;
-                            type = 2;
-                        }
-                    }
-                    if (type != -1)
-                        AddPath(type, pathOrArchiveOrFSName, archivePathOrFSUserPart, NULL, NULL);
-                    else
-                        TRACE_E("CPathHistory::LoadFromRegistry() invalid path: " << path);
-                }
-            }
-            else
-                break;
+            // Project Entry back into AddPath's argument tuple. ANSI mirrors
+            // are computed via WideToAnsi so the legacy paths that still read
+            // them (plugin FS user-parts, IsTheSamePath comparisons) keep
+            // populated values.
+            int type = static_cast<int>(entry.kind);
+            std::string nameA = WideToAnsi(entry.nameW.c_str());
+            std::string userPartA = WideToAnsi(entry.userPartW.c_str());
+            const char* userPartPtr = entry.kind == sally::path::history::EntryKind::Disk
+                                           ? NULL
+                                           : userPartA.c_str();
+            const wchar_t* userPartWPtr = entry.kind == sally::path::history::EntryKind::Disk
+                                              ? nullptr
+                                              : (entry.userPartW.empty() ? nullptr : entry.userPartW.c_str());
+            AddPath(type, nameA.c_str(), userPartPtr, NULL, NULL,
+                    entry.nameW.empty() ? nullptr : entry.nameW.c_str(),
+                    userPartWPtr);
         }
         CloseKey(historyKey);
     }
@@ -4052,12 +4120,20 @@ DWORD OnKeyDownHandleSelectAll(DWORD keyCode, HWND hDialog, int editID)
 }
 
 void InvokeDirectoryMenuCommand(DWORD cmd, HWND hDialog, int editID, int editBufSize);
+void InvokeDirectoryMenuCommandW(DWORD cmd, HWND hDialog, int editID, int editBufSize, HWND hUnicodeCtrl);
 
 void OnDirectoryButton(HWND hDialog, int editID, int editBufSize, int buttonID, WPARAM wParam, LPARAM lParam)
 {
     BOOL selectMenuItem = LOWORD(lParam);
     DWORD cmd = TrackDirectoryMenu(hDialog, buttonID, selectMenuItem);
     InvokeDirectoryMenuCommand(cmd, hDialog, editID, editBufSize);
+}
+
+void OnDirectoryButtonW(HWND hDialog, int editID, int editBufSize, int buttonID, WPARAM wParam, LPARAM lParam, HWND hUnicodeCtrl)
+{
+    BOOL selectMenuItem = LOWORD(lParam);
+    DWORD cmd = TrackDirectoryMenu(hDialog, buttonID, selectMenuItem);
+    InvokeDirectoryMenuCommandW(cmd, hDialog, editID, editBufSize, hUnicodeCtrl);
 }
 
 DWORD OnDirectoryKeyDown(DWORD keyCode, HWND hDialog, int editID, int editBufSize, int buttonID)
@@ -4101,6 +4177,48 @@ DWORD OnDirectoryKeyDown(DWORD keyCode, HWND hDialog, int editID, int editBufSiz
         {
             int index = keyCode == '0' ? 9 : keyCode - '1';
             InvokeDirectoryMenuCommand(DIRECTORY_COMMAND_HOTPATHF + index, hDialog, editID, editBufSize);
+            return TRUE;
+        }
+        }
+    }
+    return FALSE;
+}
+
+DWORD OnDirectoryKeyDownW(DWORD keyCode, HWND hDialog, int editID, int editBufSize, int buttonID, HWND hUnicodeCtrl)
+{
+    BOOL controlPressed = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    BOOL altPressed = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    BOOL shiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+
+    if (!controlPressed && !shiftPressed && altPressed && keyCode == VK_RIGHT)
+    {
+        OnDirectoryButtonW(hDialog, editID, editBufSize, buttonID, MAKELPARAM(buttonID, 0), MAKELPARAM(TRUE, 0), hUnicodeCtrl);
+        return TRUE;
+    }
+    if (controlPressed && !shiftPressed && !altPressed)
+    {
+        switch (keyCode)
+        {
+        case 'B':
+            InvokeDirectoryMenuCommandW(DIRECTORY_COMMAND_BROWSE, hDialog, editID, editBufSize, hUnicodeCtrl);
+            return TRUE;
+        case 219:
+        case 221:
+            InvokeDirectoryMenuCommandW((keyCode == 219) ? DIRECTORY_COMMAND_LEFT : DIRECTORY_COMMAND_RIGHT, hDialog, editID, editBufSize, hUnicodeCtrl);
+            return TRUE;
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+        case '0':
+        {
+            int index = keyCode == '0' ? 9 : keyCode - '1';
+            InvokeDirectoryMenuCommandW(DIRECTORY_COMMAND_HOTPATHF + index, hDialog, editID, editBufSize, hUnicodeCtrl);
             return TRUE;
         }
         }
@@ -4169,6 +4287,62 @@ void InvokeDirectoryMenuCommand(DWORD cmd, HWND hDialog, int editID, int editBuf
             path[editBufSize - 1] = 0;
         }
         SetEditOrComboText(GetDlgItem(hDialog, editID), path);
+    }
+}
+
+void InvokeDirectoryMenuCommandW(DWORD cmd, HWND hDialog, int editID, int editBufSize, HWND hUnicodeCtrl)
+{
+    std::wstring pathW;
+    BOOL setPathToEdit = FALSE;
+    switch (cmd)
+    {
+    case 0:
+        return;
+
+    case DIRECTORY_COMMAND_BROWSE:
+    {
+        int len = GetWindowTextLengthW(hUnicodeCtrl != NULL ? hUnicodeCtrl : GetDlgItem(hDialog, editID));
+        std::vector<wchar_t> current((size_t)len + 1);
+        GetWindowTextW(hUnicodeCtrl != NULL ? hUnicodeCtrl : GetDlgItem(hDialog, editID), current.data(), len + 1);
+        pathW = current.data();
+        wchar_t caption[100];
+        GetWindowTextW(hDialog, caption, _countof(caption));
+        if (GetTargetDirectoryW(hDialog, hDialog, caption, LoadStrW(IDS_BROWSETARGETDIRECTORY), pathW, FALSE, pathW.c_str()))
+            setPathToEdit = TRUE;
+        break;
+    }
+
+    case DIRECTORY_COMMAND_LEFT:
+    case DIRECTORY_COMMAND_RIGHT:
+    {
+        CFilesWindow* panel = (cmd == DIRECTORY_COMMAND_LEFT) ? MainWindow->LeftPanel : MainWindow->RightPanel;
+        if (panel != NULL && panel->GetGeneralPathW(pathW, TRUE))
+            setPathToEdit = TRUE;
+        break;
+    }
+
+    default:
+    {
+        if (cmd >= DIRECTORY_COMMAND_HOTPATHF && cmd <= DIRECTORY_COMMAND_HOTPATHL)
+        {
+            CPathBuffer pathA;
+            if (MainWindow->GetExpandedHotPath(hDialog, cmd - DIRECTORY_COMMAND_HOTPATHF, pathA, pathA.Size()))
+            {
+                pathW = AnsiToWide(pathA);
+                setPathToEdit = TRUE;
+            }
+        }
+        else
+            TRACE_E("Unknown cmd=" << cmd);
+    }
+    }
+
+    if (setPathToEdit)
+    {
+        if (hUnicodeCtrl != NULL)
+            SetWindowTextW(hUnicodeCtrl, pathW.c_str());
+        else
+            SetWindowTextW(GetDlgItem(hDialog, editID), pathW.c_str());
     }
 }
 

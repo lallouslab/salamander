@@ -14,6 +14,7 @@ extern "C"
 #include "salshlib.h"
 #include "common/widepath.h"
 #include "common/unicode/helpers.h"
+#include "common/fsutil.h"
 
 // original location in fileswnd.h (here only because of MakeCopyOfName in CImpDropTarget::ProcessClipboardData)
 extern BOOL OurClipDataObject; // TRUE during "paste" of our IDataObject
@@ -2302,6 +2303,13 @@ struct CBrowseData
     HWND HCenterWindow;
 };
 
+struct CBrowseDataW
+{
+    const wchar_t* Title;
+    const wchar_t* InitDir;
+    HWND HCenterWindow;
+};
+
 int CALLBACK DirectoryBrowse(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
 {
     CALL_STACK_MESSAGE4("DirectoryBrowse(, 0x%X, 0x%IX, 0x%IX)", uMsg, lParam, lpData);
@@ -2333,6 +2341,34 @@ int CALLBACK DirectoryBrowse(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
             BOOL ret = SHGetPathFromIDList((ITEMIDLIST*)lParam, path);
             SendMessage(hwnd, BFFM_ENABLEOK, 0, ret);
         }
+    }
+    return 0;
+}
+
+int CALLBACK DirectoryBrowseW(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
+{
+    CALL_STACK_MESSAGE4("DirectoryBrowseW(, 0x%X, 0x%IX, 0x%IX)", uMsg, lParam, lpData);
+    if (uMsg == BFFM_INITIALIZED)
+    {
+        MultiMonCenterWindow(hwnd, ((CBrowseDataW*)lpData)->HCenterWindow, FALSE);
+        SetWindowTextW(hwnd, ((CBrowseDataW*)lpData)->Title);
+        if (((CBrowseDataW*)lpData)->InitDir != NULL)
+        {
+            std::wstring path = GetRootPathW(((CBrowseDataW*)lpData)->InitDir);
+            if (path.length() < wcslen(((CBrowseDataW*)lpData)->InitDir))
+            {
+                path = ((CBrowseDataW*)lpData)->InitDir;
+                if (!path.empty() && path[path.length() - 1] == L'\\')
+                    path.resize(path.length() - 1);
+            }
+            SendMessageW(hwnd, BFFM_SETSELECTIONW, TRUE, (LPARAM)path.c_str());
+        }
+    }
+    if (uMsg == BFFM_SELCHANGED && (ITEMIDLIST*)lParam != NULL)
+    {
+        CWidePathBuffer path;
+        BOOL ret = SHGetPathFromIDListW((ITEMIDLIST*)lParam, path);
+        SendMessage(hwnd, BFFM_ENABLEOK, 0, ret);
     }
     return 0;
 }
@@ -2491,6 +2527,16 @@ void ResolveNetHoodPath(char* path)
     }
 }
 
+void ResolveNetHoodPathW(std::wstring& path)
+{
+    std::string ansi = WideToAnsi(path);
+    if (!ansi.empty())
+    {
+        ResolveNetHoodPath(ansi.data());
+        path = AnsiToWide(ansi.c_str());
+    }
+}
+
 BOOL GetTargetDirectory(HWND parent, HWND hCenterWindow,
                         const char* title, const char* comment,
                         char* path, BOOL onlyNet, const char* initDir)
@@ -2499,6 +2545,54 @@ BOOL GetTargetDirectory(HWND parent, HWND hCenterWindow,
     BOOL ret = GetTargetDirectoryAux(parent, hCenterWindow, title, comment, path, onlyNet, initDir);
     if (ret)
         ResolveNetHoodPath(path);
+    return ret;
+}
+
+BOOL GetTargetDirectoryW(HWND parent, HWND hCenterWindow, const wchar_t* title, const wchar_t* comment,
+                         std::wstring& path, BOOL onlyNet, const wchar_t* initDir)
+{
+    ITEMIDLIST* pidl;
+    if (onlyNet)
+        SHGetSpecialFolderLocation(parent, CSIDL_NETWORK, &pidl);
+    else
+        pidl = NULL;
+
+    wchar_t display[MAX_PATH];
+    BROWSEINFOW bi;
+    ZeroMemory(&bi, sizeof(bi));
+    bi.hwndOwner = parent;
+    bi.pidlRoot = pidl;
+    bi.pszDisplayName = display;
+    bi.lpszTitle = comment;
+    bi.ulFlags = BIF_RETURNONLYFSDIRS;
+    bi.lpfn = DirectoryBrowseW;
+    CBrowseDataW bd;
+    bd.Title = title;
+    bd.InitDir = initDir;
+    bd.HCenterWindow = hCenterWindow;
+    bi.lParam = (LPARAM)&bd;
+    LPITEMIDLIST res = SHBrowseForFolderW(&bi);
+    BOOL ret = FALSE;
+    if (res != NULL)
+    {
+        CWidePathBuffer out;
+        if (SHGetPathFromIDListW(res, out))
+        {
+            path = out;
+            ret = TRUE;
+        }
+    }
+    IMalloc* alloc;
+    if ((pidl != NULL || res != NULL) && SUCCEEDED(CoGetMalloc(1, &alloc)))
+    {
+        if (pidl != NULL && alloc->DidAlloc(pidl) == 1)
+            alloc->Free(pidl);
+        if (res != NULL && alloc->DidAlloc(res) == 1)
+            alloc->Free(res);
+        alloc->Release();
+    }
+    if (ret)
+        ResolveNetHoodPathW(path);
     return ret;
 }
 

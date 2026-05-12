@@ -69,6 +69,12 @@ inline bool TryGenerateUniqueCopyName(const std::wstring& directoryWithBackslash
 {
     if (directoryWithBackslash.empty() || originalName.empty() || copyToken.empty())
         return false;
+    if (directoryWithBackslash.back() != L'\\' && directoryWithBackslash.back() != L'/')
+        return false;
+
+    DWORD dirAttrs = GetFileAttributesW(directoryWithBackslash.c_str());
+    if (dirAttrs == INVALID_FILE_ATTRIBUTES || (dirAttrs & FILE_ATTRIBUTE_DIRECTORY) == 0)
+        return false;
 
     for (int copyIndex = 1; copyIndex < 10000; copyIndex++)
     {

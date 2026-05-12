@@ -76,7 +76,7 @@ HBITMAP LoadBitmapAndMapColors(HINSTANCE hInst, HRSRC hRsrc, int mapCount,
     HDC hDCScreen = HANDLES(GetDC(NULL));
     LPBYTE lpBits;
     lpBits = (LPBYTE)(lpBitmap + 1);
-    lpBits += (1 << (lpBitmapInfo->biBitCount)) * sizeof(RGBQUAD);
+    lpBits += ((size_t)1 << lpBitmapInfo->biBitCount) * sizeof(RGBQUAD);
     HBITMAP hbm = HANDLES(CreateDIBitmap(hDCScreen, lpBitmapInfo, CBM_INIT, lpBits,
                                          (LPBITMAPINFO)lpBitmapInfo, DIB_RGB_COLORS));
     if (hbm == NULL)

@@ -71,6 +71,8 @@ protected:
 
     int Border; // separator line at top/bottom
     char* Text;
+    std::wstring TextW;
+    BOOL UseWideText;
     int TextLen; // number of characters in 'Text' without terminator
     char* Size;
     int PathLen;          // -1 (path is the whole Text), otherwise path length in Text (rest is filter)
@@ -139,6 +141,7 @@ public:
     // sets 'text' in the status line, 'pathLen' defines the path length (rest is filter),
     // if 'pathLen' is not used (path is the full 'text') it equals -1
     BOOL SetText(const char* text, int pathLen = -1);
+    BOOL SetTextW(const wchar_t* text, int pathLen = -1);
 
     // builds HotTrackItems array: for disks and archivers based on backslashes
     // and for FS it asks the plugin

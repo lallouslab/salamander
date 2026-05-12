@@ -19,6 +19,20 @@
 
 #include "mainwnd.h"
 
+static std::string StaticTextWideToAnsi(const std::wstring& text)
+{
+    if (text.empty())
+        return std::string();
+
+    int required = WideCharToMultiByte(CP_ACP, 0, text.c_str(), (int)text.size(), NULL, 0, NULL, NULL);
+    if (required <= 0)
+        return std::string();
+
+    std::string result(required, '\0');
+    WideCharToMultiByte(CP_ACP, 0, text.c_str(), (int)text.size(), &result[0], required, NULL, NULL);
+    return result;
+}
+
 //****************************************************************************
 //
 // CGuiBitmap
@@ -446,7 +460,9 @@ CStaticText::CStaticText(HWND hDlg, int ctrlID, DWORD flags)
     TextLen = 0;
     Text2 = NULL;
     Text2Len = 0;
+    UseWideText = FALSE;
     AlpDX = NULL;
+    AlpDXAllocated = 0;
     Allocated = 0;
     Bitmap = NULL;
     HFont = NULL;
@@ -540,7 +556,7 @@ BOOL CStaticText::SetText(const char* text)
 
     if (text == NULL)
         text = "";
-    if (Text != NULL && strcmp(Text, text) == 0)
+    if (!UseWideText && Text != NULL && strcmp(Text, text) == 0)
         return TRUE;
 
     int l = (int)strlen(text) + 1;
@@ -570,13 +586,101 @@ BOOL CStaticText::SetText(const char* text)
                 return FALSE;
             }
             AlpDX = newAlpDX;
+            AlpDXAllocated = l + ST_ALLOC_GRANULARITY;
             Text2 = newText2;
         }
         Text = newText;
         Allocated = l + ST_ALLOC_GRANULARITY;
     }
+    // Allocated tracks ANSI byte capacity of Text; AlpDX is sized in ints to
+    // hold TextLen (which is l-1 here). A prior SetTextW under a DBCS code
+    // page can leave Allocated sized for the multi-byte ANSI fallback while
+    // AlpDXAllocated is sized only for the wide codepoint count — the new
+    // ANSI text can then fit Allocated while overrunning AlpDX. Realloc
+    // AlpDX whenever its tracked capacity is short for the new TextLen.
+    else if ((Flags & (STF_PATH_ELLIPSIS | STF_END_ELLIPSIS)) &&
+             (AlpDX == NULL || l > AlpDXAllocated))
+    {
+        const int needAlpDX = l + ST_ALLOC_GRANULARITY;
+        int* newAlpDX = (int*)realloc(AlpDX, needAlpDX * sizeof(int));
+        if (newAlpDX == NULL)
+        {
+            TRACE_E(LOW_MEMORY);
+            return FALSE;
+        }
+        AlpDX = newAlpDX;
+        AlpDXAllocated = needAlpDX;
+    }
     memmove(Text, text, l);
+    TextW.clear();
+    Text2W.clear();
+    UseWideText = FALSE;
     TextLen = l - 1;
+
+    PrepareForPaint();
+
+    InvalidateRect(HWindow, NULL, FALSE);
+    UpdateWindow(HWindow);
+    return TRUE;
+}
+
+BOOL CStaticText::SetTextW(const wchar_t* text)
+{
+    std::wstring newText = text != NULL ? text : L"";
+    if (UseWideText && TextW == newText)
+        return TRUE;
+
+    std::string fallbackText = StaticTextWideToAnsi(newText);
+    int l = (int)fallbackText.size() + 1;
+    if (Allocated < l)
+    {
+        char* newTextA = (char*)realloc(Text, l + ST_ALLOC_GRANULARITY);
+        if (newTextA == NULL)
+        {
+            TRACE_E(LOW_MEMORY);
+            return FALSE;
+        }
+        if (Flags & (STF_PATH_ELLIPSIS | STF_END_ELLIPSIS))
+        {
+            const int needAlpDX = max(1, (int)newText.size()) + ST_ALLOC_GRANULARITY;
+            int* newAlpDX = (int*)realloc(AlpDX, needAlpDX * sizeof(int));
+            if (newAlpDX == NULL)
+            {
+                TRACE_E(LOW_MEMORY);
+                free(newTextA);
+                return FALSE;
+            }
+            AlpDX = newAlpDX;
+            AlpDXAllocated = needAlpDX;
+        }
+        Text = newTextA;
+        Allocated = l + ST_ALLOC_GRANULARITY;
+    }
+    // Allocated tracks the ANSI byte capacity of Text. AlpDX, however, must
+    // hold TextLen ints, and TextLen for wide text is the wide codepoint
+    // count — which can exceed the ANSI fallback length (e.g. CJK chars on a
+    // DBCS code page, or characters that fall back to '?'). Realloc AlpDX
+    // whenever its tracked capacity is short for the new wide TextLen, even
+    // when the ANSI fallback still fits in Allocated.
+    else if ((Flags & (STF_PATH_ELLIPSIS | STF_END_ELLIPSIS)) &&
+             (AlpDX == NULL || (int)newText.size() > AlpDXAllocated))
+    {
+        const int needAlpDX = max(1, (int)newText.size()) + ST_ALLOC_GRANULARITY;
+        int* newAlpDX = (int*)realloc(AlpDX, needAlpDX * sizeof(int));
+        if (newAlpDX == NULL)
+        {
+            TRACE_E(LOW_MEMORY);
+            return FALSE;
+        }
+        AlpDX = newAlpDX;
+        AlpDXAllocated = needAlpDX;
+    }
+
+    memmove(Text, fallbackText.c_str(), l);
+    TextW = newText;
+    Text2W.clear();
+    UseWideText = TRUE;
+    TextLen = (int)TextW.size();
 
     PrepareForPaint();
 
@@ -602,6 +706,22 @@ BOOL CStaticText::SetTextToDblQuotesIfNeeded(const char* text)
     return SetText(text);
 }
 
+BOOL CStaticText::SetTextToDblQuotesIfNeededW(const wchar_t* text)
+{
+    if (text != NULL)
+    {
+        int len = (int)wcslen(text);
+        if (len > 0 && (text[0] <= L' ' || text[len - 1] <= L' ') && len < 2 * MAX_PATH)
+        {
+            std::wstring quoted = L"\"";
+            quoted += text;
+            quoted += L"\"";
+            return SetTextW(quoted.c_str());
+        }
+    }
+    return SetTextW(text);
+}
+
 void CStaticText::PrepareForPaint()
 {
     ClipDraw = FALSE;
@@ -617,7 +737,134 @@ void CStaticText::PrepareForPaint()
     HDC hDC = HANDLES(GetDC(HWindow));
     HFONT hOldFont = (HFONT)SelectObject(hDC, HFont);
     SIZE sz;
-    if (Flags & (STF_PATH_ELLIPSIS | STF_END_ELLIPSIS))
+    if (UseWideText)
+    {
+        if (Flags & (STF_PATH_ELLIPSIS | STF_END_ELLIPSIS))
+        {
+            if (Flags & STF_END_ELLIPSIS)
+            {
+                int fitChars;
+                GetTextExtentExPointW(hDC, TextW.c_str(), TextLen, Width, &fitChars, AlpDX, &sz);
+
+                if (fitChars < TextLen)
+                {
+                    SIZE ellipsisSZ;
+                    GetTextExtentPoint32W(hDC, L"...", 3, &ellipsisSZ);
+                    int ellipsisWidth = ellipsisSZ.cx;
+
+                    while (fitChars > 0 && AlpDX[fitChars - 1] + ellipsisWidth > Width)
+                        fitChars--;
+                    if (fitChars > 0)
+                    {
+                        Text2W.assign(TextW.c_str(), TextW.c_str() + fitChars);
+                        TextWidth = AlpDX[fitChars - 1];
+                        Text2Len = fitChars;
+                    }
+                    else
+                    {
+                        Text2W.clear();
+                        TextWidth = 0;
+                        Text2Len = 0;
+                    }
+                    Text2W += L"...";
+                    TextWidth += ellipsisWidth;
+                    Text2Len += 3;
+
+                    Text2Draw = TRUE;
+                }
+                else
+                {
+                    TextWidth = sz.cx;
+                    Text2W.clear();
+                }
+            }
+            else
+            {
+                GetTextExtentExPointW(hDC, TextW.c_str(), TextLen, 0, NULL, AlpDX, &sz);
+
+                if (sz.cx > Width)
+                {
+                    SIZE ellipsisSZ;
+                    GetTextExtentPoint32W(hDC, L"...", 3, &ellipsisSZ);
+                    int ellipsisWidth = ellipsisSZ.cx;
+
+                    const wchar_t separator = (wchar_t)(unsigned char)PathSeparator;
+                    const wchar_t* p = TextW.c_str() + TextLen - 1;
+                    while (*p != separator && p > TextW.c_str())
+                        p--;
+                    const wchar_t* p2 = p;
+                    if (p > TextW.c_str())
+                        p--;
+                    int pIndex = (int)(p - TextW.c_str());
+
+                    if (ellipsisWidth + sz.cx - AlpDX[pIndex] > Width)
+                    {
+                        while (pIndex < TextLen && (ellipsisWidth + sz.cx - AlpDX[pIndex] > Width))
+                            pIndex++;
+
+                        pIndex++;
+                        Text2W = L"...";
+                        Text2Len = 3;
+                        TextWidth = ellipsisWidth;
+                        if (pIndex < TextLen)
+                        {
+                            Text2W.append(TextW.c_str() + pIndex);
+                            Text2Len += TextLen - pIndex;
+                            TextWidth += sz.cx - AlpDX[pIndex - 1];
+                        }
+                    }
+                    else
+                    {
+                        int rightPartWidth = sz.cx - AlpDX[pIndex];
+                        while (pIndex >= 0 && (AlpDX[pIndex] + ellipsisWidth + rightPartWidth) > Width)
+                            pIndex--;
+
+                        Text2Len = 0;
+                        TextWidth = 0;
+                        Text2W.clear();
+                        if (pIndex >= 0)
+                        {
+                            Text2W.assign(TextW.c_str(), TextW.c_str() + pIndex + 1);
+                            Text2Len += pIndex + 1;
+                            TextWidth += AlpDX[pIndex];
+                        }
+                        Text2W += L"...";
+                        Text2Len += 3;
+                        TextWidth += ellipsisWidth;
+                        Text2W.append(p2);
+                        Text2Len += TextLen - (int)(p2 - TextW.c_str());
+                        TextWidth += rightPartWidth;
+                    }
+
+                    Text2Draw = TRUE;
+                }
+                else
+                {
+                    TextWidth = sz.cx;
+                    Text2W.clear();
+                }
+            }
+            TextHeight = sz.cy;
+        }
+        else
+        {
+            if (Flags & STF_HANDLEPREFIX)
+            {
+                RECT r;
+                GetClientRect(HWindow, &r);
+                DrawTextW(hDC, TextW.c_str(), TextLen, &r, DT_CALCRECT | DT_SINGLELINE | DT_LEFT);
+                TextWidth = r.right;
+                TextHeight = r.bottom;
+            }
+            else
+            {
+                GetTextExtentPoint32W(hDC, TextW.c_str(), TextLen, &sz);
+                TextWidth = sz.cx + 1;
+                TextHeight = sz.cy;
+            }
+        }
+    }
+    else if (Flags & (STF_PATH_ELLIPSIS | STF_END_ELLIPSIS))
     {
         if (Flags & STF_END_ELLIPSIS)
         {
@@ -1121,28 +1368,29 @@ CStaticText::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 if (UIState & UISF_HIDEACCEL)
                     drawFlags |= DT_HIDEPREFIX;
 
-                DrawText(hDC, Text, TextLen, &r, drawFlags);
+                if (UseWideText)
+                    DrawTextW(hDC, TextW.c_str(), TextLen, &r, drawFlags);
+                else
+                    DrawTextA(hDC, Text, TextLen, &r, drawFlags);
             }
             else
             {
-                const char* text;
-                int textLen;
-                if (Text2Draw)
-                {
-                    text = Text2;
-                    textLen = Text2Len;
-                }
-                else
-                {
-                    text = Text;
-                    textLen = TextLen;
-                }
                 DWORD drawFlags = (bkErased) ? 0 : ETO_OPAQUE;
-                // if (ClipDraw) // same problem as above
                 drawFlags |= ETO_CLIPPED;
 
                 int xOffset = GetTextXOffset();
-                ExtTextOut(hDC, r.left + xOffset, r.top, drawFlags, &r, text, textLen, NULL);
+                if (UseWideText)
+                {
+                    const wchar_t* text = Text2Draw ? Text2W.c_str() : TextW.c_str();
+                    int textLen = Text2Draw ? Text2Len : TextLen;
+                    ExtTextOutW(hDC, r.left + xOffset, r.top, drawFlags, &r, text, textLen, NULL);
+                }
+                else
+                {
+                    const char* text = Text2Draw ? Text2 : Text;
+                    int textLen = Text2Draw ? Text2Len : TextLen;
+                    ExtTextOutA(hDC, r.left + xOffset, r.top, drawFlags, &r, text, textLen, NULL);
+                }
             }
 
             if (Flags & STF_DOTUNDERLINE)

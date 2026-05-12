@@ -325,12 +325,14 @@ struct CConfiguration
     // the history arrays are destroyed in the ClearHistory() method
     char* SelectHistory[SELECT_HISTORY_SIZE];
     char* CopyHistory[COPY_HISTORY_SIZE];
+    wchar_t* CopyHistoryW[COPY_HISTORY_SIZE];
     char* EditHistory[EDIT_HISTORY_SIZE];
     char* ChangeDirHistory[CHANGEDIR_HISTORY_SIZE];
     char* FileListHistory[FILELIST_HISTORY_SIZE];
     char* CreateDirHistory[CREATEDIR_HISTORY_SIZE];
     char* QuickRenameHistory[QUICKRENAME_HISTORY_SIZE];
     char* EditNewHistory[EDITNEW_HISTORY_SIZE];
+    wchar_t* CreateDirHistoryW[CREATEDIR_HISTORY_SIZE];
     wchar_t* QuickRenameHistoryW[QUICKRENAME_HISTORY_SIZE];
     wchar_t* EditNewHistoryW[EDITNEW_HISTORY_SIZE];
     char* ConvertHistory[CONVERT_HISTORY_SIZE];

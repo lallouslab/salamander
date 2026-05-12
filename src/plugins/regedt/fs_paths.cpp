@@ -45,7 +45,7 @@ BOOL CPluginFSInterface::SetNewPath(WCHAR* newPath)
     return TRUE;
 }
 
-BOOL CPluginFSInterface::GetCurrentPathW(WCHAR* userPart, int size)
+BOOL WINAPI CPluginFSInterface::GetCurrentPathW(wchar_t* userPart, int size)
 {
     CALL_STACK_MESSAGE2("CPluginFSInterface::GetCurrentPathW(, %d)", size);
     // !!! report an error if the buffer is too small

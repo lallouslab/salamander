@@ -22,6 +22,9 @@
 #include "gui.h"
 #include "execute.h"
 #include "jumplist.h"
+#include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
+#include "common/fsutil.h"
 
 #include "versinfo.rh2"
 
@@ -293,6 +296,10 @@ BOOL CHotPathItems::Load1_52(HKEY hKey)
 
 CMainWindow::CMainWindow() : ChangeNotifArray(3, 5)
 {
+#ifndef _UNICODE
+    UnicodeWnd = TRUE;            // main window is registered with RegisterClassExW so the caption preserves Unicode
+    DefWndProc = GetDefWindowProc(); // re-derive after flipping UnicodeWnd so unhandled messages reach DefWindowProcW
+#endif
     HANDLES(InitializeCriticalSection(&DispachChangeNotifCS));
     LastDispachChangeNotifTime = 0;
     NeedToResentDispachChangeNotif = FALSE;
@@ -1234,8 +1241,14 @@ void CMainWindow::RefreshDiskFreeSpace()
 
 void CMainWindow::RefreshDirs()
 {
-    LeftPanel->ChangePathToDisk(LeftPanel->HWindow, LeftPanel->GetPath());
-    RightPanel->ChangePathToDisk(RightPanel->HWindow, RightPanel->GetPath());
+    if (sally::unicode::HasWidePathW(LeftPanel->GetPathW()))
+        LeftPanel->ChangePathToDiskW(LeftPanel->HWindow, LeftPanel->GetPathW());
+    else
+        LeftPanel->ChangePathToDisk(LeftPanel->HWindow, LeftPanel->GetPath());
+    if (sally::unicode::HasWidePathW(RightPanel->GetPathW()))
+        RightPanel->ChangePathToDiskW(RightPanel->HWindow, RightPanel->GetPathW());
+    else
+        RightPanel->ChangePathToDisk(RightPanel->HWindow, RightPanel->GetPath());
 }
 
 // for passing the path to the configuration dialog
@@ -1848,15 +1861,77 @@ void CMainWindow::GetFormatedPathForTitle(char* path)
     }
 }
 
+static std::wstring GetFormatedPathForTitleW(CMainWindow* mainWindow)
+{
+    CFilesWindow* panel = mainWindow->GetActivePanel();
+    if (panel == NULL)
+        return L"";
+
+    if (!panel->Is(ptDisk) && !panel->Is(ptZIPArchive))
+    {
+        CPathBuffer pathA;
+        mainWindow->GetFormatedPathForTitle(pathA);
+        return AnsiToWide(pathA);
+    }
+
+    std::wstring pathW = panel->Is(ptDisk) ? panel->GetPathW() : panel->GetZIPArchiveW();
+    if (panel->Is(ptZIPArchive) && panel->GetZIPPathW()[0] != 0)
+    {
+        if (panel->GetZIPPathW()[0] != L'\\')
+            pathW += L"\\";
+        pathW += panel->GetZIPPathW();
+    }
+
+    switch (Configuration.TitleBarMode)
+    {
+    case TITLE_BAR_MODE_COMPOSITE:
+    {
+        std::wstring trimStart;
+        std::wstring trimEnd;
+        std::wstring rootPathW = GetRootPathW(pathW.c_str());
+        size_t chars = rootPathW.size();
+        size_t lastSlash = std::wstring::npos;
+        while (chars < pathW.size())
+        {
+            if (pathW[chars] == L'\\' && chars + 1 < pathW.size())
+                lastSlash = chars;
+            chars++;
+        }
+        if (!rootPathW.empty() && lastSlash != std::wstring::npos && lastSlash > rootPathW.size())
+            pathW = pathW.substr(0, rootPathW.size()) + L"..." + pathW.substr(lastSlash);
+        break;
+    }
+
+    case TITLE_BAR_MODE_DIRECTORY:
+    {
+        std::wstring rootPathW = GetRootPathW(pathW.c_str());
+        size_t chars = rootPathW.size();
+        size_t pos = pathW.find_last_of(L'\\');
+        if (pos != std::wstring::npos && pos + 1 < pathW.size() && pos + 1 >= chars)
+            pathW = pathW.substr(pos + 1);
+        break;
+    }
+
+    case TITLE_BAR_MODE_FULLPATH:
+    default:
+        break;
+    }
+    return pathW;
+}
+
 void CMainWindow::SetWindowTitle(const char* text)
 {
     CALL_STACK_MESSAGE2("CMainWindow::SetWindowTitle(%s)", text);
+    const BOOL useDefaultTitle = (text == NULL);
     char buff[1000];
     ::GetWindowText(HWindow, buff, 1000);
     buff[999] = 0;
+    wchar_t buffW[1000];
+    ::GetWindowTextW(HWindow, buffW, 1000);
+    buffW[999] = 0;
 
     CPathBuffer stdWndName;
-    if (text == NULL)
+    if (useDefaultTitle)
     {
         // provide default content
         stdWndName[0] = 0;
@@ -1914,7 +1989,57 @@ void CMainWindow::SetWindowTitle(const char* text)
         text = stdWndName;
     }
 
-    if (strcmp(text, buff) != 0)
+    std::wstring textW;
+    if (useDefaultTitle)
+    {
+        std::wstring pathW = GetFormatedPathForTitleW(this);
+
+        if (Configuration.UseTitleBarPrefixForced && Configuration.TitleBarPrefixForced[0] != 0)
+        {
+            textW += AnsiToWide(Configuration.TitleBarPrefixForced);
+            textW += L" - ";
+        }
+        else if (Configuration.UseTitleBarPrefix && Configuration.TitleBarPrefix[0] != 0)
+        {
+            textW += AnsiToWide(Configuration.TitleBarPrefix);
+            textW += L" - ";
+        }
+
+        if (Configuration.TitleBarShowPath && !pathW.empty())
+        {
+            textW += pathW;
+            textW += L" - ";
+        }
+
+        textW += AnsiToWide(MAINWINDOW_NAME);
+#if defined(GIT_VERSION_AVAILABLE) && defined(GIT_VERSION)
+        textW += L" ";
+        textW += AnsiToWide(GIT_VERSION);
+        textW += L" (";
+        textW += AnsiToWide(SAL_VER_PLATFORM);
+        textW += L")";
+#else
+        textW += L" ";
+        textW += AnsiToWide(VERSINFO_VERSION);
+#endif
+        if (RunningAsAdmin)
+        {
+            textW += L" (";
+            textW += LoadStrW(IDS_AS_ADMIN_TITLE);
+            textW += L")";
+        }
+#ifdef X64_STRESS_TEST
+        textW += L" ST";
+#endif
+    }
+
+    if (useDefaultTitle)
+    {
+        ::SetWindowTextW(HWindow, textW.c_str());
+        if (Configuration.StatusArea)
+            SetTrayIconText(WideToAnsi(textW).c_str());
+    }
+    else if (strcmp(text, buff) != 0)
     {
         ::SetWindowText(HWindow, text);
         if (Configuration.StatusArea)
