@@ -1103,6 +1103,16 @@ public:
         return r;
     }
 
+    BOOL GetCurrentPathW(std::wstring& userPart);
+    BOOL GetFullNameW(CFileData& file, int isDir, std::wstring& fullName);
+    BOOL GetFullFSPathW(HWND parent, const std::wstring& fsName, std::wstring& path, BOOL& success);
+    BOOL GetRootPathW(std::wstring& userPart);
+    BOOL IsCurrentPathW(int currentFSNameIndex, int fsNameIndex, const std::wstring& userPart);
+    BOOL IsOurPathW(int currentFSNameIndex, int fsNameIndex, const std::wstring& userPart);
+    BOOL ChangePathW(int currentFSNameIndex, std::wstring& fsName, int fsNameIndex,
+                     const std::wstring& userPart, std::wstring* cutFileName,
+                     BOOL* pathWasCut, BOOL forceRefresh, int mode);
+
     // in the debug version we count OpenedPDCounter, therefore it must be in the .cpp module
     BOOL ListCurrentPath(CSalamanderDirectoryAbstract* dir,
                          CPluginDataInterfaceAbstract*& pluginData,

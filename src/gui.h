@@ -69,6 +69,7 @@ public:
 
     // sets Text, returns TRUE on success and FALSE on memory shortage
     BOOL SetText(const char* text);
+    BOOL SetTextW(const wchar_t* text);
 
     // warning, returned Text may be NULL
     const char* GetText() { return Text; }
@@ -76,6 +77,7 @@ public:
     // sets Text (if it starts or ends with a space, puts it in double quotes),
     // returns TRUE on success and FALSE on memory shortage
     BOOL SetTextToDblQuotesIfNeeded(const char* text);
+    BOOL SetTextToDblQuotesIfNeededW(const wchar_t* text);
 
     // on some filesystems there can be a different path separator
     // must be different from '\0';
@@ -110,13 +112,24 @@ protected:
 
     DWORD Flags;         // flags for control behavior
     char* Text;          // allocated text
+    std::wstring TextW;  // wide text source when Unicode rendering is needed
     int TextLen;         // string length
     char* Text2;         // allocated text containing ellipsis; used only with STF_END_ELLIPSIS or STF_PATH_ELLIPSIS
+    std::wstring Text2W; // wide ellipsized text for Unicode rendering
     int Text2Len;        // Text2 length
     int* AlpDX;          // array of substring lengths; used only with STF_END_ELLIPSIS or STF_PATH_ELLIPSIS
+    int AlpDXAllocated;  // AlpDX capacity, in ints. Tracked separately from
+                         // Allocated (which is ANSI byte capacity of Text)
+                         // because SetTextW sizes AlpDX by wide codepoint count
+                         // — under DBCS code pages or when wide-then-ANSI calls
+                         // interleave, Allocated and AlpDX capacity diverge.
+                         // GetTextExtentExPointW writes TextLen ints into AlpDX,
+                         // so this must be >= TextLen whenever ellipsis flags
+                         // are set.
     int TextWidth;       // text width in points
     int TextHeight;      // text height in points
-    int Allocated;       // size of allocated buffer 'Text' and 'AlpDX'
+    int Allocated;       // size of allocated buffer 'Text' (ANSI bytes)
+    BOOL UseWideText;    // render using TextW/Text2W instead of ANSI buffers
     int Width, Height;   // static dimensions
     CBitmap* Bitmap;     // cache for drawing; used only with STF_CACHED_PAINT
     HFONT HFont;         // font handle used for text drawing

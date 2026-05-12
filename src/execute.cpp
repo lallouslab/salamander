@@ -27,6 +27,15 @@ CComboboxEdit::CComboboxEdit()
     SelEnd = -1;
 }
 
+#ifndef _UNICODE
+CComboboxEdit::CComboboxEdit(BOOL unicodeWnd)
+    : CWindow(ooAllocated, unicodeWnd)
+{
+    SelStart = 0;
+    SelEnd = -1;
+}
+#endif
+
 LRESULT
 CComboboxEdit::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {

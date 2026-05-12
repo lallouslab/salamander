@@ -13,6 +13,7 @@
 #include "shellib.h"
 #include "svg.h"
 #include "darkmode.h"
+#include "common/fsutil.h"
 #include "common/unicode/helpers.h"
 
 static COLORREF GetStatusBkColor(BOOL activeCaption, BOOL showPanelCaption)
@@ -67,6 +68,7 @@ CStatusWindow::CStatusWindow(CFilesWindow* filesWindow, int border, CObjectOrigi
 {
     CALL_STACK_MESSAGE_NONE
     Text = NULL;
+    UseWideText = FALSE;
     AlpDX = NULL;
     Allocated = 0;
     PathLen = -1;
@@ -161,6 +163,8 @@ BOOL CStatusWindow::SetSubTexts(DWORD* subTexts, DWORD subTextsCount)
 BOOL CStatusWindow::SetText(const char* txt, int pathLen)
 {
     CALL_STACK_MESSAGE3("CStatusWindow::SetText(%s, %d)", txt, pathLen);
+    UseWideText = FALSE;
+    TextW.clear();
     if (Text != NULL && strcmp(Text, txt) == 0)
     {
         PathLen = pathLen;
@@ -206,6 +210,67 @@ BOOL CStatusWindow::SetText(const char* txt, int pathLen)
     return TRUE;
 }
 
+BOOL CStatusWindow::SetTextW(const wchar_t* txt, int pathLen)
+{
+    std::wstring newText = txt != NULL ? txt : L"";
+    CALL_STACK_MESSAGE3("CStatusWindow::SetTextW(%s, %d)", WideToAnsi(newText).c_str(), pathLen);
+    if (UseWideText && TextW == newText)
+    {
+        PathLen = pathLen;
+        return TRUE;
+    }
+
+    HotTrackItemsMeasured = FALSE;
+    HotItem = NULL;
+    LastHotItem = NULL;
+
+    TextW = newText;
+    UseWideText = TRUE;
+
+    std::string fallbackText = WideToAnsi(TextW);
+    int l = (int)fallbackText.size() + 1;
+    if (Allocated < l)
+    {
+        char* newAnsiText = (char*)realloc(Text, l);
+        if (newAnsiText == NULL)
+        {
+            TRACE_E(LOW_MEMORY);
+            return FALSE;
+        }
+        Text = newAnsiText;
+        Allocated = l;
+    }
+    memmove(Text, fallbackText.c_str(), l);
+
+    int requiredDx = max(1, (int)TextW.size() + 1);
+    int* newAlpDX = (int*)realloc(AlpDX, requiredDx * sizeof(int));
+    if (newAlpDX == NULL)
+    {
+        TRACE_E(LOW_MEMORY);
+        return FALSE;
+    }
+    AlpDX = newAlpDX;
+
+    PathLen = pathLen;
+    TextLen = (int)TextW.size();
+
+    if (SubTexts != NULL)
+    {
+        SubTextsCount = 0;
+        free(SubTexts);
+        SubTexts = NULL;
+    }
+
+    BuildHotTrackItems();
+
+    if (MouseCaptured)
+        WindowProc(WM_MOUSELEAVE, 0, 0);
+
+    if (HWindow != NULL)
+        InvalidateRect(HWindow, NULL, FALSE);
+    return TRUE;
+}
+
 void CStatusWindow::BuildHotTrackItems()
 {
     CALL_STACK_MESSAGE1("CStatusWindow::BuildHotTrackItems()");
@@ -220,7 +285,57 @@ void CStatusWindow::BuildHotTrackItems()
         // populate HotTrackItems
         CHotTrackItem item;
         HotTrackItems.DestroyMembers();
-        if (Text != NULL)
+        if (UseWideText)
+        {
+            int pathLen = (PathLen != -1) ? PathLen : (int)TextW.size();
+            SIZE s;
+            GetTextExtentExPointW(dc, TextW.c_str(), TextLen, 0, NULL, AlpDX, &s);
+
+            if (FilesWindow->Is(ptDisk) || FilesWindow->Is(ptZIPArchive))
+            {
+                int chars;
+                if (TextW.size() >= 2 && TextW[0] == L'\\' && TextW[1] == L'\\' &&
+                    (TextW.size() < 6 || TextW[2] != L'.' || TextW[3] != L'\\' || TextW[4] == 0 || TextW[5] != L':') &&
+                    Plugins.GetFirstNethoodPluginFSName())
+                {
+                    chars = 2;
+                }
+                else
+                {
+                    std::wstring rootPathW = GetRootPathW(TextW.c_str());
+                    chars = (int)rootPathW.size();
+
+                    BOOL isDotDriveFormat = TextW.size() >= 6 && TextW[0] == L'\\' && TextW[1] == L'\\' &&
+                                            TextW[2] == L'.' && TextW[3] == L'\\' && TextW[4] != 0 && TextW[5] == L':';
+                    if (chars > pathLen || !isDotDriveFormat && chars > 3)
+                        chars--;
+                }
+
+                BOOL exit;
+                do
+                {
+                    item.Offset = 0;
+                    item.PixelsOffset = 0;
+                    item.Chars = chars;
+                    item.Pixels = chars != 0 ? (WORD)AlpDX[chars - 1] : 0;
+                    HotTrackItems.Add(item);
+
+                    if (chars < pathLen && TextW[chars] == L'\\')
+                        chars++;
+
+                    exit = TRUE;
+                    while (chars < pathLen)
+                    {
+                        exit = FALSE;
+                        if (TextW[chars] == L'\\')
+                            break;
+                        chars++;
+                    }
+                } while (!exit);
+            }
+            HotTrackItemsMeasured = TRUE;
+        }
+        else if (Text != NULL)
         {
             // this crashed in SS2.0: execution address = 0x7800D9B0
             // strlen was called when Text was still NULL
@@ -309,7 +424,35 @@ void CStatusWindow::BuildHotTrackItems()
         // populate HotTrackItems
         CHotTrackItem item;
         HotTrackItems.DestroyMembers();
-        if (Text != NULL)
+        if (UseWideText)
+        {
+            SIZE s;
+            GetTextExtentExPointW(dc, TextW.c_str(), TextLen, 0, NULL, AlpDX, &s);
+
+            DWORD len = TextLen;
+            SIZE sOffset;
+            SIZE sSub;
+            DWORD i;
+            for (i = 0; i < (DWORD)SubTextsCount; i++)
+            {
+                WORD charOffset = LOWORD(SubTexts[i]);
+                WORD charLen = HIWORD(SubTexts[i]);
+                if (charOffset + charLen > (WORD)len)
+                {
+                    TRACE_E("charOffset + charLen >= len");
+                    continue;
+                }
+                GetTextExtentPoint32W(dc, TextW.c_str(), charOffset, &sOffset);
+                GetTextExtentPoint32W(dc, TextW.c_str() + charOffset, charLen, &sSub);
+                item.PixelsOffset = (WORD)sOffset.cx;
+                item.Pixels = (WORD)sSub.cx;
+                item.Offset = charOffset;
+                item.Chars = charLen;
+                HotTrackItems.Add(item);
+                HotTrackItemsMeasured = TRUE;
+            }
+        }
+        else if (Text != NULL)
         {
             // get positions of all characters
             SIZE s;
@@ -635,7 +778,13 @@ void CStatusWindow::LayoutWindow()
 void CStatusWindow::GetHotText(char* buffer, int bufSize)
 {
     CALL_STACK_MESSAGE_NONE
-    if (HotItem != NULL && Text != NULL)
+    if (HotItem != NULL && UseWideText)
+    {
+        std::wstring hotText = TextW.substr(HotItem->Offset, HotItem->Chars);
+        std::string hotTextA = WideToAnsi(hotText);
+        lstrcpyn(buffer, hotTextA.c_str(), bufSize);
+    }
+    else if (HotItem != NULL && Text != NULL)
     {
         lstrcpyn(buffer, Text + HotItem->Offset, min(HotItem->Chars + 1, bufSize));
         // for Directory Line with plugin FS, allow plugin to make final path adjustments (adding ']' for VMS paths in FTP)
@@ -794,6 +943,15 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
 
         SetBkMode(dc, TRANSPARENT);
         HFONT oldFont = (HFONT)SelectObject(dc, EnvFont);
+        auto drawTextAt = [&](int x, int y, int start, int count)
+        {
+            if (count <= 0)
+                return;
+            if (UseWideText)
+                ExtTextOutW(dc, x, y, 0, NULL, TextW.c_str() + start, count, NULL);
+            else
+                ExtTextOut(dc, x, y, 0, NULL, Text + start, count, NULL);
+        };
 
         SIZE s;
         RECT tmpR;
@@ -1008,7 +1166,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
             {
                 if (truncateEnd)
                 { // without truncation or truncated end
-                    ExtTextOut(dc, TextRect.left, textY, 0, NULL, Text, min(visibleChars, firstClipChar), NULL);
+                    drawTextAt(TextRect.left, textY, 0, min(visibleChars, firstClipChar));
                     if (visibleChars < min(TextLen, firstClipChar)) // if end was truncated -> append "..."
                     {
                         int offset = (visibleChars > 0) ? AlpDX[visibleChars - 1] : 0;
@@ -1019,12 +1177,12 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                 { // truncated part after root folder
                     // root part
                     int rootChars = HotTrackItems[0].Chars;
-                    ExtTextOut(dc, TextRect.left, textY, 0, NULL, Text, rootChars, NULL);
+                    drawTextAt(TextRect.left, textY, 0, rootChars);
                     // "..."
                     ExtTextOut(dc, TextRect.left + AlpDX[rootChars - 1], textY, 0, NULL, "...", 3, NULL);
                     // remainder
-                    ExtTextOut(dc, TextRect.left + AlpDX[rootChars - 1] + TextEllipsisWidthEnv,
-                               textY, 0, NULL, Text + TextLen - visibleChars, visibleChars, NULL);
+                    drawTextAt(TextRect.left + AlpDX[rootChars - 1] + TextEllipsisWidthEnv,
+                               textY, TextLen - visibleChars, visibleChars);
                 }
             }
 
@@ -1033,7 +1191,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
             {
                 // without truncation or truncated end
                 int visibleChars2 = visibleChars - lastClipChar;
-                ExtTextOut(dc, TextRect.left + AlpDX[lastClipChar - 1], textY, 0, NULL, Text + lastClipChar, visibleChars2, NULL);
+                drawTextAt(TextRect.left + AlpDX[lastClipChar - 1], textY, lastClipChar, visibleChars2);
                 if (visibleChars < TextLen) // if end was truncated -> append "..."
                 {
                     int offset = (visibleChars > 0) ? AlpDX[visibleChars - 1] : 0;
@@ -1057,8 +1215,8 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                     if (firstChar < rootChars + EllipsedChars) // need to skip possible backslash that would fall into ellipsis
                         firstChar = rootChars + EllipsedChars;
                 }
-                ExtTextOut(dc, TextRect.left + AlpDX[firstChar - 1] - EllipsedWidth + TextEllipsisWidthEnv,
-                           textY, 0, NULL, Text + firstChar, TextLen - firstChar, NULL);
+                drawTextAt(TextRect.left + AlpDX[firstChar - 1] - EllipsedWidth + TextEllipsisWidthEnv,
+                           textY, firstChar, TextLen - firstChar);
             }
 
             // display hot track item
@@ -1091,8 +1249,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                     }
                     if (showChars > 0)
                     {
-                        ExtTextOut(dc, TextRect.left + hotItem->PixelsOffset, textY, 0, NULL,
-                                   Text + hotItem->Offset, showChars, NULL);
+                        drawTextAt(TextRect.left + hotItem->PixelsOffset, textY, hotItem->Offset, showChars);
                     }
                 }
                 else
@@ -1100,7 +1257,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                     int showChars = hotItem->Chars;
 
                     int rootChars = HotTrackItems[0].Chars;
-                    ExtTextOut(dc, TextRect.left, textY, 0, NULL, Text, rootChars, NULL);
+                    drawTextAt(TextRect.left, textY, 0, rootChars);
                     if (showChars > rootChars)
                     {
                         // "..."
@@ -1108,8 +1265,8 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                         if (showChars - rootChars - EllipsedChars > 0)
                         {
                             // remainder
-                            ExtTextOut(dc, TextRect.left + AlpDX[rootChars - 1] + TextEllipsisWidthEnv,
-                                       textY, 0, NULL, Text + rootChars + EllipsedChars, showChars - rootChars - EllipsedChars, NULL);
+                            drawTextAt(TextRect.left + AlpDX[rootChars - 1] + TextEllipsisWidthEnv,
+                                       textY, rootChars + EllipsedChars, showChars - rootChars - EllipsedChars);
                         }
                     }
                 }
@@ -2085,15 +2242,23 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         //if (HotItem->Chars != (int)TextLen) // this condition failed when filter was attached
                         if (HotItem != lastItem)
                         {
-                            // path truncation
-                            CPathBuffer path; // Heap-allocated for long path support
-                            strncpy(path, Text, HotItem->Chars);
-                            path[HotItem->Chars] = 0;
+                            if (UseWideText && FilesWindow->Is(ptDisk))
+                            {
+                                std::wstring pathW = TextW.substr(0, HotItem->Chars);
+                                FilesWindow->ChangePathToDiskW(FilesWindow->HWindow, pathW.c_str(), -1, NULL, NULL, FALSE);
+                            }
+                            else
+                            {
+                                // path truncation
+                                CPathBuffer path; // Heap-allocated for long path support
+                                strncpy(path, Text, HotItem->Chars);
+                                path[HotItem->Chars] = 0;
 
-                            if (FilesWindow->Is(ptPluginFS) && FilesWindow->GetPluginFS()->NotEmpty())
-                                FilesWindow->GetPluginFS()->CompleteDirectoryLineHotPath(path, path.Size());
+                                if (FilesWindow->Is(ptPluginFS) && FilesWindow->GetPluginFS()->NotEmpty())
+                                    FilesWindow->GetPluginFS()->CompleteDirectoryLineHotPath(path, path.Size());
 
-                            FilesWindow->ChangeDir(path, -1, NULL, 2 /* as back/forward in history*/, NULL, FALSE);
+                                FilesWindow->ChangeDir(path, -1, NULL, 2 /* as back/forward in history*/, NULL, FALSE);
+                            }
                         }
                         else
                         {

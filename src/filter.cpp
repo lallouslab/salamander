@@ -1,10 +1,13 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
 
+#include "darkmode.h"
 #include "ui/IPrompter.h"
+
+#include <uxtheme.h>
 
 // Attributes
 const char* FILTERCRITERIA_ATTRIBUTESMASK_REG = "Attributes Mask";
@@ -51,6 +54,770 @@ const char* OLD_FINDOPTIONSITEM_TIMEACTION_REG = "TimeAction";
 const char* OLD_FINDOPTIONSITEM_HOUR_REG = "Hour";
 const char* OLD_FINDOPTIONSITEM_MINUTE_REG = "Minute";
 const char* OLD_FINDOPTIONSITEM_SECOND_REG = "Second";
+
+static const UINT_PTR FILTER_DARK_SKIN_SUBCLASS_ID = 1;
+static const COLORREF FILTER_DARK_LINE = RGB(55, 55, 58);
+static const COLORREF FILTER_DARK_FRAME = RGB(62, 62, 66);
+static const COLORREF FILTER_DARK_BUTTON = RGB(52, 52, 56);
+static const COLORREF FILTER_DARK_SECTION_LINE = RGB(82, 82, 86);
+
+enum CFilterDarkSkinKind
+{
+    fdskStaticLine,
+    fdskEdit,
+    fdskCombo,
+    fdskUpDown,
+    fdskDateTime
+};
+
+struct CFilterDarkSkinState
+{
+    LONG_PTR Style;
+    LONG_PTR ExStyle;
+    CFilterDarkSkinKind Kind;
+};
+
+static LRESULT CALLBACK FilterDarkSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
+static void FilterFillRectSolid(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldColor = SetDCBrushColor(hdc, color);
+    FillRect(hdc, rect, (HBRUSH)GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+}
+
+static void FilterDrawRectOutline(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    COLORREF oldColor = SetDCPenColor(hdc, color);
+    Rectangle(hdc, rect->left, rect->top, rect->right, rect->bottom);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static void FilterDrawDownArrow(HDC hdc, const RECT* rect, COLORREF color)
+{
+    int centerX = (rect->left + rect->right) / 2;
+    int centerY = (rect->top + rect->bottom) / 2;
+    POINT arrow[3] = {
+        {centerX - 3, centerY - 1},
+        {centerX + 4, centerY - 1},
+        {centerX, centerY + 3},
+    };
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldPenColor = SetDCPenColor(hdc, color);
+    COLORREF oldBrushColor = SetDCBrushColor(hdc, color);
+    Polygon(hdc, arrow, 3);
+    SetDCBrushColor(hdc, oldBrushColor);
+    SetDCPenColor(hdc, oldPenColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static void FilterDrawUpArrow(HDC hdc, const RECT* rect, COLORREF color)
+{
+    int centerX = (rect->left + rect->right) / 2;
+    int centerY = (rect->top + rect->bottom) / 2;
+    POINT arrow[3] = {
+        {centerX - 3, centerY + 2},
+        {centerX + 4, centerY + 2},
+        {centerX, centerY - 2},
+    };
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldPenColor = SetDCPenColor(hdc, color);
+    COLORREF oldBrushColor = SetDCBrushColor(hdc, color);
+    Polygon(hdc, arrow, 3);
+    SetDCBrushColor(hdc, oldBrushColor);
+    SetDCPenColor(hdc, oldPenColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static void FilterDrawCheckMark(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldColor = SetDCPenColor(hdc, color);
+    int left = rect->left + max(2, (rect->right - rect->left) / 4);
+    int midY = (rect->top + rect->bottom) / 2;
+    MoveToEx(hdc, left, midY, NULL);
+    LineTo(hdc, left + 3, midY + 3);
+    LineTo(hdc, rect->right - 2, rect->top + 3);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldPen);
+}
+
+static void SetFilterWindowStyle(HWND hwnd, LONG_PTR style)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    if (GetWindowLongPtr(hwnd, GWL_STYLE) == style)
+        return;
+
+    SetWindowLongPtr(hwnd, GWL_STYLE, style);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static void SetFilterWindowExStyle(HWND hwnd, LONG_PTR exStyle)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) == exStyle)
+        return;
+
+    SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static BOOL GetFilterChildRectInDialog(HWND hDialog, int ctrlID, RECT* rect)
+{
+    if (hDialog == NULL || rect == NULL || !IsWindow(hDialog))
+        return FALSE;
+
+    HWND hChild = GetDlgItem(hDialog, ctrlID);
+    if (hChild == NULL || !IsWindow(hChild))
+        return FALSE;
+
+    if (!GetWindowRect(hChild, rect))
+        return FALSE;
+    MapWindowPoints(NULL, hDialog, (POINT*)rect, 2);
+    return TRUE;
+}
+
+static void PaintFilterDarkEditFrame(HWND hwnd)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return;
+
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+
+    RECT window;
+    GetWindowRect(hwnd, &window);
+    OffsetRect(&window, -window.left, -window.top);
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    MapWindowPoints(hwnd, NULL, (POINT*)&client, 2);
+    RECT screenWindow;
+    GetWindowRect(hwnd, &screenWindow);
+    OffsetRect(&client, -screenWindow.left, -screenWindow.top);
+
+    int savedDC = SaveDC(hdc);
+    ExcludeClipRect(hdc, client.left, client.top, client.right, client.bottom);
+    FilterFillRectSolid(hdc, &window, colors.InputBackground);
+    RestoreDC(hdc, savedDC);
+
+    FilterDrawRectOutline(hdc, &window, FILTER_DARK_FRAME);
+    ReleaseDC(hwnd, hdc);
+}
+
+static BOOL PaintFilterDarkStaticLine(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    FilterFillRectSolid(hdc, &client, colors.DialogBackground);
+    int y = max(client.top, min(client.bottom - 1, (client.top + client.bottom) / 2));
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldColor = SetDCPenColor(hdc, FILTER_DARK_LINE);
+    MoveToEx(hdc, client.left, y, NULL);
+    LineTo(hdc, client.right, y);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldPen);
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
+}
+
+static BOOL GetFilterComboText(HWND hwnd, LPTSTR text, int textLen)
+{
+    if (text == NULL || textLen <= 0)
+        return FALSE;
+
+    text[0] = 0;
+    int curSel = (int)SendMessage(hwnd, CB_GETCURSEL, 0, 0);
+    if (curSel >= 0)
+    {
+        SendMessage(hwnd, CB_GETLBTEXT, curSel, (LPARAM)text);
+        text[textLen - 1] = 0;
+        return text[0] != 0;
+    }
+
+    GetWindowText(hwnd, text, textLen);
+    text[textLen - 1] = 0;
+    return text[0] != 0;
+}
+
+static BOOL PaintFilterDarkCombo(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    FilterFillRectSolid(hdc, &client, colors.InputBackground);
+
+    int buttonWidth = max(GetSystemMetrics(SM_CXVSCROLL), client.bottom - client.top);
+    RECT button = client;
+    button.left = max(client.left + 1, client.right - buttonWidth - 1);
+    button.top = client.top + 1;
+    button.right = client.right - 1;
+    button.bottom = client.bottom - 1;
+
+    RECT textRect = client;
+    textRect.left += 4;
+    textRect.right = max(textRect.left, button.left - 3);
+
+    HFONT hFont = (HFONT)SendMessage(hwnd, WM_GETFONT, 0, 0);
+    HFONT hOldFont = NULL;
+    if (hFont != NULL)
+        hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+    TCHAR text[256];
+    GetFilterComboText(hwnd, text, _countof(text));
+
+    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+    COLORREF oldTextColor = SetTextColor(hdc, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+    DrawText(hdc, text, -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+    SetTextColor(hdc, oldTextColor);
+    SetBkMode(hdc, oldBkMode);
+    if (hOldFont != NULL)
+        SelectObject(hdc, hOldFont);
+
+    if (button.right > button.left && button.bottom > button.top)
+    {
+        FilterFillRectSolid(hdc, &button, FILTER_DARK_BUTTON);
+        HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+        COLORREF oldColor = SetDCPenColor(hdc, FILTER_DARK_LINE);
+        MoveToEx(hdc, button.left, button.top, NULL);
+        LineTo(hdc, button.left, button.bottom);
+        SetDCPenColor(hdc, oldColor);
+        SelectObject(hdc, oldPen);
+        FilterDrawDownArrow(hdc, &button, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+    }
+
+    FilterDrawRectOutline(hdc, &client, FILTER_DARK_FRAME);
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
+}
+
+static BOOL PaintFilterDarkUpDown(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    FilterFillRectSolid(hdc, &client, FILTER_DARK_BUTTON);
+
+    int midY = (client.top + client.bottom) / 2;
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldColor = SetDCPenColor(hdc, FILTER_DARK_LINE);
+    MoveToEx(hdc, client.left, midY, NULL);
+    LineTo(hdc, client.right, midY);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldPen);
+
+    RECT up = client;
+    up.bottom = midY;
+    RECT down = client;
+    down.top = midY;
+    COLORREF arrowColor = IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText;
+    FilterDrawUpArrow(hdc, &up, arrowColor);
+    FilterDrawDownArrow(hdc, &down, arrowColor);
+    FilterDrawRectOutline(hdc, &client, FILTER_DARK_FRAME);
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
+}
+
+static BOOL GetFilterDateTimeText(HWND hwnd, LPTSTR text, int textLen, BOOL* hasValue)
+{
+    if (text == NULL || textLen <= 0)
+        return FALSE;
+
+    text[0] = 0;
+    if (hasValue != NULL)
+        *hasValue = FALSE;
+
+    SYSTEMTIME st;
+    LRESULT state = DateTime_GetSystemtime(hwnd, &st);
+    if (state != GDT_VALID)
+        return FALSE;
+
+    if (hasValue != NULL)
+        *hasValue = TRUE;
+
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    BOOL ok;
+    if ((style & DTS_UPDOWN) != 0)
+        ok = GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, text, textLen) != 0;
+    else
+        ok = GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, text, textLen) != 0;
+    if (!ok)
+        text[0] = 0;
+    text[textLen - 1] = 0;
+    return ok;
+}
+
+static BOOL PaintFilterDarkDateTime(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    FilterFillRectSolid(hdc, &client, colors.InputBackground);
+
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    int buttonWidth = max(GetSystemMetrics(SM_CXVSCROLL), client.bottom - client.top);
+    RECT button = client;
+    button.left = max(client.left + 1, client.right - buttonWidth - 1);
+    button.top = client.top + 1;
+    button.right = client.right - 1;
+    button.bottom = client.bottom - 1;
+
+    RECT textRect = client;
+    textRect.left += 4;
+    textRect.right = max(textRect.left, button.left - 3);
+
+    BOOL hasValue = FALSE;
+    if ((style & DTS_SHOWNONE) != 0)
+    {
+        int boxSize = max(9, min(13, client.bottom - client.top - 4));
+        RECT check = {
+            client.left + 4,
+            client.top + max(1, (client.bottom - client.top - boxSize) / 2),
+            client.left + 4 + boxSize,
+            client.top + max(1, (client.bottom - client.top - boxSize) / 2) + boxSize};
+        FilterFillRectSolid(hdc, &check, colors.InputBackground);
+        FilterDrawRectOutline(hdc, &check, FILTER_DARK_FRAME);
+
+        TCHAR probe[8];
+        GetFilterDateTimeText(hwnd, probe, _countof(probe), &hasValue);
+        if (hasValue)
+            FilterDrawCheckMark(hdc, &check, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+        textRect.left = check.right + 4;
+    }
+
+    TCHAR text[128];
+    GetFilterDateTimeText(hwnd, text, _countof(text), &hasValue);
+
+    HFONT hFont = (HFONT)SendMessage(hwnd, WM_GETFONT, 0, 0);
+    HFONT hOldFont = NULL;
+    if (hFont != NULL)
+        hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+    COLORREF oldTextColor = SetTextColor(hdc, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+    DrawText(hdc, text, -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+    SetTextColor(hdc, oldTextColor);
+    SetBkMode(hdc, oldBkMode);
+    if (hOldFont != NULL)
+        SelectObject(hdc, hOldFont);
+
+    if (button.right > button.left && button.bottom > button.top)
+    {
+        FilterFillRectSolid(hdc, &button, FILTER_DARK_BUTTON);
+        HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+        COLORREF oldColor = SetDCPenColor(hdc, FILTER_DARK_LINE);
+        MoveToEx(hdc, button.left, button.top, NULL);
+        LineTo(hdc, button.left, button.bottom);
+        if ((style & DTS_UPDOWN) != 0)
+        {
+            int midY = (button.top + button.bottom) / 2;
+            MoveToEx(hdc, button.left, midY, NULL);
+            LineTo(hdc, button.right, midY);
+        }
+        SetDCPenColor(hdc, oldColor);
+        SelectObject(hdc, oldPen);
+
+        COLORREF arrowColor = IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText;
+        if ((style & DTS_UPDOWN) != 0)
+        {
+            RECT up = button;
+            up.bottom = (button.top + button.bottom) / 2;
+            RECT down = button;
+            down.top = up.bottom;
+            FilterDrawUpArrow(hdc, &up, arrowColor);
+            FilterDrawDownArrow(hdc, &down, arrowColor);
+        }
+        else
+            FilterDrawDownArrow(hdc, &button, arrowColor);
+    }
+
+    FilterDrawRectOutline(hdc, &client, FILTER_DARK_FRAME);
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
+}
+
+static void PaintFilterDarkFrame(HWND hwnd)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return;
+
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+
+    RECT rect;
+    GetWindowRect(hwnd, &rect);
+    OffsetRect(&rect, -rect.left, -rect.top);
+    FilterDrawRectOutline(hdc, &rect, FILTER_DARK_FRAME);
+    ReleaseDC(hwnd, hdc);
+}
+
+static void SetFilterDateTimeCalendarColors(HWND hwnd, BOOL useDark)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    DarkModeColors colors;
+    DarkMode_GetColors(&colors);
+    SendMessage(hwnd, DTM_SETMCCOLOR, MCSC_BACKGROUND, useDark ? colors.DialogBackground : CLR_DEFAULT);
+    SendMessage(hwnd, DTM_SETMCCOLOR, MCSC_MONTHBK, useDark ? colors.InputBackground : CLR_DEFAULT);
+    SendMessage(hwnd, DTM_SETMCCOLOR, MCSC_TEXT, useDark ? colors.InputText : CLR_DEFAULT);
+    SendMessage(hwnd, DTM_SETMCCOLOR, MCSC_TITLEBK, useDark ? FILTER_DARK_BUTTON : CLR_DEFAULT);
+    SendMessage(hwnd, DTM_SETMCCOLOR, MCSC_TITLETEXT, useDark ? colors.InputText : CLR_DEFAULT);
+    SendMessage(hwnd, DTM_SETMCCOLOR, MCSC_TRAILINGTEXT, useDark ? colors.DisabledText : CLR_DEFAULT);
+}
+
+static void ApplyFilterDarkSkin(HWND hwnd, CFilterDarkSkinKind kind)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    DWORD_PTR data = 0;
+    CFilterDarkSkinState* state = NULL;
+    if (GetWindowSubclass(hwnd, FilterDarkSkinSubclassProc, FILTER_DARK_SKIN_SUBCLASS_ID, &data))
+        state = (CFilterDarkSkinState*)data;
+    else
+    {
+        state = new CFilterDarkSkinState;
+        if (state == NULL)
+            return;
+        state->Style = GetWindowLongPtr(hwnd, GWL_STYLE);
+        state->ExStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        state->Kind = kind;
+        if (!SetWindowSubclass(hwnd, FilterDarkSkinSubclassProc, FILTER_DARK_SKIN_SUBCLASS_ID, (DWORD_PTR)state))
+        {
+            delete state;
+            return;
+        }
+    }
+
+    state->Kind = kind;
+    BOOL useDark = DarkMode_ShouldUseDark();
+    LONG_PTR style = state->Style;
+    LONG_PTR exStyle = state->ExStyle;
+    if (useDark && kind != fdskStaticLine)
+    {
+        style &= ~WS_BORDER;
+        exStyle &= ~(WS_EX_CLIENTEDGE | WS_EX_STATICEDGE);
+    }
+
+    SetFilterWindowStyle(hwnd, style);
+    SetFilterWindowExStyle(hwnd, exStyle);
+
+    if (kind == fdskStaticLine)
+        ShowWindow(hwnd, useDark ? SW_HIDE : SW_SHOWNA);
+
+    if (kind != fdskStaticLine)
+        SetWindowTheme(hwnd, useDark ? L"" : NULL, NULL);
+
+    if (kind == fdskCombo)
+    {
+        COMBOBOXINFO cbi = {0};
+        cbi.cbSize = sizeof(cbi);
+        if (GetComboBoxInfo(hwnd, &cbi) && cbi.hwndList != NULL && IsWindow(cbi.hwndList))
+            SetWindowTheme(cbi.hwndList, useDark ? L"DarkMode_Explorer" : NULL, NULL);
+    }
+    else if (kind == fdskDateTime)
+        SetFilterDateTimeCalendarColors(hwnd, useDark);
+
+    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+static BOOL PaintFilterCriteriaDialogSectionLines(HWND hDialog, HDC paintDC)
+{
+    if (!DarkMode_ShouldUseDark())
+        return FALSE;
+
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = GetDC(hDialog);
+    if (hdc == NULL)
+        return FALSE;
+
+    int lineIDs[] = {IDC_STATIC_2, IDC_STATIC_4, IDC_STATIC_6, IDC_STATIC_8};
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldColor = SetDCPenColor(hdc, FILTER_DARK_SECTION_LINE);
+    for (int i = 0; i < _countof(lineIDs); i++)
+    {
+        RECT rect;
+        if (!GetFilterChildRectInDialog(hDialog, lineIDs[i], &rect))
+            continue;
+
+        int y = max(rect.top, min(rect.bottom - 1, (rect.top + rect.bottom) / 2));
+        MoveToEx(hdc, rect.left, y, NULL);
+        LineTo(hdc, rect.right, y);
+    }
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldPen);
+
+    if (paintDC == NULL)
+        ReleaseDC(hDialog, hdc);
+    return TRUE;
+}
+
+static void ApplyFilterCriteriaDialogTheme(HWND hDialog)
+{
+    if (hDialog == NULL || !IsWindow(hDialog))
+        return;
+
+    DarkMode_ApplyTitleBar(hDialog);
+    DarkMode_ApplyListTreeThemeRecursive(hDialog);
+
+    int lineIDs[] = {IDC_STATIC_2, IDC_STATIC_4, IDC_STATIC_6, IDC_STATIC_8};
+    for (int i = 0; i < _countof(lineIDs); i++)
+        ApplyFilterDarkSkin(GetDlgItem(hDialog, lineIDs[i]), fdskStaticLine);
+
+    int editIDs[] = {IDC_FFA_SIZEMIN_VALUE, IDC_FFA_SIZEMAX_VALUE, IDC_FFA_TIMEDURING_VALUE};
+    for (int i = 0; i < _countof(editIDs); i++)
+        ApplyFilterDarkSkin(GetDlgItem(hDialog, editIDs[i]), fdskEdit);
+
+    int upDownIDs[] = {IDC_FFA_SIZEMIN_UPDOWN, IDC_FFA_SIZEMAX_UPDOWN, IDC_FFA_TIMEDURING_UPDOWN};
+    for (int i = 0; i < _countof(upDownIDs); i++)
+        ApplyFilterDarkSkin(GetDlgItem(hDialog, upDownIDs[i]), fdskUpDown);
+
+    int comboIDs[] = {IDC_FFA_SIZEMIN_UNITS, IDC_FFA_SIZEMAX_UNITS, IDC_FFA_TIMEDURING_UNITS};
+    for (int i = 0; i < _countof(comboIDs); i++)
+        ApplyFilterDarkSkin(GetDlgItem(hDialog, comboIDs[i]), fdskCombo);
+
+    int dateTimeIDs[] = {IDC_FFA_FROM_DATE, IDC_FFA_FROM_TIME, IDC_FFA_TO_DATE, IDC_FFA_TO_TIME};
+    for (int i = 0; i < _countof(dateTimeIDs); i++)
+        ApplyFilterDarkSkin(GetDlgItem(hDialog, dateTimeIDs[i]), fdskDateTime);
+
+    InvalidateRect(hDialog, NULL, TRUE);
+    RedrawWindow(hDialog, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+static void RedrawFilterCriteriaDialogSkin(HWND hDialog)
+{
+    if (hDialog == NULL || !DarkMode_ShouldUseDark())
+        return;
+
+    int controlIDs[] = {
+        IDC_STATIC_2, IDC_STATIC_4, IDC_STATIC_6, IDC_STATIC_8,
+        IDC_FFA_SIZEMIN_VALUE, IDC_FFA_SIZEMAX_VALUE, IDC_FFA_TIMEDURING_VALUE,
+        IDC_FFA_SIZEMIN_UPDOWN, IDC_FFA_SIZEMAX_UPDOWN, IDC_FFA_TIMEDURING_UPDOWN,
+        IDC_FFA_SIZEMIN_UNITS, IDC_FFA_SIZEMAX_UNITS, IDC_FFA_TIMEDURING_UNITS,
+        IDC_FFA_FROM_DATE, IDC_FFA_FROM_TIME, IDC_FFA_TO_DATE, IDC_FFA_TO_TIME};
+
+    for (int i = 0; i < _countof(controlIDs); i++)
+    {
+        HWND hCtrl = GetDlgItem(hDialog, controlIDs[i]);
+        if (hCtrl != NULL && IsWindow(hCtrl))
+            RedrawWindow(hCtrl, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+    }
+}
+
+static LRESULT CALLBACK FilterDarkSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    CFilterDarkSkinState* state = (CFilterDarkSkinState*)dwRefData;
+    CFilterDarkSkinKind kind = state != NULL ? state->Kind : fdskEdit;
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark() && kind != fdskStaticLine)
+        {
+            if (kind == fdskEdit)
+                PaintFilterDarkEditFrame(hwnd);
+            else
+                PaintFilterDarkFrame(hwnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            switch (kind)
+            {
+            case fdskStaticLine:
+                if (PaintFilterDarkStaticLine(hwnd, NULL))
+                    return 0;
+                break;
+
+            case fdskCombo:
+                if (PaintFilterDarkCombo(hwnd, NULL))
+                    return 0;
+                break;
+
+            case fdskUpDown:
+                if (PaintFilterDarkUpDown(hwnd, NULL))
+                    return 0;
+                break;
+
+            case fdskDateTime:
+                if (PaintFilterDarkDateTime(hwnd, NULL))
+                    return 0;
+                break;
+
+            case fdskEdit:
+            {
+                LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+                PaintFilterDarkEditFrame(hwnd);
+                return ret;
+            }
+            }
+        }
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            switch (kind)
+            {
+            case fdskStaticLine:
+                if (PaintFilterDarkStaticLine(hwnd, (HDC)wParam))
+                    return 0;
+                break;
+
+            case fdskCombo:
+                if (PaintFilterDarkCombo(hwnd, (HDC)wParam))
+                    return 0;
+                break;
+
+            case fdskUpDown:
+                if (PaintFilterDarkUpDown(hwnd, (HDC)wParam))
+                    return 0;
+                break;
+
+            case fdskDateTime:
+                if (PaintFilterDarkDateTime(hwnd, (HDC)wParam))
+                    return 0;
+                break;
+
+            default:
+                break;
+            }
+        }
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        DarkModeColors colors;
+        if (DarkMode_GetColors(&colors))
+        {
+            RECT client;
+            GetClientRect(hwnd, &client);
+            FilterFillRectSolid((HDC)wParam, &client, kind == fdskStaticLine ? colors.DialogBackground : colors.InputBackground);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_CTLCOLORLISTBOX:
+    {
+        HBRUSH hBrush = DarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (LRESULT)hBrush;
+        break;
+    }
+
+    case WM_ENABLE:
+    case WM_SETTEXT:
+    case WM_SIZE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    case CB_SETCURSEL:
+    case CB_ADDSTRING:
+    case CB_DELETESTRING:
+    case CB_RESETCONTENT:
+    case DTM_SETSYSTEMTIME:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, FilterDarkSkinSubclassProc, uIdSubclass);
+        delete state;
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
 
 // leap year
 #define IsLeapYear(_yr) ((!((_yr) % 400) || ((_yr) % 100) && !((_yr) % 4)) ? TRUE : FALSE)
@@ -1247,6 +2014,8 @@ void CFilterCriteriaDialog::EnableControls()
     // disable the control that currently has focus; we handle it
     if (hFocus != NULL && !IsWindowEnabled(hFocus))
         SendMessage(HWindow, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(HWindow, IDC_FFA_SIZEMIN), TRUE);
+
+    RedrawFilterCriteriaDialogSkin(HWindow);
 }
 
 INT_PTR
@@ -1255,6 +2024,20 @@ CFilterCriteriaDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     CALL_STACK_MESSAGE4("CFilterCriteriaDialog::DialogProc(0x%X, 0x%IX, 0x%IX)", uMsg, wParam, lParam);
     switch (uMsg)
     {
+    case WM_PAINT:
+    {
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+        PaintFilterCriteriaDialogSectionLines(HWindow, NULL);
+        return ret;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+        PaintFilterCriteriaDialogSectionLines(HWindow, (HDC)wParam);
+        return ret;
+    }
+
     case WM_INITDIALOG:
     {
         // attach the UpDown control to the edit line
@@ -1276,6 +2059,19 @@ CFilterCriteriaDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (!EnableDirectory)
             EnableWindow(GetDlgItem(HWindow, IDC_FFA_ATTRDIRECTORY), FALSE);
 
+        ApplyFilterCriteriaDialogTheme(HWindow);
+        break;
+    }
+
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORBTN:
+    case WM_CTLCOLORLISTBOX:
+    {
+        HBRUSH hBrush = DarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (INT_PTR)hBrush;
         break;
     }
 
@@ -1331,6 +2127,14 @@ CFilterCriteriaDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         LPNMHDR nmh = (LPNMHDR)lParam;
         if (nmh->code == DTN_DATETIMECHANGE)
             EnableControls();
+        break;
+    }
+
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+    case WM_SYSCOLORCHANGE:
+    {
+        ApplyFilterCriteriaDialogTheme(HWindow);
         break;
     }
     }

@@ -231,11 +231,13 @@ const char* CONFIG_VIEWERHISTORY_REG = "Viewer History";
 const char* CONFIG_COMMANDHISTORY_REG = "Command History";
 const char* CONFIG_SELECTHISTORY_REG = "Select History";
 const char* CONFIG_COPYHISTORY_REG = "Copy History";
+const char* CONFIG_COPYHISTORYW_REG = "Copy History W";
 const char* CONFIG_CHANGEDIRHISTORY_REG = "ChangeDir History";
 const char* CONFIG_FILELISTHISTORY_REG = "File List History";
 const char* CONFIG_CREATEDIRHISTORY_REG = "Create Directory History";
 const char* CONFIG_QUICKRENAMEHISTORY_REG = "Quick Rename History";
 const char* CONFIG_EDITNEWHISTORY_REG = "Edit New History";
+const char* CONFIG_CREATEDIRHISTORYW_REG = "Create Directory History W";
 const char* CONFIG_QUICKRENAMEHISTORYW_REG = "Quick Rename History W";
 const char* CONFIG_EDITNEWHISTORYW_REG = "Edit New History W";
 const char* CONFIG_CONVERTHISTORY_REG = "Convert History";
@@ -1283,7 +1285,21 @@ void CMainWindow::SavePanelConfig(CFilesWindow* panel, HKEY hSalamander, const c
         DWORD value;
         value = panel->HeaderLineVisible;
         SetValue(actKey, PANEL_HEADER_REG, REG_DWORD, &value, sizeof(DWORD));
-        SetValue(actKey, PANEL_PATH_REG, REG_SZ, panel->GetPath(), -1);
+        // Wide-only persistence: write the panel path as REG_SZ Unicode so Unicode-only
+        // disk roots (e.g. C:\Temp\zz中文) survive across restart. Older Sally builds
+        // reading this config will not find a usable PANEL_PATH and fall back to the
+        // rescue path on first launch (then resave). User-approved clean break.
+        if (gRegistry != NULL)
+        {
+            gRegistry->SetString(actKey, AnsiToWideReg(PANEL_PATH_REG).c_str(),
+                                 panel->GetPathW());
+        }
+        else
+        {
+            // gRegistry should always be set in the running app; this is a defensive
+            // fallback so a misconfigured test harness still records something.
+            SetValue(actKey, PANEL_PATH_REG, REG_SZ, panel->GetPath(), -1);
+        }
         value = panel->GetViewTemplateIndex();
         SetValue(actKey, PANEL_VIEW_REG, REG_DWORD, &value, sizeof(DWORD));
         value = panel->SortType;
@@ -1996,6 +2012,8 @@ void CMainWindow::SaveConfig(HWND parent)
                             SELECT_HISTORY_SIZE, !Configuration.SaveHistory);
                 SaveHistory(actKey, CONFIG_COPYHISTORY_REG, Configuration.CopyHistory,
                             COPY_HISTORY_SIZE, !Configuration.SaveHistory);
+                SaveHistoryW(actKey, CONFIG_COPYHISTORYW_REG, Configuration.CopyHistoryW,
+                             COPY_HISTORY_SIZE, !Configuration.SaveHistory);
                 SaveHistory(actKey, CONFIG_CHANGEDIRHISTORY_REG, Configuration.ChangeDirHistory,
                             CHANGEDIR_HISTORY_SIZE, !Configuration.SaveHistory);
 
@@ -2013,6 +2031,8 @@ void CMainWindow::SaveConfig(HWND parent)
                             FILELIST_HISTORY_SIZE, !Configuration.SaveHistory);
                 SaveHistory(actKey, CONFIG_CREATEDIRHISTORY_REG, Configuration.CreateDirHistory,
                             CREATEDIR_HISTORY_SIZE, !Configuration.SaveHistory);
+                SaveHistoryW(actKey, CONFIG_CREATEDIRHISTORYW_REG, Configuration.CreateDirHistoryW,
+                             CREATEDIR_HISTORY_SIZE, !Configuration.SaveHistory);
                 SaveHistory(actKey, CONFIG_QUICKRENAMEHISTORY_REG, Configuration.QuickRenameHistory,
                             QUICKRENAME_HISTORY_SIZE, !Configuration.SaveHistory);
                 SaveHistory(actKey, CONFIG_EDITNEWHISTORY_REG, Configuration.EditNewHistory,
@@ -2327,37 +2347,30 @@ void CMainWindow::SaveConfig(HWND parent)
     }
 }
 
-void CMainWindow::LoadPanelConfig(CPathBuffer& panelPath, CFilesWindow* panel, HKEY hSalamander, const char* reg)
+void CMainWindow::LoadPanelConfig(CPathBuffer& panelPath, std::wstring& panelPathW, CFilesWindow* panel, HKEY hSalamander, const char* reg)
 {
-    auto readPanelPathViaRegistryService = [](HKEY key, CPathBuffer& outPath) -> BOOL
-    {
-        if (gRegistry == NULL || key == NULL)
-            return FALSE;
-
-        std::wstring panelPathW;
-        RegistryResult result = gRegistry->GetString(key, AnsiToWideReg(PANEL_PATH_REG).c_str(), panelPathW);
-        if (!result.success)
-            return FALSE;
-
-        int requiredChars = WideCharToMultiByte(CP_ACP, 0, panelPathW.c_str(), -1, NULL, 0, NULL, NULL);
-        if (requiredChars <= 0 || !outPath.EnsureCapacity(requiredChars))
-            return FALSE;
-
-        return WideCharToMultiByte(CP_ACP, 0, panelPathW.c_str(), -1, outPath.Get(), outPath.Size(), NULL, NULL) > 0;
-    };
-
     HKEY actKey;
     if (OpenKey(hSalamander, reg, actKey))
     {
         DWORD value;
-        DWORD panelPathSize = 0;
-        BOOL panelPathLoaded = readPanelPathViaRegistryService(actKey, panelPath);
-        if (!panelPathLoaded &&
-            GetSize(actKey, PANEL_PATH_REG, REG_SZ, panelPathSize) &&
-            panelPath.EnsureCapacity((int)panelPathSize) &&
-            GetValue(actKey, PANEL_PATH_REG, REG_SZ, panelPath.Get(), panelPath.Size()))
+        BOOL panelPathLoaded = FALSE;
+        // Read the panel path as REG_SZ Unicode (matches the wide-only save in
+        // SavePanelConfig). Keep panelPathW as the source-of-truth for the apply
+        // path; populate the legacy ANSI panelPath via WideToAnsi for any caller
+        // that still consumes it (only the rescue-path log paths today). Older
+        // Sally configs that wrote ANSI PANEL_PATH will now miss on the wide read
+        // and fall through to the rescue path on first launch — user-approved
+        // clean break.
+        if (gRegistry != NULL)
         {
-            panelPathLoaded = TRUE;
+            RegistryResult result = gRegistry->GetString(actKey, AnsiToWideReg(PANEL_PATH_REG).c_str(), panelPathW);
+            if (result.success)
+            {
+                panelPathLoaded = TRUE;
+                std::string panelPathA = WideToAnsi(panelPathW);
+                if (!panelPath.Assign(panelPathA.c_str()))
+                    panelPath.Clear();
+            }
         }
 
         if (panelPathLoaded)
@@ -3658,15 +3671,23 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
             //      if (Configuration.SelectHistory[0] != NULL)  // load the initial state of +/- selection as well
             //        strcpy(SelectionMask, Configuration.SelectHistory[0]);
             LoadHistory(actKey, CONFIG_COPYHISTORY_REG, Configuration.CopyHistory, COPY_HISTORY_SIZE);
+            LoadHistoryW(actKey, CONFIG_COPYHISTORYW_REG, Configuration.CopyHistoryW, COPY_HISTORY_SIZE);
             LoadHistory(actKey, CONFIG_CHANGEDIRHISTORY_REG, Configuration.ChangeDirHistory, CHANGEDIR_HISTORY_SIZE);
             LoadHistory(actKey, CONFIG_VIEWERHISTORY_REG, ViewerHistory, VIEWER_HISTORY_SIZE);
             LoadHistory(actKey, CONFIG_COMMANDHISTORY_REG, Configuration.EditHistory, EDIT_HISTORY_SIZE);
             LoadHistory(actKey, CONFIG_FILELISTHISTORY_REG, Configuration.FileListHistory, FILELIST_HISTORY_SIZE);
+            if (IsWideHistoryEmpty(Configuration.CopyHistoryW, COPY_HISTORY_SIZE))
+                SeedWideHistoryFromAnsi(Configuration.CopyHistoryW, COPY_HISTORY_SIZE,
+                                        Configuration.CopyHistory, COPY_HISTORY_SIZE);
             LoadHistory(actKey, CONFIG_CREATEDIRHISTORY_REG, Configuration.CreateDirHistory, CREATEDIR_HISTORY_SIZE);
+            LoadHistoryW(actKey, CONFIG_CREATEDIRHISTORYW_REG, Configuration.CreateDirHistoryW, CREATEDIR_HISTORY_SIZE);
             LoadHistory(actKey, CONFIG_QUICKRENAMEHISTORY_REG, Configuration.QuickRenameHistory, QUICKRENAME_HISTORY_SIZE);
             LoadHistory(actKey, CONFIG_EDITNEWHISTORY_REG, Configuration.EditNewHistory, EDITNEW_HISTORY_SIZE);
             LoadHistoryW(actKey, CONFIG_QUICKRENAMEHISTORYW_REG, Configuration.QuickRenameHistoryW, QUICKRENAME_HISTORY_SIZE);
             LoadHistoryW(actKey, CONFIG_EDITNEWHISTORYW_REG, Configuration.EditNewHistoryW, EDITNEW_HISTORY_SIZE);
+            if (IsWideHistoryEmpty(Configuration.CreateDirHistoryW, CREATEDIR_HISTORY_SIZE))
+                SeedWideHistoryFromAnsi(Configuration.CreateDirHistoryW, CREATEDIR_HISTORY_SIZE,
+                                        Configuration.CreateDirHistory, CREATEDIR_HISTORY_SIZE);
             if (IsWideHistoryEmpty(Configuration.QuickRenameHistoryW, QUICKRENAME_HISTORY_SIZE))
                 SeedWideHistoryFromAnsi(Configuration.QuickRenameHistoryW, QUICKRENAME_HISTORY_SIZE,
                                         Configuration.QuickRenameHistory, QUICKRENAME_HISTORY_SIZE);
@@ -3791,10 +3812,16 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
         CPathBuffer rightPanelPath;
         EnvGetSystemDirectoryA(gEnvironment, leftPanelPath, leftPanelPath.Size());
         strcpy(rightPanelPath, leftPanelPath);
+        // Wide source-of-truth for the panel path; populated by LoadPanelConfig from the
+        // REG_SZ Unicode value SavePanelConfig wrote. The ANSI mirror above remains for
+        // rescue-path bookkeeping only. The system directory is OS-supplied and ASCII,
+        // so AnsiToWide is safe as the seed value.
+        std::wstring leftPanelPathW = AnsiToWide(leftPanelPath);
+        std::wstring rightPanelPathW = AnsiToWide(rightPanelPath);
         CPathBuffer sysDefDir;
         lstrcpyn(sysDefDir, DefaultDir[LowerCase[leftPanelPath[0]] - 'a'], sysDefDir.Size());
-        LoadPanelConfig(leftPanelPath, LeftPanel, salamander, SALAMANDER_LEFTP_REG);
-        LoadPanelConfig(rightPanelPath, RightPanel, salamander, SALAMANDER_RIGHTP_REG);
+        LoadPanelConfig(leftPanelPath, leftPanelPathW, LeftPanel, salamander, SALAMANDER_LEFTP_REG);
+        LoadPanelConfig(rightPanelPath, rightPanelPathW, RightPanel, salamander, SALAMANDER_RIGHTP_REG);
 
         CloseKey(salamander);
         salamander = NULL;
@@ -3982,16 +4009,17 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
         if (rightPanelPathSet)
             RightPanel->RefreshVisibleItemsArray();
 
-        // leftPanelPath and rightPanelPath are only disk paths; we don't store archives or FS paths
+        // leftPanelPath and rightPanelPath are only disk paths; we don't store archives or FS paths.
+        // Apply via the wide variants so Unicode-only roots survive validation and reopening.
         DWORD err, lastErr;
         BOOL pathInvalid, cut;
         BOOL tryNet = TRUE;
         if (!leftPanelPathSet)
         {
-            if (SalCheckAndRestorePathWithCut(LeftPanel->HWindow, leftPanelPath, tryNet,
-                                              err, lastErr, pathInvalid, cut, TRUE))
+            if (SalCheckAndRestorePathWithCutW(LeftPanel->HWindow, leftPanelPathW, tryNet,
+                                               err, lastErr, pathInvalid, cut, TRUE))
             {
-                LeftPanel->ChangePathToDisk(LeftPanel->HWindow, leftPanelPath);
+                LeftPanel->ChangePathToDiskW(LeftPanel->HWindow, leftPanelPathW.c_str());
             }
             else
                 LeftPanel->ChangeToRescuePathOrFixedDrive(LeftPanel->HWindow);
@@ -4002,10 +4030,10 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
         tryNet = TRUE;
         if (!rightPanelPathSet)
         {
-            if (SalCheckAndRestorePathWithCut(RightPanel->HWindow, rightPanelPath, tryNet,
-                                              err, lastErr, pathInvalid, cut, TRUE))
+            if (SalCheckAndRestorePathWithCutW(RightPanel->HWindow, rightPanelPathW, tryNet,
+                                               err, lastErr, pathInvalid, cut, TRUE))
             {
-                RightPanel->ChangePathToDisk(RightPanel->HWindow, rightPanelPath);
+                RightPanel->ChangePathToDiskW(RightPanel->HWindow, rightPanelPathW.c_str());
             }
             else
                 RightPanel->ChangeToRescuePathOrFixedDrive(RightPanel->HWindow);

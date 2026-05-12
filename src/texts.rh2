@@ -1461,6 +1461,10 @@
 #define IDS_OLDPLUGINVERSION_CONFIRM 12027
 // legacy req==102 plugin: ask whether to allow loading anyway (name unknown)
 #define IDS_OLDPLUGINVERSION_CONFIRM2 12028
+// file-system plugin was built against the broken transitional SDK 104 ABI (name known)
+#define IDS_BROKENFSPLUGINVERSION    12029
+// file-system plugin was built against the broken transitional SDK 104 ABI (name unknown)
+#define IDS_BROKENFSPLUGINVERSION2   12030
 
 // edit or assoc from archive: update failed, do you want to try it again?
 #define IDS_UPDATEFAILED             12033

@@ -142,7 +142,7 @@ INT_PTR CPSPGeneral::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
         case PSN_APPLY:
         {
-            int ret = CPropSheetPage::DialogProc(uMsg, wParam, lParam);
+            INT_PTR ret = CPropSheetPage::DialogProc(uMsg, wParam, lParam);
             LONG oldExStyle = GetWindowLong(MainWindow->HWindow, GWL_EXSTYLE);
             if (((oldExStyle & WS_EX_TOOLWINDOW) != 0) != ConfigData.UseToolbarCaption)
             {
@@ -230,7 +230,7 @@ INT_PTR CPSPView::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
         case PSN_APPLY:
         {
-            int ret = CPropSheetPage::DialogProc(uMsg, wParam, lParam);
+            INT_PTR ret = CPropSheetPage::DialogProc(uMsg, wParam, lParam);
             PostMessage(MainWindow->TabList->HWindow, WM_USER_HEADER_CHANGE, 0, 0);
             Registry.Save();
             return ret;

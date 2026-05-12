@@ -7,6 +7,7 @@
 
 #include "ui/IPrompter.h"
 #include "common/IFileSystem.h"
+#include "common/fsutil.h"
 #include "common/unicode/helpers.h"
 #include "common/IEnvironment.h"
 #include "common/IRegistry.h"
@@ -755,12 +756,68 @@ void CMainWindow::PostChangeOnPathNotification(const char* path, BOOL includingS
     // add this notification to the array (for later processing)
     CChangeNotifData data;
     lstrcpyn(data.Path, path, MAX_PATH);
+    data.PathW = NULL;
     data.IncludingSubdirs = includingSubdirs;
     ChangeNotifArray.Add(data);
     if (!ChangeNotifArray.IsGood())
         ChangeNotifArray.ResetState(); // ignore errors (at worst we won't refresh)
 
     // post a request to distribute path change notifications
+    HANDLES(EnterCriticalSection(&TimeCounterSection));
+    int t1 = MyTimeCounter++;
+    HANDLES(LeaveCriticalSection(&TimeCounterSection));
+    PostMessage(HWindow, WM_USER_DISPACHCHANGENOTIF, 0, t1);
+
+    HANDLES(LeaveCriticalSection(&DispachChangeNotifCS));
+}
+
+static wchar_t* DupWideChangeNotifPath(const wchar_t* path)
+{
+    if (path == NULL)
+        return NULL;
+
+    size_t len = wcslen(path);
+    wchar_t* copy = (wchar_t*)malloc((len + 1) * sizeof(wchar_t));
+    if (copy != NULL)
+        memcpy(copy, path, (len + 1) * sizeof(wchar_t));
+    return copy;
+}
+
+static void FreeChangeNotifData(CChangeNotifData& data)
+{
+    if (data.PathW != NULL)
+    {
+        free(data.PathW);
+        data.PathW = NULL;
+    }
+}
+
+static void ClearPendingChangeNotifArray(TDirectArray<CChangeNotifData>& array)
+{
+    for (int i = 0; i < array.Count; i++)
+        FreeChangeNotifData(array[i]);
+    array.DestroyMembers();
+    array.ResetState();
+}
+
+void CMainWindow::PostChangeOnPathNotificationW(const wchar_t* path, BOOL includingSubdirs)
+{
+    CALL_STACK_MESSAGE3("CMainWindow::PostChangeOnPathNotificationW(%S, %d)", path, includingSubdirs);
+
+    HANDLES(EnterCriticalSection(&DispachChangeNotifCS));
+
+    CChangeNotifData data;
+    data.Path[0] = 0;
+    data.PathW = DupWideChangeNotifPath(path);
+    data.IncludingSubdirs = includingSubdirs;
+    if (data.PathW != NULL || path == NULL)
+        ChangeNotifArray.Add(data);
+    if (!ChangeNotifArray.IsGood())
+    {
+        FreeChangeNotifData(data);
+        ChangeNotifArray.ResetState();
+    }
+
     HANDLES(EnterCriticalSection(&TimeCounterSection));
     int t1 = MyTimeCounter++;
     HANDLES(LeaveCriticalSection(&TimeCounterSection));
@@ -3405,6 +3462,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         case CM_LEFTREFRESH: // refresh the left panel
         {
             LeftPanel->NextFocusName[0] = 0;
+            LeftPanel->NextFocusNameW.clear();
             while (SnooperSuspended)
                 EndSuspendMode(); // safety catch to resume refreshing
             while (StopRefresh)
@@ -3422,6 +3480,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         case CM_RIGHTREFRESH: // refresh the right panel
         {
             RightPanel->NextFocusName[0] = 0;
+            RightPanel->NextFocusNameW.clear();
             while (SnooperSuspended)
                 EndSuspendMode(); // safety catch to resume refreshing
             while (StopRefresh)
@@ -3439,6 +3498,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         case CM_ACTIVEREFRESH: // refresh the right panel
         {
             activePanel->NextFocusName[0] = 0;
+            activePanel->NextFocusNameW.clear();
             while (SnooperSuspended)
                 EndSuspendMode(); // safety catch to resume refreshing
             while (StopRefresh)
@@ -4712,6 +4772,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             else
             {
                 CPathBuffer path; // Heap-allocated for long path support
+                std::wstring pathW;
                 BOOL includingSubdirs;
                 BOOL ok = TRUE;
                 while (1)
@@ -4720,14 +4781,18 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
                     if (ChangeNotifArray.Count > 0)
                     {
                         CChangeNotifData* item = &ChangeNotifArray[ChangeNotifArray.Count - 1];
-                        strcpy(path, item->Path);
+                        pathW = item->PathW != NULL ? item->PathW : AnsiToWide(item->Path);
+                        if (item->PathW != NULL)
+                            WideToAnsi(pathW, path, path.Size());
+                        else
+                            strcpy(path, item->Path);
                         includingSubdirs = item->IncludingSubdirs;
+                        FreeChangeNotifData(*item);
                         ChangeNotifArray.Delete(ChangeNotifArray.Count - 1);
                         if (!ChangeNotifArray.IsGood())
                         {
                             ChangeNotifArray.ResetState();
-                            ChangeNotifArray.DestroyMembers();
-                            ChangeNotifArray.ResetState();
+                            ClearPendingChangeNotifArray(ChangeNotifArray);
                             ok = FALSE;
                         }
                     }
@@ -4748,11 +4813,11 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
 
                         if (GetNonActivePanel() != NULL) // non-active panel first (due to timestamps of subdirectory changes on NTFS)
                         {
-                            GetNonActivePanel()->AcceptChangeOnPathNotification(path, includingSubdirs);
+                            GetNonActivePanel()->AcceptChangeOnPathNotificationW(pathW.c_str(), includingSubdirs);
                         }
                         if (GetActivePanel() != NULL) // then the active panel
                         {
-                            GetActivePanel()->AcceptChangeOnPathNotification(path, includingSubdirs);
+                            GetActivePanel()->AcceptChangeOnPathNotificationW(pathW.c_str(), includingSubdirs);
                         }
 
                         if (DetachedFSList->Count > 0)
@@ -6184,11 +6249,17 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         if (wParam == TRUE) // activating the app
         {
             if (!LeftPanel->DontClearNextFocusName)
+            {
                 LeftPanel->NextFocusName[0] = 0;
+                LeftPanel->NextFocusNameW.clear();
+            }
             else
                 LeftPanel->DontClearNextFocusName = FALSE;
             if (!RightPanel->DontClearNextFocusName)
+            {
                 RightPanel->NextFocusName[0] = 0;
+                RightPanel->NextFocusNameW.clear();
+            }
             else
                 RightPanel->DontClearNextFocusName = FALSE;
             if (Windows7AndLater && IsIconic(HWindow))

@@ -420,6 +420,8 @@ BOOL SalCheckAndRestorePathW(HWND parent, const wchar_t* path, BOOL tryNet);
 // if resulting path 'path' is accessible
 BOOL SalCheckAndRestorePathWithCut(HWND parent, char* path, BOOL& tryNet, DWORD& err, DWORD& lastErr,
                                    BOOL& pathInvalid, BOOL& cut, BOOL donotReconnect);
+BOOL SalCheckAndRestorePathWithCutW(HWND parent, std::wstring& path, BOOL& tryNet, DWORD& err, DWORD& lastErr,
+                                    BOOL& pathInvalid, BOOL& cut, BOOL donotReconnect);
 
 // Recognizes what type of path (FS/windows/archive) it is and handles splitting it into
 // its parts (for FS it's fs-name and fs-user-part, for archive it's path-to-archive and
@@ -452,6 +454,9 @@ BOOL SalParsePath(HWND parent, char* path, int& type, BOOL& isDir, char*& second
                   const char* errorTitle, char* nextFocus, BOOL curPathIsDiskOrArchive,
                   const char* curPath, const char* curArchivePath, int* error,
                   int pathBufSize);
+BOOL SalParsePathW(HWND parent, std::wstring& path, int& type, BOOL& isDir, wchar_t*& secondPart,
+                   const wchar_t* errorTitle, std::wstring* nextFocus, BOOL curPathIsDiskOrArchive,
+                   const wchar_t* curPath, const wchar_t* curArchivePath, int* error);
 
 // Gets existing part and operation mask from windows target path; allows creating non-existing part;
 // on success returns TRUE and existing windows target path (in 'path') and found operation mask
@@ -470,6 +475,9 @@ BOOL SalParsePath(HWND parent, char* path, int& type, BOOL& isDir, char*& second
 BOOL SalSplitWindowsPath(HWND parent, const char* title, const char* errorTitle, int selCount,
                          char* path, char* secondPart, BOOL pathIsDir, BOOL backslashAtEnd,
                          const char* dirName, const char* curDiskPath, char*& mask);
+BOOL SalSplitWindowsPathW(HWND parent, const wchar_t* title, const wchar_t* errorTitle, int selCount,
+                          wchar_t* path, wchar_t* secondPart, BOOL pathIsDir, BOOL backslashAtEnd,
+                          const wchar_t* dirName, const wchar_t* curDiskPath, wchar_t*& mask);
 
 // Gets existing part and operation mask from target path; recognizes non-existing part; on
 // success returns TRUE, relative path to create (in 'newDirs'), existing target path (in 'path';
@@ -682,7 +690,7 @@ void RemoveEmptyDirs(const char* dir);
 // and return values are not described
 BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, BOOL returnLock,
                  HANDLE& lock, BOOL& lockOwner, BOOL addToHistory, int enumFileNamesSourceUID,
-                 int enumFileNamesLastFileIndex);
+                 int enumFileNamesLastFileIndex, const wchar_t* nameW = NULL);
 
 // Converts string ('str' of length 'len') to unsigned __int64 (can be preceded by
 // '+' sign; ignores white-spaces at beginning and end of string);
@@ -1412,6 +1420,8 @@ extern const char *LOW_MEMORY,
     *CFILESBOX_CLASSNAME,
     *SAVEBITS_CLASSNAME,
     *SHELLEXECUTE_CLASSNAME;
+
+extern const wchar_t* CMAINWINDOW_CLASSNAMEW;
 
 extern const char* STR_NONE; // "(none)" - plug-ins: for DLLName and Version if they are unknown
 

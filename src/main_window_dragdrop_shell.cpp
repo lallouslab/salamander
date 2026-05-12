@@ -54,12 +54,15 @@ void CMainWindow::ClearPluginFSFromHistory(CPluginFSInterfaceAbstract* fs)
 void CMainWindow::DirHistoryAddPathUnique(int type, const char* pathOrArchiveOrFSName,
                                           const char* archivePathOrFSUserPart, HICON hIcon,
                                           CPluginFSInterfaceAbstract* pluginFS,
-                                          CPluginFSInterfaceEncapsulation* curPluginFS)
+                                          CPluginFSInterfaceEncapsulation* curPluginFS,
+                                          const wchar_t* pathOrArchiveOrFSNameW,
+                                          const wchar_t* archivePathOrFSUserPartW)
 {
     if (CanAddToDirHistory)
     {
         DirHistory->AddPathUnique(type, pathOrArchiveOrFSName, archivePathOrFSUserPart, hIcon,
-                                  pluginFS, curPluginFS);
+                                  pluginFS, curPluginFS,
+                                  pathOrArchiveOrFSNameW, archivePathOrFSUserPartW);
         if (LeftPanel != NULL)
             LeftPanel->DirectoryLine->SetHistory(DirHistory->HasPaths());
         if (RightPanel != NULL)
@@ -76,13 +79,15 @@ void CMainWindow::DirHistoryRemoveActualPath(CFilesWindow* panel)
 {
     if (panel->Is(ptZIPArchive))
     {
-        DirHistory->RemoveActualPath(1, panel->GetZIPArchive(), panel->GetZIPPath(), NULL, NULL);
+        DirHistory->RemoveActualPath(1, panel->GetZIPArchive(), panel->GetZIPPath(), NULL, NULL,
+                                     panel->GetZIPArchiveW(), panel->GetZIPPathW());
     }
     else
     {
         if (panel->Is(ptDisk))
         {
-            DirHistory->RemoveActualPath(0, panel->GetPath(), NULL, NULL, NULL);
+            DirHistory->RemoveActualPath(0, panel->GetPath(), NULL, NULL, NULL,
+                                         panel->GetPathW(), nullptr);
         }
         else
         {

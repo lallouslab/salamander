@@ -402,6 +402,8 @@ const char* __GetHandlesOrigin(C__HandlesOrigin origin)
         return "GlobalLock";
     case __hoFindFirstChangeNotification:
         return "FindFirstChangeNotification";
+    case __hoFindFirstChangeNotificationW:
+        return "FindFirstChangeNotificationW";
     case __hoGetEnvironmentStrings:
         return "GetEnvironmentStrings";
     case __hoLocalAlloc:
@@ -2202,13 +2204,24 @@ BOOL C__Handles::GlobalUnlock(HGLOBAL hMem)
 }
 
 HANDLE
-C__Handles::FindFirstChangeNotification(LPCTSTR lpPathName, BOOL bWatchSubtree,
-                                        DWORD dwNotifyFilter)
+C__Handles::FindFirstChangeNotificationA(LPCSTR lpPathName, BOOL bWatchSubtree,
+                                         DWORD dwNotifyFilter)
 {
-    HANDLE ret = ::FindFirstChangeNotification(lpPathName, bWatchSubtree,
-                                               dwNotifyFilter);
+    HANDLE ret = ::FindFirstChangeNotificationA(lpPathName, bWatchSubtree,
+                                                dwNotifyFilter);
     CheckCreate(ret != INVALID_HANDLE_VALUE, __htChangeNotification,
                 __hoFindFirstChangeNotification, ret, GetLastError());
+    return ret;
+}
+
+HANDLE
+C__Handles::FindFirstChangeNotificationW(LPCWSTR lpPathName, BOOL bWatchSubtree,
+                                         DWORD dwNotifyFilter)
+{
+    HANDLE ret = ::FindFirstChangeNotificationW(lpPathName, bWatchSubtree,
+                                                dwNotifyFilter);
+    CheckCreate(ret != INVALID_HANDLE_VALUE, __htChangeNotification,
+                __hoFindFirstChangeNotificationW, ret, GetLastError());
     return ret;
 }
 

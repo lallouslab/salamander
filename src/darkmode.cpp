@@ -42,17 +42,22 @@ const COLORREF DIALOG_DARK_DISABLED_TEXT = RGB(160, 160, 160);
 const COLORREF DIALOG_DARK_HIGHLIGHT = RGB(0, 120, 215);
 const COLORREF DIALOG_DARK_INACTIVE_SELECTION = RGB(75, 75, 78);
 const COLORREF DIALOG_DARK_TOOLTIP_BG = RGB(43, 43, 43);
+const COLORREF DIALOG_DARK_FRAME = RGB(62, 62, 66);
+const COLORREF DIALOG_DARK_SUBTLE_LINE = RGB(55, 55, 58);
 const TCHAR* IMMERSIVE_COLOR_SET_PARAM = TEXT("ImmersiveColorSet");
 const TCHAR* WINDOWS_THEME_ELEMENT_PARAM = TEXT("WindowsThemeElement");
 const TCHAR* BUTTON_CLASS_NAME = TEXT("Button");
 const TCHAR* COMBOBOX_CLASS_NAME = TEXT("ComboBox");
 const TCHAR* EDIT_CLASS_NAME = TEXT("Edit");
+const TCHAR* HEADER_CLASS_NAME = TEXT("SysHeader32");
 const TCHAR* LISTBOX_CLASS_NAME = TEXT("ListBox");
 const TCHAR* SCROLLBAR_CLASS_NAME = TEXT("ScrollBar");
 const TCHAR* STATIC_CLASS_NAME = TEXT("Static");
 const WCHAR* UXTHEME_DARKMODE_EXPLORER = L"DarkMode_Explorer";
 const WCHAR* UXTHEME_EXPLORER = L"Explorer";
 const UINT_PTR GROUPBOX_SUBCLASS_ID = 1;
+const UINT_PTR STATIC_EDGE_SUBCLASS_ID = 2;
+const UINT_PTR HEADER_SUBCLASS_ID = 4;
 
 HBRUSH DialogDarkBrush = NULL;
 HBRUSH DialogDarkInputBrush = NULL;
@@ -181,6 +186,29 @@ void EnsureDialogBrushes()
         DialogDarkInputBrush = CreateSolidBrush(DIALOG_DARK_INPUT_BG);
 }
 
+void FillRectSolid(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldColor = SetDCBrushColor(hdc, color);
+    FillRect(hdc, rect, (HBRUSH)GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+}
+
+void DrawRectOutline(HDC hdc, const RECT* rect, COLORREF color)
+{
+    if (rect == NULL || rect->right <= rect->left || rect->bottom <= rect->top)
+        return;
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    COLORREF oldColor = SetDCPenColor(hdc, color);
+    Rectangle(hdc, rect->left, rect->top, rect->right, rect->bottom);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
 BOOL HasClassName(HWND hwnd, LPCTSTR expectedClassName)
 {
     if (hwnd == NULL || expectedClassName == NULL || !IsWindow(hwnd))
@@ -193,6 +221,20 @@ BOOL HasClassName(HWND hwnd, LPCTSTR expectedClassName)
     return _tcsicmp(className, expectedClassName) == 0;
 }
 
+BOOL HasAnyClassName(HWND hwnd, LPCTSTR firstClassName, LPCTSTR secondClassName = NULL, LPCTSTR thirdClassName = NULL)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return FALSE;
+
+    TCHAR className[64] = {0};
+    if (GetClassName(hwnd, className, _countof(className)) == 0)
+        return FALSE;
+
+    return (firstClassName != NULL && _tcsicmp(className, firstClassName) == 0) ||
+           (secondClassName != NULL && _tcsicmp(className, secondClassName) == 0) ||
+           (thirdClassName != NULL && _tcsicmp(className, thirdClassName) == 0);
+}
+
 BOOL IsGroupBox(HWND hwnd)
 {
     if (!HasClassName(hwnd, BUTTON_CLASS_NAME))
@@ -202,10 +244,157 @@ BOOL IsGroupBox(HWND hwnd)
     return (style & BS_TYPEMASK) == BS_GROUPBOX;
 }
 
+BOOL IsStaticEdge(HWND hwnd)
+{
+    if (!HasClassName(hwnd, STATIC_CLASS_NAME))
+        return FALSE;
+
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    switch (style & SS_TYPEMASK)
+    {
+    case SS_ETCHEDHORZ:
+    case SS_ETCHEDVERT:
+    case SS_GRAYFRAME:
+    case SS_BLACKFRAME:
+    case SS_WHITEFRAME:
+        return TRUE;
+    }
+    return FALSE;
+}
+
 void InvalidateGroupBox(HWND hwnd)
 {
     if (hwnd != NULL && IsWindow(hwnd))
         InvalidateRect(hwnd, NULL, TRUE);
+}
+
+BOOL PaintDarkStaticEdge(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    switch (style & SS_TYPEMASK)
+    {
+    case SS_ETCHEDHORZ:
+    {
+        FillRectSolid(hdc, &client, colors.DialogBackground);
+        int y = max(client.top, min(client.bottom - 1, (client.top + client.bottom) / 2));
+        HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+        COLORREF oldColor = SetDCPenColor(hdc, DIALOG_DARK_SUBTLE_LINE);
+        MoveToEx(hdc, client.left, y, NULL);
+        LineTo(hdc, client.right, y);
+        SetDCPenColor(hdc, oldColor);
+        SelectObject(hdc, oldPen);
+        break;
+    }
+
+    case SS_ETCHEDVERT:
+    {
+        FillRectSolid(hdc, &client, colors.DialogBackground);
+        int x = max(client.left, min(client.right - 1, (client.left + client.right) / 2));
+        HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+        COLORREF oldColor = SetDCPenColor(hdc, DIALOG_DARK_SUBTLE_LINE);
+        MoveToEx(hdc, x, client.top, NULL);
+        LineTo(hdc, x, client.bottom);
+        SetDCPenColor(hdc, oldColor);
+        SelectObject(hdc, oldPen);
+        break;
+    }
+
+    default:
+        FillRectSolid(hdc, &client, colors.DialogBackground);
+        InflateRect(&client, -1, -1);
+        if (client.right > client.left && client.bottom > client.top)
+            DrawRectOutline(hdc, &client, DIALOG_DARK_SUBTLE_LINE);
+        break;
+    }
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
+}
+
+BOOL PaintDarkHeader(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    FillRectSolid(hdc, &client, colors.InputBackground);
+
+    HFONT hFont = (HFONT)SendMessage(hwnd, WM_GETFONT, 0, 0);
+    HFONT hOldFont = NULL;
+    if (hFont != NULL)
+        hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+    COLORREF oldTextColor = SetTextColor(hdc, colors.InputText);
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldPenColor = SetDCPenColor(hdc, DIALOG_DARK_FRAME);
+
+    int count = Header_GetItemCount(hwnd);
+    for (int i = 0; i < count; i++)
+    {
+        RECT itemRect;
+        if (!Header_GetItemRect(hwnd, i, &itemRect))
+            continue;
+
+        TCHAR text[256] = {0};
+        HDITEM item = {0};
+        item.mask = HDI_TEXT | HDI_FORMAT;
+        item.pszText = text;
+        item.cchTextMax = _countof(text);
+        Header_GetItem(hwnd, i, &item);
+
+        RECT textRect = itemRect;
+        textRect.left += 6;
+        textRect.right -= 6;
+        DWORD flags = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
+        if ((item.fmt & HDF_CENTER) != 0)
+            flags |= DT_CENTER;
+        else if ((item.fmt & HDF_RIGHT) != 0)
+            flags |= DT_RIGHT;
+        else
+            flags |= DT_LEFT;
+        DrawText(hdc, text, -1, &textRect, flags);
+
+        MoveToEx(hdc, itemRect.right - 1, itemRect.top, NULL);
+        LineTo(hdc, itemRect.right - 1, itemRect.bottom);
+    }
+
+    MoveToEx(hdc, client.left, client.bottom - 1, NULL);
+    LineTo(hdc, client.right, client.bottom - 1);
+
+    SetDCPenColor(hdc, oldPenColor);
+    SelectObject(hdc, oldPen);
+    SetTextColor(hdc, oldTextColor);
+    SetBkMode(hdc, oldBkMode);
+    if (hOldFont != NULL)
+        SelectObject(hdc, hOldFont);
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
 }
 
 DWORD GetGroupBoxTextFlags(HWND hwnd)
@@ -345,6 +534,99 @@ BOOL PaintDarkGroupBox(HWND hwnd, HDC paintDC)
     return TRUE;
 }
 
+LRESULT CALLBACK StaticEdgeSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkStaticEdge(hwnd, NULL))
+            return 0;
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkStaticEdge(hwnd, (HDC)wParam))
+            return 0;
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (DarkMode_ShouldUseDark())
+            return TRUE;
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, StaticEdgeSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK HeaderSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkHeader(hwnd, NULL))
+            return 0;
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkHeader(hwnd, (HDC)wParam))
+            return 0;
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (DarkMode_ShouldUseDark())
+            return TRUE;
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    case WM_SIZE:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, HeaderSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
 LRESULT CALLBACK GroupBoxSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
     UNREFERENCED_PARAMETER(dwRefData);
@@ -448,6 +730,13 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
     if (_tcsicmp(className, WC_LISTVIEW) == 0)
     {
         ApplyWindowTheme(hwnd, useDark, UXTHEME_EXPLORER);
+        HWND hHeader = ListView_GetHeader(hwnd);
+        if (hHeader != NULL)
+        {
+            ApplyWindowTheme(hHeader, useDark, UXTHEME_EXPLORER);
+            SetWindowSubclass(hHeader, HeaderSubclassProc, HEADER_SUBCLASS_ID, 0);
+            InvalidateRect(hHeader, NULL, TRUE);
+        }
         DarkModeColors colors;
         DarkMode_GetColors(&colors);
         COLORREF bgColor = colors.InputBackground;
@@ -479,6 +768,15 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
         return;
     }
 
+    if (_tcsicmp(className, WC_HEADER) == 0 ||
+        _tcsicmp(className, HEADER_CLASS_NAME) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark, UXTHEME_EXPLORER);
+        SetWindowSubclass(hwnd, HeaderSubclassProc, HEADER_SUBCLASS_ID, 0);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+
     if (_tcsicmp(className, TOOLTIPS_CLASS) == 0)
     {
         ApplyWindowTheme(hwnd, useDark);
@@ -486,9 +784,17 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
         return;
     }
 
+    if (_tcsicmp(className, STATIC_CLASS_NAME) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark);
+        if (IsStaticEdge(hwnd))
+            SetWindowSubclass(hwnd, StaticEdgeSubclassProc, STATIC_EDGE_SUBCLASS_ID, 0);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+
     if (_tcsicmp(className, BUTTON_CLASS_NAME) == 0 ||
         _tcsicmp(className, EDIT_CLASS_NAME) == 0 ||
-        _tcsicmp(className, STATIC_CLASS_NAME) == 0 ||
         _tcsicmp(className, UPDOWN_CLASS) == 0)
     {
         ApplyWindowTheme(hwnd, useDark);

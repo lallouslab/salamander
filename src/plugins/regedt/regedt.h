@@ -317,11 +317,21 @@ public:
 
     BOOL SetNewPath(WCHAR* newPath);
 
-    BOOL GetCurrentPathW(WCHAR* userPart, int size);
+    // Wide-native implementation that overrides the base bridge. The base
+    // virtual at spl_fs.h:796 takes (wchar_t*, int) with WINAPI; matching the
+    // calling convention is required so x86 does not reject this as C2695.
+    virtual BOOL WINAPI GetCurrentPathW(wchar_t* userPart, int size) override;
     virtual BOOL WINAPI GetCurrentPath(char* userPart);
 
     virtual BOOL WINAPI GetFullName(CFileData& file, int isDir, char* buf, int bufSize);
 
+    // regedt-internal 3-arg helper. NOTE: this hides the inherited 5-arg
+    // base virtual GetFullFSPathW(HWND, const wchar_t*, wchar_t*, int, BOOL&)
+    // by C++ name-lookup rules. That is acceptable today because all in-tree
+    // callers go through this 3-arg helper; Salamander framework code reaches
+    // the base virtual via CPluginFSInterfaceAbstract* (vtable dispatch).
+    // If a future change needs to override the 5-arg variant from regedt,
+    // rename this helper (e.g. BuildFullFSPathW) and add an explicit override.
     BOOL GetFullFSPathW(WCHAR* path, int pathSize, BOOL& success);
     virtual BOOL WINAPI GetFullFSPath(HWND parent, const char* fsName, char* path, int pathSize, BOOL& success);
 

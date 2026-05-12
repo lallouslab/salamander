@@ -812,12 +812,16 @@ BOOL CDuplicateCandidates::GetMD5Digest(CGrepData* data, CFoundFilesData* file,
     CPathBuffer fullPath;  // Heap-allocated for long path support
     lstrcpyn(fullPath, file->Path.c_str(), fullPath.Size());
     SalPathAppend(fullPath, file->Name.c_str(), fullPath.Size());
+    std::wstring fullPathW = !file->PathW.empty() ? file->PathW : AnsiToWide(file->Path.c_str());
+    if (!fullPathW.empty() && fullPathW[fullPathW.length() - 1] != L'\\' && fullPathW[fullPathW.length() - 1] != L'/')
+        fullPathW.push_back(L'\\');
+    fullPathW += !file->NameW.empty() ? file->NameW : AnsiToWide(file->Name.c_str());
 
     data->SearchingText->Set(fullPath); // set the current file
 
     // open the file for reading with sequential access
-    HANDLE hFile = HANDLES_Q(CreateFileW(AnsiToWide(fullPath).c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                        NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
+    HANDLE hFile = SalCreateFileWideH(fullPathW.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                      NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
     if (hFile != INVALID_HANDLE_VALUE)
     {
         BYTE buffer[DUPLICATES_BUFFER_SIZE];
@@ -1133,7 +1137,16 @@ void CDuplicateCandidates::Examine(CGrepData* data)
 
 void CSearchForData::Set(const char* dir, const char* masksGroup, BOOL includeSubDirs)
 {
+    Set(dir, NULL, masksGroup, includeSubDirs);
+}
+
+void CSearchForData::Set(const char* dir, const wchar_t* dirW, const char* masksGroup, BOOL includeSubDirs)
+{
     strcpy(Dir, dir);
+    if (dirW != NULL && dirW[0] != L'\0')
+        DirW = dirW;
+    else
+        DirW = AnsiToWide(dir);
     MasksGroup.SetMasksString(masksGroup);
     IncludeSubDirs = includeSubDirs;
 }
@@ -1342,7 +1355,8 @@ BOOL TestFileContentAux(BOOL& ok, CQuadWord& fileOffset, const CQuadWord& totalS
     }
 }
 
-BOOL TestFileContent(DWORD sizeLow, DWORD sizeHigh, const char* path, CGrepData* data, BOOL isLink)
+BOOL TestFileContentW(DWORD sizeLow, DWORD sizeHigh, const wchar_t* pathW,
+                      const char* pathA, CGrepData* data, BOOL isLink)
 {
     CQuadWord totalSize(sizeLow, sizeHigh);
     CQuadWord fileOffset(0, 0);
@@ -1352,12 +1366,12 @@ BOOL TestFileContent(DWORD sizeLow, DWORD sizeHigh, const char* path, CGrepData*
     if (totalSize > CQuadWord(0, 0) || isLink)
     {
         DWORD err = ERROR_SUCCESS;
-        data->SearchingText->Set(path); // set the current file
-        HANDLE hFile = HANDLES_Q(CreateFileW(AnsiToWide(path).c_str(), GENERIC_READ,
-                                            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                                            OPEN_EXISTING,
-                                            FILE_FLAG_SEQUENTIAL_SCAN,
-                                            NULL));
+        data->SearchingText->Set(pathA); // set the current file
+        HANDLE hFile = SalCreateFileWideH(pathW, GENERIC_READ,
+                                          FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                          OPEN_EXISTING,
+                                          FILE_FLAG_SEQUENTIAL_SCAN,
+                                          NULL);
         BOOL getLinkFileSizeErr = FALSE;
         if (hFile != INVALID_HANDLE_VALUE)
         {
@@ -1390,7 +1404,7 @@ BOOL TestFileContent(DWORD sizeLow, DWORD sizeHigh, const char* path, CGrepData*
                             // let the file view be examined
                             DWORD diff = (DWORD)(fileOffset - mapFileOffset).Value;
                             BOOL err2 = !TestFileContentAux(ok, fileOffset, totalSize, viewSize - diff,
-                                                            path, txt + diff, data);
+                                                            pathA, txt + diff, data);
                             HANDLES(UnmapViewOfFile(txt));
                             if (err2 || ok)
                                 break;
@@ -1419,7 +1433,7 @@ BOOL TestFileContent(DWORD sizeLow, DWORD sizeHigh, const char* path, CGrepData*
             FIND_LOG_ITEM log;
             log.Flags = FLI_ERROR;
             log.Text = buf;
-            log.Path = path;
+            log.Path = pathA;
             SendMessage(data->HWindow, WM_USER_ADDLOG, (WPARAM)&log, 0);
         }
     }
@@ -1427,9 +1441,15 @@ BOOL TestFileContent(DWORD sizeLow, DWORD sizeHigh, const char* path, CGrepData*
     return ok;
 }
 
-BOOL AddFoundItem(const char* path, const char* name, DWORD sizeLow, DWORD sizeHigh,
-                  DWORD attr, const FILETIME* lastWrite, BOOL isDir, CGrepData* data,
-                  CDuplicateCandidates* duplicateCandidates)
+BOOL TestFileContent(DWORD sizeLow, DWORD sizeHigh, const char* path, CGrepData* data, BOOL isLink)
+{
+    std::wstring pathW = AnsiToWide(path);
+    return TestFileContentW(sizeLow, sizeHigh, pathW.c_str(), path, data, isLink);
+}
+
+BOOL AddFoundItemEx(const char* path, const char* name, const wchar_t* pathW, const wchar_t* nameW,
+                    DWORD sizeLow, DWORD sizeHigh, DWORD attr, const FILETIME* lastWrite, BOOL isDir,
+                    CGrepData* data, CDuplicateCandidates* duplicateCandidates)
 {
     if (duplicateCandidates != NULL && isDir) // directories are irrelevant to us when searching for duplicates
         return TRUE;
@@ -1437,7 +1457,7 @@ BOOL AddFoundItem(const char* path, const char* name, DWORD sizeLow, DWORD sizeH
     CFoundFilesData* foundData = new CFoundFilesData;
     if (foundData != NULL)
     {
-        BOOL good = foundData->Set(path, name,
+        BOOL good = foundData->Set(path, name, pathW, nameW,
                                    CQuadWord(sizeLow, sizeHigh),
                                    attr, lastWrite, isDir);
         if (good)
@@ -1497,6 +1517,22 @@ BOOL AddFoundItem(const char* path, const char* name, DWORD sizeLow, DWORD sizeH
         return FALSE;
     }
     return TRUE;
+}
+
+BOOL AddFoundItem(const char* path, const char* name, DWORD sizeLow, DWORD sizeHigh,
+                  DWORD attr, const FILETIME* lastWrite, BOOL isDir, CGrepData* data,
+                  CDuplicateCandidates* duplicateCandidates)
+{
+    return AddFoundItemEx(path, name, NULL, NULL, sizeLow, sizeHigh, attr, lastWrite, isDir,
+                          data, duplicateCandidates);
+}
+
+BOOL AddFoundItemW(const char* path, const char* name, const wchar_t* pathW, const wchar_t* nameW,
+                   DWORD sizeLow, DWORD sizeHigh, DWORD attr, const FILETIME* lastWrite, BOOL isDir,
+                   CGrepData* data, CDuplicateCandidates* duplicateCandidates)
+{
+    return AddFoundItemEx(path, name, pathW, nameW, sizeLow, sizeHigh, attr, lastWrite, isDir,
+                          data, duplicateCandidates);
 }
 
 // 'dirStack' stores directories for late grepping. Otherwise,
@@ -1775,6 +1811,273 @@ void SearchDirectory(CPathBuffer& path, char* end, int startPathLen,
     *end = 0;
 }
 
+static std::wstring GetDirectoryWithoutSearchBackslashW(const std::wstring& pathW, size_t endIndex)
+{
+    std::wstring result(pathW, 0, endIndex);
+    if (result.length() > 3 && (result[result.length() - 1] == L'\\' || result[result.length() - 1] == L'/'))
+        result.resize(result.length() - 1);
+    return result;
+}
+
+static BOOL WideFindPathFits(size_t baseLen, size_t extraLen)
+{
+    return baseLen + extraLen < SAL_MAX_LONG_PATH;
+}
+
+static void WideFileNameToAnsi(const wchar_t* fileNameW, char* fileNameA, int fileNameASize)
+{
+    if (fileNameASize <= 0)
+        return;
+    int copied = WideCharToMultiByte(CP_ACP, 0, fileNameW, -1, fileNameA, fileNameASize, NULL, NULL);
+    if (copied <= 0)
+        fileNameA[0] = 0;
+    fileNameA[fileNameASize - 1] = 0;
+}
+
+void SearchDirectoryW(std::wstring& pathW, size_t endIndex, int startPathLen,
+                      CMaskGroup* masksGroup, BOOL includeSubDirs, CGrepData* data,
+                      TDirectArray<wchar_t*>* dirStack, int dirStackCount,
+                      CDuplicateCandidates* duplicateCandidates,
+                      CFindIgnore* ignoreList, CPathBuffer& message)
+{
+    std::wstring pathWithSlashW(pathW, 0, endIndex);
+    std::string pathWithSlashA = WideToAnsi(pathWithSlashW);
+    SLOW_CALL_STACK_MESSAGE6("SearchDirectoryW(%s, , %d, %s, %d, , , %d, , )",
+                             pathWithSlashA.c_str(), startPathLen, masksGroup->GetMasksString(),
+                             includeSubDirs, dirStackCount);
+
+    if (ignoreList != NULL && ignoreList->Contains(pathWithSlashA.c_str(), startPathLen))
+    {
+        FIND_LOG_ITEM log;
+        log.Flags = FLI_INFO;
+        log.Text = LoadStr(IDS_FINDLOG_SKIP);
+        log.Path = pathWithSlashA.c_str();
+        SendMessage(data->HWindow, WM_USER_ADDLOG, (WPARAM)&log, 0);
+        return;
+    }
+
+    if (!WideFindPathFits(endIndex, 1))
+    {
+        FIND_LOG_ITEM log;
+        log.Flags = FLI_ERROR;
+        log.Text = LoadStr(IDS_TOOLONGNAME);
+        log.Path = pathWithSlashA.c_str();
+        SendMessage(data->HWindow, WM_USER_ADDLOG, (WPARAM)&log, 0);
+        return;
+    }
+
+    WIN32_FIND_DATAW file;
+    std::wstring findMaskW = pathWithSlashW;
+    findMaskW.push_back(L'*');
+    HANDLE find = SalFindFirstFileWideH(findMaskW.c_str(), &file);
+    if (find != INVALID_HANDLE_VALUE)
+    {
+        std::wstring displayDirW = GetDirectoryWithoutSearchBackslashW(pathW, endIndex);
+        std::string displayDirA = WideToAnsi(displayDirW);
+        data->SearchingText->Set(displayDirA.c_str()); // set the current path
+
+        int dirStackEnterCount = 0; // number of items before starting the search at this level
+        if (dirStack != NULL)
+            dirStackEnterCount = dirStackCount;
+        BOOL testFindNextErr = TRUE;
+
+        do
+        {
+            char cFileNameA[MAX_PATH];
+            WideFileNameToAnsi(file.cFileName, cFileNameA, MAX_PATH);
+            BOOL isDir = (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            BOOL ignoreDir = isDir && (wcscmp(file.cFileName, L".") == 0 || wcscmp(file.cFileName, L"..") == 0);
+            size_t fileNameLenW = wcslen(file.cFileName);
+            if (ignoreDir || WideFindPathFits(endIndex, fileNameLenW))
+            {
+                // after finding an item without displaying it and once 0.5 s have passed since the last redraw,
+                // we request the listview to redraw
+                if (data->NeedRefresh && GetTickCount() - data->FoundVisibleTick >= 500)
+                {
+                    SendMessage(data->HWindow, WM_USER_ADDFILE, 0, 0);
+                    data->NeedRefresh = FALSE;
+                }
+
+                if (cFileNameA[0] != 0 && !ignoreDir)
+                {
+                    // add all files and directories except "." and ".."
+
+                    // test the criteria attributes, size, date and time
+                    CQuadWord size(file.nFileSizeLow, file.nFileSizeHigh);
+                    if (data->Criteria.Test(file.dwFileAttributes, &size, &file.ftLastWriteTime))
+                    {
+                        // file name
+                        // let the extension be resolved if ext==NULL
+                        if (masksGroup->AgreeMasks(cFileNameA, NULL)) // mask is OK
+                        {
+                            BOOL ok;
+                            if (data->Grep)
+                            {
+                                // content
+                                if (isDir)
+                                    ok = FALSE; // a directory cannot be grepped
+                                else
+                                {
+                                    std::wstring fullPathW = pathWithSlashW;
+                                    fullPathW.append(file.cFileName);
+                                    std::string fullPathA = WideToAnsi(fullPathW);
+                                    // links: file.nFileSizeLow == 0 && file.nFileSizeHigh == 0, the file size
+                                    // must be additionally obtained via SalGetFileSize()
+                                    BOOL isLink = (file.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+                                    ok = TestFileContentW(file.nFileSizeLow, file.nFileSizeHigh,
+                                                          fullPathW.c_str(), fullPathA.c_str(),
+                                                          data, isLink);
+                                }
+                            }
+                            else
+                                ok = TRUE;
+
+                            // if the item matches all criteria,
+                            // add it to the list of found items
+                            if (ok)
+                            {
+                                AddFoundItemW(displayDirA.c_str(), cFileNameA,
+                                              displayDirW.c_str(), file.cFileName,
+                                              file.nFileSizeLow, file.nFileSizeHigh,
+                                              file.dwFileAttributes, &file.ftLastWriteTime, isDir, data,
+                                              duplicateCandidates);
+                            }
+                        }
+                    }
+                }
+                if (isDir && includeSubDirs && !ignoreDir) // directory + not "." or ".."
+                {
+                    if (WideFindPathFits(endIndex, fileNameLenW + 1 /* backslash */))
+                    {
+                        BOOL searchNow = TRUE;
+
+                        if (dirStack != NULL)
+                        {
+                            // just store for later search
+                            wchar_t* newFileName = new wchar_t[fileNameLenW + 1];
+                            if (newFileName != NULL)
+                            {
+                                wcscpy_s(newFileName, fileNameLenW + 1, file.cFileName);
+                                if (dirStackCount < dirStack->Count)
+                                {
+                                    // no need to assign an item - we have space
+                                    dirStack->At(dirStackCount) = newFileName;
+                                    dirStackCount++;
+                                    searchNow = FALSE;
+                                }
+                                else
+                                {
+                                    // we must allocate a new item in the array
+                                    dirStack->Add(newFileName);
+                                    if (dirStack->IsGood())
+                                    {
+                                        dirStackCount++;
+                                        searchNow = FALSE;
+                                    }
+                                    else
+                                    {
+                                        dirStack->ResetState();
+                                        delete[] newFileName;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (searchNow)
+                        {
+                            // out of memory - we will not use dirStack
+                            pathW.resize(endIndex);
+                            pathW.append(file.cFileName);
+                            pathW.push_back(L'\\');
+                            SearchDirectoryW(pathW, pathW.length(), startPathLen, masksGroup, includeSubDirs, data,
+                                             NULL, 0, duplicateCandidates, ignoreList, message);
+                            pathW.resize(endIndex);
+                        }
+                    }
+                    else
+                    {
+                        std::wstring fullPathW = pathWithSlashW;
+                        fullPathW.append(file.cFileName);
+                        std::string fullPathA = WideToAnsi(fullPathW);
+                        FIND_LOG_ITEM log;
+                        log.Flags = FLI_ERROR;
+                        log.Text = LoadStr(IDS_TOOLONGNAME);
+                        log.Path = fullPathA.c_str();
+                        SendMessage(data->HWindow, WM_USER_ADDLOG, (WPARAM)&log, 0);
+                    }
+                }
+            }
+            else // too long file-name
+            {
+                std::wstring fullPathW = pathWithSlashW;
+                fullPathW.append(file.cFileName);
+                std::string fullPathA = WideToAnsi(fullPathW);
+                FIND_LOG_ITEM log;
+                log.Flags = FLI_ERROR;
+                log.Text = LoadStr(IDS_TOOLONGNAME);
+                log.Path = fullPathA.c_str();
+                SendMessage(data->HWindow, WM_USER_ADDLOG, (WPARAM)&log, 0);
+            }
+            if (data->StopSearch)
+            {
+                testFindNextErr = FALSE;
+                break;
+            }
+        } while (SalLPFindNextFile(find, &file));
+        DWORD err = GetLastError();
+        HANDLES(FindClose(find));
+
+        if (testFindNextErr && err != ERROR_NO_MORE_FILES)
+        {
+            sprintf(message, LoadStr(IDS_DIRERRORFORMAT), GetErrorText(err));
+            FIND_LOG_ITEM log;
+            log.Flags = FLI_ERROR;
+            log.Text = message;
+            log.Path = displayDirA.c_str();
+            SendMessage(data->HWindow, WM_USER_ADDLOG, (WPARAM)&log, 0);
+        }
+
+        // search through directories
+        if (dirStack != NULL)
+        {
+            int i;
+            for (i = dirStackEnterCount; i < dirStackCount; i++)
+            {
+                wchar_t* newFileName = (wchar_t*)dirStack->At(i);
+                if (!data->StopSearch) // may be set during SearchDirectoryW
+                {
+                    pathW.resize(endIndex);
+                    pathW.append(newFileName);
+                    pathW.push_back(L'\\');
+                    SearchDirectoryW(pathW, pathW.length(), startPathLen, masksGroup, includeSubDirs, data,
+                                     dirStack, dirStackCount, duplicateCandidates, ignoreList, message);
+                    pathW.resize(endIndex);
+                }
+            }
+            // and release data from this level
+            for (i = dirStackEnterCount; i < dirStackCount; i++)
+                delete[] dirStack->At(i);
+        }
+    }
+    else
+    {
+        DWORD err = GetLastError();
+        if (err != ERROR_FILE_NOT_FOUND && err != ERROR_NO_MORE_FILES)
+        {
+            std::wstring displayDirW = GetDirectoryWithoutSearchBackslashW(pathW, endIndex);
+            std::string displayDirA = WideToAnsi(displayDirW);
+            sprintf(message, LoadStr(IDS_DIRERRORFORMAT), GetErrorText(err));
+
+            FIND_LOG_ITEM log;
+            log.Flags = FLI_ERROR | FLI_IGNORE;
+            log.Text = message;
+            log.Path = displayDirA.c_str();
+            SendMessage(data->HWindow, WM_USER_ADDLOG, (WPARAM)&log, 0);
+        }
+    }
+    pathW.resize(endIndex);
+}
+
 void RefineData(CMaskGroup* masksGroup, CGrepData* data)
 {
     int refineCount = data->FoundFilesListView->GetDataForRefineCount();
@@ -1821,10 +2124,18 @@ void RefineData(CMaskGroup* masksGroup, CGrepData* data)
                 if (fullPath[strlen(fullPath) - 1] != '\\')
                     strcat(fullPath, "\\");
                 strcat(fullPath, refineData->Name.c_str());
+                std::wstring fullPathW = !refineData->PathW.empty()
+                                             ? refineData->PathW
+                                             : AnsiToWide(refineData->Path.c_str());
+                if (!fullPathW.empty() && fullPathW[fullPathW.length() - 1] != L'\\' && fullPathW[fullPathW.length() - 1] != L'/')
+                    fullPathW.push_back(L'\\');
+                fullPathW += !refineData->NameW.empty()
+                                 ? refineData->NameW
+                                 : AnsiToWide(refineData->Name.c_str());
                 // links: refineData->Size == 0, the file size must be additionally obtained via SalGetFileSize()
                 BOOL isLink = (refineData->Attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0; // size == 0, the file size must be obtained via SalGetFileSize()
-                ok = TestFileContent(refineData->Size.LoDWord, refineData->Size.HiDWord,
-                                     fullPath, data, isLink);
+                ok = TestFileContentW(refineData->Size.LoDWord, refineData->Size.HiDWord,
+                                      fullPathW.c_str(), fullPath, data, isLink);
             }
         }
 
@@ -1833,10 +2144,11 @@ void RefineData(CMaskGroup* masksGroup, CGrepData* data)
         if (data->Refine == 1 && ok ||
             data->Refine == 2 && !ok)
         {
-            AddFoundItem(refineData->Path.c_str(), refineData->Name.c_str(),
-                         refineData->Size.LoDWord, refineData->Size.HiDWord,
-                         refineData->Attr, &refineData->LastWrite,
-                         refineData->IsDir, data, NULL);
+            AddFoundItemW(refineData->Path.c_str(), refineData->Name.c_str(),
+                          refineData->PathW.c_str(), refineData->NameW.c_str(),
+                          refineData->Size.LoDWord, refineData->Size.HiDWord,
+                          refineData->Attr, &refineData->LastWrite,
+                          refineData->IsDir, data, NULL);
         }
     }
 }
@@ -1852,7 +2164,6 @@ unsigned GrepThreadFBody(void* ptr)
     data->NeedRefresh = FALSE;
     data->Criteria.PrepareForTest();
     CPathBuffer path;  // Heap-allocated for long path support
-    char* end;
     if (data->Refine != 0)
     {
         if (data->Data->Count > 0)
@@ -1864,7 +2175,6 @@ unsigned GrepThreadFBody(void* ptr)
                 lstrcpyn(path + len, "\\", path.Size() - len);
                 len++;
             }
-            end = path + len;
             CMaskGroup* mg = &data->Data->At(0)->MasksGroup;
             int errorPos;
             if (mg->PrepareMasks(errorPos))
@@ -1900,15 +2210,22 @@ unsigned GrepThreadFBody(void* ptr)
             int i;
             for (i = 0; i < data->Data->Count; i++)
             {
-                lstrcpyn(path, data->Data->At(i)->Dir, path.Size());
-                int len = (int)strlen(path);
-                if (path[len - 1] != '\\')
+                CSearchForData* searchData = data->Data->At(i);
+                std::wstring pathW = !searchData->DirW.empty()
+                                         ? searchData->DirW
+                                         : AnsiToWide(searchData->Dir);
+                if (!pathW.empty() && pathW[pathW.length() - 1] != L'\\' && pathW[pathW.length() - 1] != L'/')
+                    pathW.push_back(L'\\');
+
+                CPathBuffer pathA;  // legacy mirror for ignore-list prefix lengths and status/log fallbacks
+                lstrcpyn(pathA, searchData->Dir, pathA.Size());
+                int len = (int)strlen(pathA);
+                if (len > 0 && pathA[len - 1] != '\\' && pathA[len - 1] != '/')
                 {
-                    lstrcpyn(path + len, "\\", path.Size() - len);
+                    lstrcpyn(pathA + len, "\\", pathA.Size() - len);
                     len++;
                 }
-                end = path + len;
-                CMaskGroup* mg = &data->Data->At(i)->MasksGroup;
+                CMaskGroup* mg = &searchData->MasksGroup;
                 int errorPos;
                 if (!mg->PrepareMasks(errorPos))
                 {
@@ -1917,11 +2234,11 @@ unsigned GrepThreadFBody(void* ptr)
                     break;
                 }
 
-                BOOL includeSubDirs = data->Data->At(i)->IncludeSubDirs;
-                TDirectArray<char*>* dirStack = NULL; // see description at SearchDirectory
+                BOOL includeSubDirs = searchData->IncludeSubDirs;
+                TDirectArray<wchar_t*>* dirStack = NULL; // see description at SearchDirectoryW
                 if (includeSubDirs)
                 {
-                    dirStack = new TDirectArray<char*>(1000, 1000);
+                    dirStack = new TDirectArray<wchar_t*>(1000, 1000);
                     if (dirStack == NULL)
                         TRACE_E(LOW_MEMORY); // the algorithm will run even without the stack
                 }
@@ -1941,8 +2258,8 @@ unsigned GrepThreadFBody(void* ptr)
                 }
 
                 CPathBuffer message;  // Heap-allocated for long path support
-                SearchDirectory(path, end, (int)(end - path), mg, includeSubDirs, data, dirStack, 0,
-                                duplicateCandidates, ignoreList, message);
+                SearchDirectoryW(pathW, pathW.length(), len, mg, includeSubDirs, data, dirStack, 0,
+                                 duplicateCandidates, ignoreList, message);
 
                 if (ignoreList != NULL)
                     delete ignoreList;
@@ -2172,13 +2489,13 @@ DWORD WINAPI ThreadFindDialogMessageLoop(void* param)
     return ThreadFindDialogMessageLoopEH(param);
 }
 
-BOOL OpenFindDialog(HWND hCenterAgainst, const char* initPath)
+BOOL OpenFindDialog(HWND hCenterAgainst, const char* initPath, const wchar_t* initPathW)
 {
     CALL_STACK_MESSAGE3("OpenFindDialog(0x%p, %s)", hCenterAgainst, initPath);
 
     HCURSOR hOldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
 
-    CFindDialog* findDlg = new CFindDialog(hCenterAgainst, initPath);
+    CFindDialog* findDlg = new CFindDialog(hCenterAgainst, initPath, initPathW);
     if (findDlg != NULL && findDlg->IsGood())
     {
         CTFDData data;

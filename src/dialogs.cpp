@@ -305,9 +305,11 @@ unsigned ThreadProgressDlgBody(void* parameter)
     CConvertData* convertData = (data->ConvertData != NULL ? &convertDataCopy : NULL);
     CPathBuffer workPath1; // Heap-allocated for long path support
     lstrcpyn(workPath1, data->Script->WorkPath1, workPath1.Size());
+    std::wstring workPath1W = data->Script->WorkPath1W;
     BOOL workPath1InclSubDirs = data->Script->WorkPath1InclSubDirs;
     CPathBuffer workPath2; // Heap-allocated for long path support
     lstrcpyn(workPath2, data->Script->WorkPath2, workPath2.Size());
+    std::wstring workPath2W = data->Script->WorkPath2W;
     BOOL workPath2InclSubDirs = data->Script->WorkPath2InclSubDirs;
 
     CProgressDialog dlg(NULL, data->Script, data->Caption, attrsData, convertData, TRUE, data);
@@ -315,9 +317,13 @@ unsigned ThreadProgressDlgBody(void* parameter)
     if (res == 0 || res == -1 || res == IDABORT) // failed to open the dialog or worker thread
         SetEvent(data->ContEvent);               // let the main thread continue (opening the dialog or starting the operation failed)
 
-    if (workPath1[0] != 0)
+    if (!workPath1W.empty())
+        MainWindow->PostChangeOnPathNotificationW(workPath1W.c_str(), workPath1InclSubDirs);
+    else if (workPath1[0] != 0)
         MainWindow->PostChangeOnPathNotification(workPath1, workPath1InclSubDirs);
-    if (workPath2[0] != 0)
+    if (!workPath2W.empty())
+        MainWindow->PostChangeOnPathNotificationW(workPath2W.c_str(), workPath2InclSubDirs);
+    else if (workPath2[0] != 0)
         MainWindow->PostChangeOnPathNotification(workPath2, workPath2InclSubDirs);
     TRACE_I("End");
     return 0;
@@ -475,7 +481,9 @@ BOOL CProgressDialog::FlushCachedData()
             OperationText->SetText(OperationCache);
         if (Source != NULL && Script != NULL)
         {
-            if (Script->RemapNameFrom != NULL)
+            if (!SourceCacheW.empty() && Script->RemapNameFrom == NULL)
+                Source->SetTextToDblQuotesIfNeededW(SourceCacheW.c_str());
+            else if (Script->RemapNameFrom != NULL)
             {
                 CPathBuffer name; // Heap-allocated for long path support
                 Source->SetTextToDblQuotesIfNeeded(RemapNames(name, name.Size(), SourceCache, Script));
@@ -485,7 +493,12 @@ BOOL CProgressDialog::FlushCachedData()
         }
         SetWindowText(HPreposition, PrepositionCache);
         if (Target != NULL)
-            Target->SetTextToDblQuotesIfNeeded(TargetCache);
+        {
+            if (!TargetCacheW.empty())
+                Target->SetTextToDblQuotesIfNeededW(TargetCacheW.c_str());
+            else
+                Target->SetTextToDblQuotesIfNeeded(TargetCache);
+        }
         CacheIsDirty = FALSE;
     }
 
@@ -725,6 +738,8 @@ CProgressDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             lstrcpyn(PrepositionCache, data->Preposition, 100);
             lstrcpyn(SourceCache, data->Source, SourceCache.Size());
             lstrcpyn(TargetCache, data->Target, TargetCache.Size());
+            SourceCacheW = data->SourceW != NULL ? data->SourceW : L"";
+            TargetCacheW = data->TargetW != NULL ? data->TargetW : L"";
             CacheIsDirty = TRUE;
         }
 
@@ -793,10 +808,39 @@ CProgressDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         char** data = (char**)lParam;
         switch (wParam)
         {
+        case 100:
+        {
+            void** dataW = (void**)lParam;
+            CFileErrorDlg dlg(HWindow, (const char*)dataW[1], (const char*)dataW[2], (const char*)dataW[4],
+                              FALSE, 0, (const wchar_t*)dataW[3]);
+            *(int*)dataW[0] = (int)dlg.Execute();
+            break;
+        }
+
         case 0:
         {
             CFileErrorDlg dlg(HWindow, data[1], data[2], data[3]);
             *(int*)data[0] = (int)dlg.Execute();
+            break;
+        }
+
+        case 101:
+        {
+            void** dataW = (void**)lParam;
+            COverwriteDlg dlg(HWindow, (const char*)dataW[1], (const char*)dataW[3],
+                              (const char*)dataW[4], (const char*)dataW[6], FALSE, FALSE,
+                              (const wchar_t*)dataW[2], (const wchar_t*)dataW[5]);
+            *(int*)dataW[0] = (int)dlg.Execute();
+            break;
+        }
+
+        case 107:
+        {
+            void** dataW = (void**)lParam;
+            COverwriteDlg dlg(HWindow, (const char*)dataW[1], (const char*)dataW[3],
+                              (const char*)dataW[4], (const char*)dataW[6], FALSE, TRUE,
+                              (const wchar_t*)dataW[2], (const wchar_t*)dataW[5]);
+            *(int*)dataW[0] = (int)dlg.Execute();
             break;
         }
 
@@ -834,6 +878,15 @@ CProgressDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             break;
         }
 
+        case 103:
+        {
+            void** dataW = (void**)lParam;
+            CCannotMoveDlg dlg(HWindow, IDD_CANNOTMOVE, (char*)dataW[1], (char*)dataW[3], (char*)dataW[5],
+                               (const wchar_t*)dataW[2], (const wchar_t*)dataW[4]);
+            *(int*)dataW[0] = (int)dlg.Execute();
+            break;
+        }
+
         case 4:
         {
             CCannotMoveDlg dlg(HWindow, IDD_RENAMEDIR, data[1], data[2], data[3]);
@@ -841,9 +894,27 @@ CProgressDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             break;
         }
 
+        case 104:
+        {
+            void** dataW = (void**)lParam;
+            CCannotMoveDlg dlg(HWindow, IDD_RENAMEDIR, (char*)dataW[1], (char*)dataW[3], (char*)dataW[5],
+                               (const wchar_t*)dataW[2], (const wchar_t*)dataW[4]);
+            *(int*)dataW[0] = (int)dlg.Execute();
+            break;
+        }
+
         case 5:
         {
             CFileErrorDlg dlg(HWindow, data[0], data[1], data[2], FALSE, IDD_ERROR3);
+            dlg.Execute();
+            break;
+        }
+
+        case 105:
+        {
+            void** dataW = (void**)lParam;
+            CFileErrorDlg dlg(HWindow, (const char*)dataW[0], (const char*)dataW[1], (const char*)dataW[3],
+                              FALSE, IDD_ERROR3, (const wchar_t*)dataW[2]);
             dlg.Execute();
             break;
         }
@@ -883,10 +954,29 @@ CProgressDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             break;
         }
 
+        case 110:
+        {
+            void** dataW = (void**)lParam;
+            CErrorCopyingPermissionsDlg dlg(HWindow, (const char*)dataW[1], (const char*)dataW[3],
+                                            (DWORD)(DWORD_PTR)dataW[5],
+                                            (const wchar_t*)dataW[2], (const wchar_t*)dataW[4]);
+            *(int*)dataW[0] = (int)dlg.Execute();
+            break;
+        }
+
         case 11:
         {
             CErrorCopyingDirTimeDlg dlg(HWindow, data[1], (DWORD)(DWORD_PTR)data[2]);
             *(int*)data[0] = (int)dlg.Execute();
+            break;
+        }
+
+        case 111:
+        {
+            void** dataW = (void**)lParam;
+            CErrorCopyingDirTimeDlg dlg(HWindow, (const char*)dataW[1], (DWORD)(DWORD_PTR)dataW[3],
+                                        (const wchar_t*)dataW[2]);
+            *(int*)dataW[0] = (int)dlg.Execute();
             break;
         }
 
@@ -1539,10 +1629,11 @@ MENU_TEMPLATE_ITEM ProgressDialogMenu2[] =
 //
 
 CFileErrorDlg::CFileErrorDlg(HWND parent, const char* caption, const char* file, const char* error,
-                             BOOL noSkip, int altRes) : CCommonDialog(HLanguage, altRes == 0 ? (noSkip ? IDD_CREATEDIRERR : IDD_CANNOTOPEN) : altRes, parent)
+                             BOOL noSkip, int altRes, const wchar_t* fileW) : CCommonDialog(HLanguage, altRes == 0 ? (noSkip ? IDD_CREATEDIRERR : IDD_CANNOTOPEN) : altRes, parent)
 {
     Caption = caption;
     File = file;
+    FileW = fileW;
     Error = error;
 }
 
@@ -1558,7 +1649,12 @@ CFileErrorDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         CStaticText* name;
         if ((name = new CStaticText(HWindow, IDS_FILENAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(File);
+        {
+            if (FileW != NULL)
+                name->SetTextToDblQuotesIfNeededW(FileW);
+            else
+                name->SetTextToDblQuotesIfNeeded(File);
+        }
         else
             TRACE_E(LOW_MEMORY);
 
@@ -1651,7 +1747,8 @@ MENU_TEMPLATE_ITEM FileErrorDlgMenu[] =
 
 COverwriteDlg::COverwriteDlg(HWND parent, const char* sourceName, const char* sourceAttr,
                              const char* targetName, const char* targetAttr, BOOL yesnocancel,
-                             BOOL dirOverwrite) : CCommonDialog(HLanguage,
+                             BOOL dirOverwrite, const wchar_t* sourceNameW,
+                             const wchar_t* targetNameW) : CCommonDialog(HLanguage,
                                                                 dirOverwrite ? IDD_DIROVERWRITE : (yesnocancel ? IDD_OVERWRITE2 : IDD_OVERWRITE),
                                                                 parent)
 {
@@ -1659,6 +1756,8 @@ COverwriteDlg::COverwriteDlg(HWND parent, const char* sourceName, const char* so
     SourceAttr = sourceAttr;
     TargetName = targetName;
     TargetAttr = targetAttr;
+    SourceNameW = sourceNameW;
+    TargetNameW = targetNameW;
 }
 
 INT_PTR
@@ -1671,11 +1770,21 @@ COverwriteDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         CStaticText *source, *target;
         if ((source = new CStaticText(HWindow, IDS_SOURCENAME, STF_PATH_ELLIPSIS)) != NULL)
-            source->SetTextToDblQuotesIfNeeded(SourceName);
+        {
+            if (SourceNameW != NULL)
+                source->SetTextToDblQuotesIfNeededW(SourceNameW);
+            else
+                source->SetTextToDblQuotesIfNeeded(SourceName);
+        }
         else
             TRACE_E(LOW_MEMORY);
         if ((target = new CStaticText(HWindow, IDS_TARGETNAME, STF_PATH_ELLIPSIS)) != NULL)
-            target->SetTextToDblQuotesIfNeeded(TargetName);
+        {
+            if (TargetNameW != NULL)
+                target->SetTextToDblQuotesIfNeededW(TargetNameW);
+            else
+                target->SetTextToDblQuotesIfNeeded(TargetName);
+        }
         else
             TRACE_E(LOW_MEMORY);
 
@@ -1760,11 +1869,15 @@ CHiddenOrSystemDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 //
 
 CCannotMoveDlg::CCannotMoveDlg(HWND parent, int resID, char* sourceName,
-                               char* targetName, char* error) : CCommonDialog(HLanguage, resID, parent)
+                               char* targetName, char* error,
+                               const wchar_t* sourceNameW,
+                               const wchar_t* targetNameW) : CCommonDialog(HLanguage, resID, parent)
 {
     SourceName = sourceName;
     TargetName = targetName;
     Error = error;
+    SourceNameW = sourceNameW;
+    TargetNameW = targetNameW;
 }
 
 INT_PTR
@@ -1777,11 +1890,21 @@ CCannotMoveDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         CStaticText *source, *target;
         if ((source = new CStaticText(HWindow, IDS_SOURCENAME, STF_PATH_ELLIPSIS)) != NULL)
-            source->SetTextToDblQuotesIfNeeded(SourceName);
+        {
+            if (SourceNameW != NULL)
+                source->SetTextToDblQuotesIfNeededW(SourceNameW);
+            else
+                source->SetTextToDblQuotesIfNeeded(SourceName);
+        }
         else
             TRACE_E(LOW_MEMORY);
         if ((target = new CStaticText(HWindow, IDS_TARGETNAME, STF_PATH_ELLIPSIS)) != NULL)
-            target->SetTextToDblQuotesIfNeeded(TargetName);
+        {
+            if (TargetNameW != NULL)
+                target->SetTextToDblQuotesIfNeededW(TargetNameW);
+            else
+                target->SetTextToDblQuotesIfNeeded(TargetName);
+        }
         else
             TRACE_E(LOW_MEMORY);
 

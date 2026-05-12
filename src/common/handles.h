@@ -192,6 +192,7 @@ enum C__HandlesOrigin
     __hoGlobalReAlloc,
     __hoGlobalLock,
     __hoFindFirstChangeNotification,
+    __hoFindFirstChangeNotificationW,
     __hoGetEnvironmentStrings,
     __hoLocalAlloc,
     __hoLocalReAlloc,
@@ -605,8 +606,13 @@ public:
 
     BOOL GlobalUnlock(HGLOBAL hMem);
 
-    HANDLE FindFirstChangeNotification(LPCTSTR lpPathName, BOOL bWatchSubtree,
-                                       DWORD dwNotifyFilter);
+    HANDLE FindFirstChangeNotificationA(LPCSTR lpPathName, BOOL bWatchSubtree,
+                                        DWORD dwNotifyFilter);
+
+    // Wide variant — needed by the Snooper's wide path support so the
+    // change-notification handle is opened against the real Unicode path.
+    HANDLE FindFirstChangeNotificationW(LPCWSTR lpPathName, BOOL bWatchSubtree,
+                                        DWORD dwNotifyFilter);
 
     BOOL FindCloseChangeNotification(HANDLE hChangeHandle);
 

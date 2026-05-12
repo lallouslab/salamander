@@ -154,6 +154,10 @@ BOOL DoCopyMove(BOOL copy, char* targetDir, CCopyMoveData* data, void* param)
     {
         tmp->Copy = copy;
         strcpy(tmp->TargetPath, targetDir);
+        if (panel != NULL && panel->Is(ptDisk))
+            tmp->TargetPathW = panel->GetPathW();
+        else
+            tmp->TargetPathW = AnsiToWide(targetDir);
         tmp->Data = data;
         PostMessage(panel->HWindow, WM_USER_DROPCOPYMOVE, (WPARAM)tmp, 0);
         return TRUE;
@@ -772,7 +776,7 @@ static BOOL CollectSelectedPathsW(CFilesWindow* panel, const int* indexes, int i
     if (panel == NULL || indexes == NULL || indexCount <= 0)
         return FALSE;
 
-    std::wstring basePathW = AnsiToWide(panel->GetPath());
+    std::wstring basePathW = panel->Is(ptDisk) ? std::wstring(panel->GetPathW()) : AnsiToWide(panel->GetPath());
     if (!basePathW.empty() && basePathW.back() != L'\\')
         basePathW += L'\\';
 
@@ -1951,7 +1955,7 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
             {
                 std::vector<std::wstring> selectedPathsW;
                 BOOL hasWideName = FALSE;
-                if (CollectSelectedPathsW(panel, idxs, idxCount, selectedPathsW, hasWideName) && hasWideName)
+                if (CollectSelectedPathsW(panel, idxs, idxCount, selectedPathsW, hasWideName))
                 {
                     sally::clipboard::HDropWideDataObject* wideDataObject = new sally::clipboard::HDropWideDataObject(selectedPathsW);
                     if (wideDataObject != NULL)

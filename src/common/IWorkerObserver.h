@@ -20,6 +20,11 @@
 
 // Forward declarations for data types used by overwrite dialogs
 struct CProgressData;
+struct CWorkerFileErrorDialogData;
+struct CWorkerOverwriteDialogData;
+struct CWorkerCannotMoveDialogData;
+struct CWorkerCopyPermErrorDialogData;
+struct CWorkerCopyDirTimeErrorDialogData;
 
 // Standard dialog return values (matching resource IDs from worker.cpp)
 // IDRETRY, IDYES, IDNO, IDCANCEL are from windows.h
@@ -65,19 +70,47 @@ public:
     // Generic file error with retry/skip/cancel options.
     // Returns IDRETRY, IDB_SKIP, IDB_SKIPALL, IDCANCEL, or IDB_IGNORE.
     virtual int AskFileError(const char* title, const char* fileName, const char* errorText) = 0;
+    virtual int AskFileErrorW(const char* title, const char* fileName, const wchar_t* fileNameW,
+                              const char* errorText)
+    {
+        (void)fileNameW;
+        return AskFileError(title, fileName, errorText);
+    }
 
     // ID-based variant — worker passes IDS_* constant + Win32 error code,
     // observer handles localization (LoadStr / GetErrorText).
     virtual int AskFileErrorById(int titleId, const char* fileName, DWORD win32Error) = 0;
+    virtual int AskFileErrorByIdW(int titleId, const char* fileName, const wchar_t* fileNameW,
+                                  DWORD win32Error)
+    {
+        (void)fileNameW;
+        return AskFileErrorById(titleId, fileName, win32Error);
+    }
 
     // Variant where both title and error text are string resource IDs.
     virtual int AskFileErrorByIds(int titleId, const char* fileName, int errorTextId) = 0;
+    virtual int AskFileErrorByIdsW(int titleId, const char* fileName, const wchar_t* fileNameW,
+                                   int errorTextId)
+    {
+        (void)fileNameW;
+        return AskFileErrorByIds(titleId, fileName, errorTextId);
+    }
 
     // --- Overwrite confirmation (message ID 1) ---
     // Ask whether to overwrite a file. Shows source and target info.
     // Returns IDYES, IDB_ALL (yes to all), IDB_SKIP, IDB_SKIPALL, IDCANCEL.
     virtual int AskOverwrite(const char* sourceName, const char* sourceInfo,
                              const char* targetName, const char* targetInfo) = 0;
+    virtual int AskOverwriteW(const char* sourceName, const wchar_t* sourceNameW,
+                              const char* sourceInfo, const char* targetName,
+                              const wchar_t* targetNameW, const char* targetInfo,
+                              bool dirOverwrite = false)
+    {
+        (void)sourceNameW;
+        (void)targetNameW;
+        (void)dirOverwrite;
+        return AskOverwrite(sourceName, sourceInfo, targetName, targetInfo);
+    }
 
     // --- Hidden/system file confirmation (message ID 2) ---
     // Returns IDYES, IDB_ALL, IDB_SKIP, IDB_SKIPALL, IDCANCEL.
@@ -91,18 +124,46 @@ public:
     // Returns IDRETRY, IDB_SKIP, IDB_SKIPALL, IDCANCEL.
     virtual int AskCannotMove(const char* errorText, const char* fileName,
                               const char* destPath, bool isDirectory) = 0;
+    virtual int AskCannotMoveW(const char* errorText, const char* fileName,
+                               const wchar_t* fileNameW, const char* destPath,
+                               const wchar_t* destPathW, bool isDirectory)
+    {
+        (void)fileNameW;
+        (void)destPathW;
+        return AskCannotMove(errorText, fileName, destPath, isDirectory);
+    }
 
     // Variant with Win32 error code — observer formats error text.
     virtual int AskCannotMoveErr(const char* sourceName, const char* targetName,
                                  DWORD win32Error, bool isDirectory) = 0;
+    virtual int AskCannotMoveErrW(const char* sourceName, const wchar_t* sourceNameW,
+                                  const char* targetName, const wchar_t* targetNameW,
+                                  DWORD win32Error, bool isDirectory)
+    {
+        (void)sourceNameW;
+        (void)targetNameW;
+        return AskCannotMoveErr(sourceName, targetName, win32Error, isDirectory);
+    }
 
     // --- Simple error notification (message ID 5) ---
     // Informational only — no return value expected.
     virtual void NotifyError(const char* title, const char* fileName,
                              const char* errorText) = 0;
+    virtual void NotifyErrorW(const char* title, const char* fileName, const wchar_t* fileNameW,
+                              const char* errorText)
+    {
+        (void)fileNameW;
+        NotifyError(title, fileName, errorText);
+    }
 
     // ID-based variant — worker passes IDS_* constants, observer handles localization.
     virtual void NotifyErrorById(int titleId, const char* fileName, int detailId) = 0;
+    virtual void NotifyErrorByIdW(int titleId, const char* fileName, const wchar_t* fileNameW,
+                                  int detailId)
+    {
+        (void)fileNameW;
+        NotifyErrorById(titleId, fileName, detailId);
+    }
 
     // --- ADS read error (message ID 6) ---
     // Returns IDB_SKIP, IDB_SKIPALL, IDB_IGNORE, IDB_ALL (ignore all), IDCANCEL.
@@ -130,10 +191,24 @@ public:
     // Returns IDRETRY, IDB_SKIP, IDB_SKIPALL, IDB_IGNORE, IDB_ALL (ignore all), IDCANCEL.
     virtual int AskCopyPermError(const char* sourceFile, const char* targetFile,
                                  const char* errorText) = 0;
+    virtual int AskCopyPermErrorW(const char* sourceFile, const wchar_t* sourceFileW,
+                                  const char* targetFile, const wchar_t* targetFileW,
+                                  const char* errorText)
+    {
+        (void)sourceFileW;
+        (void)targetFileW;
+        return AskCopyPermError(sourceFile, targetFile, errorText);
+    }
 
     // --- Error copying directory time (message ID 11) ---
     // Returns IDRETRY, IDB_IGNORE, IDB_ALL (ignore all), IDCANCEL.
     virtual int AskCopyDirTimeError(const char* dirName, DWORD errorCode) = 0;
+    virtual int AskCopyDirTimeErrorW(const char* dirName, const wchar_t* dirNameW,
+                                     DWORD errorCode)
+    {
+        (void)dirNameW;
+        return AskCopyDirTimeError(dirName, errorCode);
+    }
 
     // --- Confirm encryption loss (message ID 12) ---
     // Returns IDYES, IDB_ALL (yes to all), IDB_SKIP, IDB_SKIPALL, IDCANCEL.

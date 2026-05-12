@@ -308,6 +308,7 @@ enum CMainWindowsHitTestEnum
 struct CChangeNotifData
 {
     char Path[MAX_PATH];
+    wchar_t* PathW;
     BOOL IncludingSubdirs;
 };
 
@@ -484,6 +485,7 @@ public:
     // and to all opened FS from plugins (both panels and FS can respond by refreshing their content);
     // can be called from any thread
     void PostChangeOnPathNotification(const char* path, BOOL includingSubdirs);
+    void PostChangeOnPathNotificationW(const wchar_t* path, BOOL includingSubdirs);
 
     // these functions have no effect if CFilesWindow::CanBeFocused is not satisfied
     void ChangePanel(BOOL force = FALSE);                                   // respects EditMode; activates the inactive panel; (ignores ZOOM if force is TRUE)
@@ -494,10 +496,15 @@ public:
     void CompareDirectories(DWORD flags); // flags are a combination of COMPARE_DIRECTORIES_xxx
 
     // ensures DirHistory->AddPathUnique is called and correctly updates the panel's SetHistory
+    // pathOrArchiveOrFSNameW / archivePathOrFSUserPartW carry the wide source-of-truth so the
+    // history can replay through ChangePathToDiskW / ChangePathToArchiveW; pass nullptr when
+    // only the ANSI byte stream is available (plugin FS today).
     void DirHistoryAddPathUnique(int type, const char* pathOrArchiveOrFSName,
                                  const char* archivePathOrFSUserPart, HICON hIcon,
                                  CPluginFSInterfaceAbstract* pluginFS,
-                                 CPluginFSInterfaceEncapsulation* curPluginFS);
+                                 CPluginFSInterfaceEncapsulation* curPluginFS,
+                                 const wchar_t* pathOrArchiveOrFSNameW = nullptr,
+                                 const wchar_t* archivePathOrFSUserPartW = nullptr);
 
     // ensures DirHistory->RemoveActualPath is called and correctly updates the panel's SetHistory
     void DirHistoryRemoveActualPath(CFilesWindow* panel);
@@ -516,7 +523,7 @@ public:
     void SaveConfig(HWND parent = NULL); // parent: NULL = MainWindow->HWindow
     BOOL LoadConfig(BOOL importingOldConfig, const CCommandLineParams* cmdLineParams);
     void SavePanelConfig(CFilesWindow* panel, HKEY hSalamander, const char* reg);
-    void LoadPanelConfig(CPathBuffer& panelPath, CFilesWindow* panel, HKEY hSalamander, const char* reg);
+    void LoadPanelConfig(CPathBuffer& panelPath, std::wstring& panelPathW, CFilesWindow* panel, HKEY hSalamander, const char* reg);
     void DeleteOldConfigurations(BOOL* deleteConfigurations, BOOL autoImportConfig,
                                  const char* autoImportConfigFromKey, BOOL doNotDeleteImportedCfg);
 

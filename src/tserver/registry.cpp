@@ -42,6 +42,11 @@ const WCHAR REGERR_HKEY_CLASSES_ROOT[] = L"HKEY_CLASSES_ROOT";
 const WCHAR REGERR_HKEY_CURRENT_USER[] = L"HKEY_CURRENT_USER";
 const WCHAR REGERR_HKEY_UNKNOWN[] = L"?";
 
+static DWORD RegStringByteSize(const WCHAR* value)
+{
+    return (DWORD)(sizeof(WCHAR) * (wcslen(value) + 1));
+}
+
 //*****************************************************************************
 //
 // GetHKeyName
@@ -139,7 +144,7 @@ BOOL CReg::GetSize(HKEY hKey, const WCHAR* name, DWORD type, DWORD& dataSize, BO
 BOOL CRegBOOL::Save(HKEY hKey, const WCHAR* name, void* data)
 {
     const WCHAR* val = *(BOOL*)data ? L"True" : L"False";
-    return SaveVoid(hKey, name, REG_SZ, val, sizeof(WCHAR) * (wcslen(val) + 1));
+    return SaveVoid(hKey, name, REG_SZ, val, RegStringByteSize(val));
 }
 
 BOOL CRegBOOL::Load(HKEY hKey, const WCHAR* name, void* data, BOOL* notFound)
@@ -195,7 +200,7 @@ BOOL CRegInt::Save(HKEY hKey, const WCHAR* name, void* data)
 {
     WCHAR buff[20];
     swprintf_s(buff, L"%d", *(int*)data);
-    return SaveVoid(hKey, name, REG_SZ, buff, sizeof(WCHAR) * (wcslen(buff) + 1));
+    return SaveVoid(hKey, name, REG_SZ, buff, RegStringByteSize(buff));
 }
 
 BOOL CRegInt::Load(HKEY hKey, const WCHAR* name, void* data, BOOL* notFound)
@@ -216,7 +221,7 @@ BOOL CRegDouble::Save(HKEY hKey, const WCHAR* name, void* data)
 {
     WCHAR buff[30];
     swprintf_s(buff, L"%f", *(double*)data);
-    return SaveVoid(hKey, name, REG_SZ, buff, sizeof(WCHAR) * (wcslen(buff) + 1));
+    return SaveVoid(hKey, name, REG_SZ, buff, RegStringByteSize(buff));
 }
 
 BOOL CRegDouble::Load(HKEY hKey, const WCHAR* name, void* data, BOOL* notFound)
@@ -241,7 +246,7 @@ BOOL CRegCOLORREF::Save(HKEY hKey, const WCHAR* name, void* data)
     BYTE g = GetGValue(color);
     BYTE b = GetBValue(color);
     swprintf_s(buff, L"%d,%d,%d", r, g, b);
-    return SaveVoid(hKey, name, REG_SZ, buff, sizeof(WCHAR) * (wcslen(buff) + 1));
+    return SaveVoid(hKey, name, REG_SZ, buff, RegStringByteSize(buff));
 }
 
 BOOL CRegCOLORREF::Load(HKEY hKey, const WCHAR* name, void* data, BOOL* notFound)
@@ -278,7 +283,7 @@ BOOL CRegWindowPlacement::Save(HKEY hKey, const WCHAR* name, void* data)
                wp->rcNormalPosition.top,
                wp->rcNormalPosition.right,
                wp->rcNormalPosition.bottom);
-    return SaveVoid(hKey, name, REG_SZ, buff, sizeof(WCHAR) * (wcslen(buff) + 1));
+    return SaveVoid(hKey, name, REG_SZ, buff, RegStringByteSize(buff));
 }
 
 BOOL CRegWindowPlacement::Load(HKEY hKey, const WCHAR* name, void* data, BOOL* notFound)
@@ -326,7 +331,7 @@ BOOL CRegLogFont::Save(HKEY hKey, const WCHAR* name, void* data)
                lf->lfQuality,
                lf->lfPitchAndFamily,
                lf->lfFaceName);
-    return SaveVoid(hKey, name, REG_SZ, buff, sizeof(WCHAR) * (wcslen(buff) + 1));
+    return SaveVoid(hKey, name, REG_SZ, buff, RegStringByteSize(buff));
 }
 
 BOOL CRegLogFont::Load(HKEY hKey, const WCHAR* name, void* data, BOOL* notFound)
@@ -492,7 +497,7 @@ CRegistry::CRegistry()
 
 BOOL CRegistry::RegisterPath(HRegistryPath& hRegistryPath, HKEY hRootKey, const WCHAR* path, ...)
 {
-    int len = 1;
+    size_t len = 1;
     const WCHAR* iterator = path;
     va_list params;
     va_start(params, path);
@@ -531,7 +536,7 @@ BOOL CRegistry::RegisterPath(HRegistryPath& hRegistryPath, HKEY hRootKey, const 
     }
     va_end(params);
 
-    int lenNewPath = wcslen(newPath);
+    size_t lenNewPath = wcslen(newPath);
     if (lenNewPath > 0 && newPath[lenNewPath - 1] == L'\\')
         newPath[lenNewPath - 1] = 0; // W95 Hell
 

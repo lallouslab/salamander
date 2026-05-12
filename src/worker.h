@@ -82,6 +82,8 @@ struct CProgressData
         *Source,
         *Preposition,
         *Target;
+    const wchar_t *SourceW,
+        *TargetW;
 };
 
 //
@@ -227,6 +229,8 @@ struct COperation
         *TargetName;
     std::wstring SourceNameW;  // Unicode source path (for long path and Unicode filename support)
     std::wstring TargetNameW;  // Unicode target path (for long path and Unicode filename support)
+    bool SourceNameWExplicit = false;  // true when SetSourceNameW supplied a real wide path/name
+    bool TargetNameWExplicit = false;  // true when SetTargetNameW supplied a real wide path/name
     DWORD Attr;
     DWORD OpFlags; // combination of OPFL_xxx, see above
 
@@ -261,6 +265,7 @@ struct COperation
         : Opcode(other.Opcode), Size(other.Size), FileSize(other.FileSize),
           SourceName(other.SourceName), TargetName(other.TargetName),
           SourceNameW(std::move(other.SourceNameW)), TargetNameW(std::move(other.TargetNameW)),
+          SourceNameWExplicit(other.SourceNameWExplicit), TargetNameWExplicit(other.TargetNameWExplicit),
           Attr(other.Attr), OpFlags(other.OpFlags),
           OwnsSourceName(other.OwnsSourceName), OwnsTargetName(other.OwnsTargetName)
     {
@@ -291,6 +296,8 @@ struct COperation
             TargetName = other.TargetName;
             SourceNameW = std::move(other.SourceNameW);
             TargetNameW = std::move(other.TargetNameW);
+            SourceNameWExplicit = other.SourceNameWExplicit;
+            TargetNameWExplicit = other.TargetNameWExplicit;
             Attr = other.Attr;
             OpFlags = other.OpFlags;
             OwnsSourceName = other.OwnsSourceName;
@@ -317,6 +324,8 @@ struct COperation
     // wideFileName: the actual Unicode filename (from CFileData::NameW), or empty to widen ANSI
     void SetSourceNameW(const char* ansiPath, const std::wstring& wideFileName);
     void SetTargetNameW(const char* ansiPath, const std::wstring& wideFileName);
+    void SetSourceNameW(const std::wstring& widePath, const std::wstring& wideFileName);
+    void SetTargetNameW(const std::wstring& widePath, const std::wstring& wideFileName);
 
     // File operation helpers that automatically use wide paths when available
     HANDLE OpenSourceFile(DWORD flags) const;
@@ -387,6 +396,15 @@ public:
         Count = 0;
     }
 
+    // Re-anchor auto-widened SourceNameW values so paths under `anchorAnsi`
+    // are rebound to `anchorWide`. Script builders increasingly call
+    // SetSourceNameW with the panel PathW and CFileData::NameW; those explicit
+    // values are already richer than SourceName and must not be overwritten.
+    //
+    // Matching is case-insensitive on the prefix bytes; ops whose SourceName
+    // does not start with `anchorAnsi` are left untouched.
+    void ReanchorWideSourcePaths(const char* anchorAnsi, const wchar_t* anchorWide);
+
 public:
     CQuadWord TotalSize;      // WARNING: not the byte size of the files (usable only for progress calculations)
     CQuadWord CompressedSize; // sum of file sizes after compression
@@ -437,6 +455,8 @@ public:
     BOOL WorkPath1InclSubDirs; // TRUE/FALSE = with/without subdirectories (first path)
     CPathBuffer WorkPath2;     // when non-empty string second path processed (used for change notifications)
     BOOL WorkPath2InclSubDirs; // TRUE/FALSE = with/without subdirectories (second path)
+    std::wstring WorkPath1W;
+    std::wstring WorkPath2W;
 
     std::string WaitInQueueSubject; // text for the "waiting in queue" state: dialog title
     std::string WaitInQueueFrom;    // text for the "waiting in queue" state: top line (From)
@@ -478,6 +498,18 @@ public:
     void SetWorkPath2(const char* path, BOOL inclSubDirs)
     {
         lstrcpyn(WorkPath2.Get(), path, SAL_MAX_LONG_PATH);
+        WorkPath2InclSubDirs = inclSubDirs;
+    }
+
+    void SetWorkPath1W(const wchar_t* path, BOOL inclSubDirs)
+    {
+        WorkPath1W = path != NULL ? path : L"";
+        WorkPath1InclSubDirs = inclSubDirs;
+    }
+
+    void SetWorkPath2W(const wchar_t* path, BOOL inclSubDirs)
+    {
+        WorkPath2W = path != NULL ? path : L"";
         WorkPath2InclSubDirs = inclSubDirs;
     }
 

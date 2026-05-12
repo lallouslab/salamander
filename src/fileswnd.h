@@ -7,6 +7,8 @@
 #include "common/widepath.h"
 #include "common/CSelectionSnapshot.h"
 
+#include <string>
+
 #define NUM_OF_CHECKTHREADS 30                   // maximum number of threads for "non-blocking" path accessibility tests
 #define ICONOVR_REFRESH_PERIOD 2000              // minimum interval between icon-overlay refreshes in the panel (see IconOverlaysChangedOnPath)
 #define MIN_DELAY_BETWEENINACTIVEREFRESHES 2000  // minimum refresh interval when the main window is inactive
@@ -61,6 +63,7 @@ struct CTmpDropData
 {
     BOOL Copy;
     CPathBuffer TargetPath;
+    std::wstring TargetPathW;
     CCopyMoveData* Data;
 };
 
@@ -480,6 +483,7 @@ class CFilesWindowAncestor : public CWindow // the real object core - everything
 {
 private:
     CPathBuffer Path; // path for a ptDisk panel - normal ("c:\path") or UNC ("\\server\share\path")
+    std::wstring PathW; // wide source of truth for disk paths; Path is the ANSI compatibility cache
     BOOL SuppressAutoRefresh;     // TRUE if the user canceled directory listing during reading and chose temporary auto-refresh suppression
 
     CPanelType PanelType; // type of panel (disk, archive, plugin FS)
@@ -491,6 +495,8 @@ private:
     CSalamanderDirectory* ArchiveDir;   // content of the open archive; basic data - array of CFileData
     CPathBuffer ZIPArchive; // path to the open archive
     CPathBuffer ZIPPath;    // path inside the open archive
+    std::wstring ZIPArchiveW;
+    std::wstring ZIPPathW;
     FILETIME ZIPArchiveDate;            // archive date (used for the ".." date and during refresh)
     CQuadWord ZIPArchiveSize;           // archive size - used to detect archive changes
 
@@ -550,8 +556,10 @@ public:
     // CPluginInterfaceForFSAbstract::ConvertPathToExternal() is called
     // it returns TRUE if the path fits into the buffer completely, otherwise a truncated path is returned
     BOOL GetGeneralPath(char* buf, int bufSize, BOOL convertFSPathToExternal = FALSE);
+    BOOL GetGeneralPathW(std::wstring& buf, BOOL convertFSPathToExternal = FALSE);
 
     const char* GetPath() { return Path; }
+    const wchar_t* GetPathW() { return PathW.c_str(); }
     BOOL Is(CPanelType type) { return type == PanelType; }
     CPanelType GetPanelType() { return PanelType; }
     BOOL GetMonitorChanges() { return MonitorChanges; }
@@ -560,16 +568,21 @@ public:
     CSalamanderDirectory* GetArchiveDir() { return ArchiveDir; }
     const char* GetZIPArchive() { return ZIPArchive; }
     const char* GetZIPPath() { return ZIPPath; }
+    const wchar_t* GetZIPArchiveW() { return ZIPArchiveW.c_str(); }
+    const wchar_t* GetZIPPathW() { return ZIPPathW.c_str(); }
     FILETIME GetZIPArchiveDate() { return ZIPArchiveDate; }
     BOOL IsSameZIPArchiveSize(const CQuadWord& size) { return ZIPArchiveSize == size; }
     CQuadWord GetZIPArchiveSize() { return ZIPArchiveSize; }
     BOOL GetSuppressAutoRefresh() { return SuppressAutoRefresh; }
 
     void SetPath(const char* path);
+    void SetPathW(const wchar_t* path);
     void SetMonitorChanges(BOOL monitorChanges) { MonitorChanges = monitorChanges; }
     void SetPanelType(CPanelType type) { PanelType = type; }
     void SetZIPPath(const char* path);
+    void SetZIPPathW(const wchar_t* path);
     void SetZIPArchive(const char* archive);
+    void SetZIPArchiveW(const wchar_t* archive);
     void SetArchiveDir(CSalamanderDirectory* dir) { ArchiveDir = dir; }
     void SetZIPArchiveDate(FILETIME& time) { ZIPArchiveDate = time; }
     void SetZIPArchiveSize(const CQuadWord& size) { ZIPArchiveSize = size; }
@@ -773,6 +786,7 @@ public:
 
     CPathBuffer DropPath;  // buffer for the current directory used in a drop operation
     CPathBuffer NextFocusName; // the name that will receive focus on the next refresh
+    std::wstring NextFocusNameW; // exact UTF-16 focus target when ANSI cache is lossy
     BOOL DontClearNextFocusName;  // TRUE = do not clear NextFocusName when the main Salamander window is activated
     BOOL FocusFirstNewItem;       // refresh: should the newly added item be selected? (for system New)
     CTopIndexMem TopIndexMem;     // memory of top index for Execute()
@@ -925,6 +939,7 @@ public:
     // called to inform the panel about changes on 'path'; when 'includingSubdirs' is TRUE,
     // changes may also occur in subdirectories
     void AcceptChangeOnPathNotification(const char* path, BOOL includingSubdirs);
+    void AcceptChangeOnPathNotificationW(const wchar_t* path, BOOL includingSubdirs);
 
     // called to notify the panel about icon overlay changes on 'path' (mainly from Tortoise SVN)
     void IconOverlaysChangedOnPath(const char* path);
@@ -956,6 +971,8 @@ public:
     // it, the path is copied to 'nextFocus' (see SalGetFullName)
     BOOL ParsePath(char* path, int& type, BOOL& isDir, char*& secondPart, const char* errorTitle,
                    char* nextFocus, int* error, int pathBufSize);
+    BOOL ParsePathW(std::wstring& path, int& type, BOOL& isDir, wchar_t*& secondPart,
+                    const wchar_t* errorTitle, std::wstring* nextFocus, int* error);
 
     void Execute(int index); // enter + l_dblclk
     // file from archive: execute (edit==FALSE) or edit (edit + editWithMenuParent != NULL means
@@ -1070,6 +1087,11 @@ public:
                           BOOL refreshListBox = TRUE, BOOL canForce = FALSE, BOOL isRefresh = FALSE,
                           int* failReason = NULL, BOOL shorterPathWarning = TRUE,
                           int tryCloseReason = FSTRYCLOSE_CHANGEPATH);
+    BOOL ChangePathToDiskW(HWND parent, const wchar_t* path, int suggestedTopIndex = -1,
+                           const char* suggestedFocusName = NULL, BOOL* noChange = NULL,
+                           BOOL refreshListBox = TRUE, BOOL canForce = FALSE, BOOL isRefresh = FALSE,
+                           int* failReason = NULL, BOOL shorterPathWarning = TRUE,
+                           int tryCloseReason = FSTRYCLOSE_CHANGEPATH);
     // changes to an archive path; only absolute Windows paths are allowed (archive is UNC or C:\path\archive)
     // if suggestedTopIndex != -1, the top index will be set;
     // if suggestedFocusName != NULL, and present in the new list, it will be focused;
@@ -1089,6 +1111,10 @@ public:
                              const char* suggestedFocusName = NULL, BOOL forceUpdate = FALSE,
                              BOOL* noChange = NULL, BOOL refreshListBox = TRUE, int* failReason = NULL,
                              BOOL isRefresh = FALSE, BOOL canFocusFileName = FALSE, BOOL isHistory = FALSE);
+    BOOL ChangePathToArchiveW(const wchar_t* archive, const wchar_t* archivePath = L"", int suggestedTopIndex = -1,
+                              const char* suggestedFocusName = NULL, BOOL forceUpdate = FALSE,
+                              BOOL* noChange = NULL, BOOL refreshListBox = TRUE, int* failReason = NULL,
+                              BOOL isRefresh = FALSE, BOOL canFocusFileName = FALSE, BOOL isHistory = FALSE);
     // change path to the plug-in FS;
     // if suggestedTopIndex != -1 the top index will be set;
     // if suggestedFocusName != NULL and present in the new list, it will be focused;
@@ -1115,6 +1141,11 @@ public:
                               int mode = 2, BOOL* noChange = NULL, BOOL refreshListBox = TRUE,
                               int* failReason = NULL, BOOL isRefresh = FALSE,
                               BOOL canFocusFileName = FALSE, BOOL convertPathToInternal = FALSE);
+    BOOL ChangePathToPluginFSW(const wchar_t* fsName, const wchar_t* fsUserPart, int suggestedTopIndex = -1,
+                               const char* suggestedFocusName = NULL, BOOL forceUpdate = FALSE,
+                               int mode = 2, BOOL* noChange = NULL, BOOL refreshListBox = TRUE,
+                               int* failReason = NULL, BOOL isRefresh = FALSE,
+                               BOOL canFocusFileName = FALSE, BOOL convertPathToInternal = FALSE);
     // change path to a detached plug-in FS (in MainWindow->DetachedFSList at index 'fsIndex');
     // if suggestedTopIndex != -1, the top index will be set;
     // if suggestedFocusName != NULL and present in the new list, it will be selected;
@@ -1298,7 +1329,7 @@ public:
     void RenameFile(int specialIndex = -1);
     void RenameFileInternal(CFileData* f, const char* formatedFileName, BOOL* mayChange, BOOL* tryAgain);
     void RenameFileInternalW(CFileData* f, const std::wstring& newName, BOOL* mayChange, BOOL* tryAgain);
-    void DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data);
+    void DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targetPathW, CCopyMoveData* data);
 
     // performs deletion using the SHFileOperation API function (only when deleting to the Recycle Bin)
     BOOL DeleteThroughRecycleBin(int* selection, int selCount, CFileData* oneFile);
@@ -1310,7 +1341,8 @@ public:
                          char* mask, int selCount, int* selection,
                          CFileData* oneFile, CAttrsData* attrsData,
                          CChangeCaseData* chCaseData, BOOL onlySize,
-                         CCriteriaData* filterCriteria);
+                         CCriteriaData* filterCriteria,
+                         const wchar_t* targetPathW = NULL);
     BOOL BuildScriptDir(COperations* script, CActionType type, char* sourcePath,
                         BOOL sourcePathSupADS, char* targetPath, CTargetPathState targetPathState,
                         BOOL targetPathSupADS, BOOL targetPathIsFAT32, char* mask, char* dirName,
@@ -1318,16 +1350,18 @@ public:
                         DWORD sourceDirAttr, CChangeCaseData* chCaseData, BOOL firstLevelDir,
                         BOOL onlySize, BOOL fastDirectoryMove, CCriteriaData* filterCriteria,
                         BOOL* canDelUpperDirAfterMove, FILETIME* sourceDirTime,
-                        DWORD srcAndTgtPathsFlags, wchar_t* dirNameW = NULL);
+                        DWORD srcAndTgtPathsFlags, const wchar_t* sourcePathW = NULL,
+                        wchar_t* dirNameW = NULL, const wchar_t* targetPathW = NULL);
     BOOL BuildScriptFile(COperations* script, CActionType type, char* sourcePath,
                          BOOL sourcePathSupADS, char* targetPath, CTargetPathState targetPathState,
                          BOOL targetPathSupADS, BOOL targetPathIsFAT32, char* mask, char* fileName,
                          char* fileDOSName, const CQuadWord& fileSize, CAttrsData* attrsData,
                          char* mapName, DWORD sourceFileAttr, CChangeCaseData* chCaseData,
                          BOOL onlySize, FILETIME* fileLastWriteTime, DWORD srcAndTgtPathsFlags,
-                         wchar_t* fileNameW = NULL, const wchar_t* mapNameW = NULL);
+                         wchar_t* fileNameW = NULL, const wchar_t* sourcePathW = NULL,
+                         const wchar_t* mapNameW = NULL, const wchar_t* targetPathW = NULL);
     BOOL BuildScriptMain2(COperations* script, BOOL copy, char* targetDir,
-                          CCopyMoveData* data);
+                          const wchar_t* targetDirW, CCopyMoveData* data);
 
     virtual LRESULT WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
 

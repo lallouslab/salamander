@@ -16,6 +16,7 @@
 #include "common/IFileSystem.h"
 #include "common/unicode/helpers.h"
 #include "common/widepath.h"
+#include "common/fsutil.h"
 #include "common/IEnvironment.h"
 
 //
@@ -2035,30 +2036,31 @@ void CFilesWindow::CalculateOccupiedZIPSpace(int countSizeMode)
 
 void CFilesWindow::AcceptChangeOnPathNotification(const char* path, BOOL includingSubdirs)
 {
+    AcceptChangeOnPathNotificationW(AnsiToWide(path).c_str(), includingSubdirs);
+}
+
+void CFilesWindow::AcceptChangeOnPathNotificationW(const wchar_t* path, BOOL includingSubdirs)
+{
     CALL_STACK_MESSAGE3("CFilesWindow::AcceptChangeOnPathNotification(%s, %d)",
-                        path, includingSubdirs);
+                        path != NULL ? WideToAnsi(path).c_str() : "<null>", includingSubdirs);
 
     BOOL refresh = FALSE;
     if ((Is(ptDisk) || Is(ptZIPArchive)) && (!AutomaticRefresh || GetNetworkDrive()))
     {
         // test the equality of paths or at least their prefix (we only care about disk paths,
         // FS paths in 'path' are automatically excluded because they can never match GetPath())
-        CPathBuffer path1; // Heap-allocated for long path support
-        CPathBuffer path2; // Heap-allocated for long path support
-        lstrcpyn(path1, path, path1.Size());
-        lstrcpyn(path2, GetPath(), path2.Size()); // for archives this is the path to the archive
-        SalPathRemoveBackslash(path1);
-        SalPathRemoveBackslash(path2);
-        int len1 = (int)strlen(path1);
-        refresh = !includingSubdirs && StrICmp(path1, path2) == 0 ||       // exact match
-                  includingSubdirs && StrNICmp(path1, path2, len1) == 0 && // prefix match
-                      (path2[len1] == 0 || path2[len1] == '\\');
-        if (Is(ptDisk) && !refresh && CutDirectory(path1)) // pointless for archives
+        std::wstring path1 = path != NULL ? path : L"";
+        std::wstring path2 = GetPathW(); // for archives this is the path to the archive
+        SalPathRemoveBackslashW(path1);
+        SalPathRemoveBackslashW(path2);
+        refresh = !includingSubdirs && IsTheSamePathW(path1.c_str(), path2.c_str()) || // exact match
+                  includingSubdirs && PathStartsWithW(path2.c_str(), path1.c_str());
+        if (Is(ptDisk) && !refresh && CutDirectoryW(path1)) // pointless for archives
         {
-            SalPathRemoveBackslash(path1);
+            SalPathRemoveBackslashW(path1);
             // on NTFS the last subdirectory timestamp also changes (unfortunately visible only after entering
             // that subdirectory, but perhaps it will be fixed eventually, so refresh proactively)
-            refresh = StrICmp(path1, path2) == 0;
+            refresh = IsTheSamePathW(path1.c_str(), path2.c_str());
         }
         if (refresh)
         {
@@ -2074,13 +2076,14 @@ void CFilesWindow::AcceptChangeOnPathNotification(const char* path, BOOL includi
         {
             // the EnterPlugin+LeavePlugin section must be exposed up to here (not wrapped inside the interface)
             EnterPlugin();
-            GetPluginFS()->AcceptChangeOnPathNotification(GetPluginFS()->GetPluginFSName(), path, includingSubdirs);
+            std::string pathA = path != NULL ? WideToAnsi(path) : std::string();
+            GetPluginFS()->AcceptChangeOnPathNotification(GetPluginFS()->GetPluginFSName(), pathA.c_str(), includingSubdirs);
             LeavePlugin();
         }
     }
 
     if (Is(ptDisk) && !refresh &&           // only disks have free space (archives do not and FS is handled elsewhere)
-        HasTheSameRootPath(path, GetPath()) // same root -> possible change in free disk space size
+        HasTheSameRootPathW(path, GetPathW()) // same root -> possible change in free disk space size
 
         /* && (!AutomaticRefresh ||  // commented out because notifications do not arrive for subdirectory changes on auto-refreshed paths causing the free space info to remain invalid
        !IsTheSamePath(path, GetPath()))*/

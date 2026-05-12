@@ -16,6 +16,7 @@
 #include "execute.h"
 #include "gui.h"
 #include "darkmode.h"
+#include "common/unicode/helpers.h"
 
 const char* CVIEWERWINDOW_CLASSNAME = "Salamander's Viewer Window";
 
@@ -556,15 +557,18 @@ CViewerWindow::CViewerWindow(const char* fileName, CViewType type, const char* c
     TextEncoding = Sally::Unicode::BomEncoding::LegacyBytes;
     TextContentOffset = 0;
     if (fileName == NULL)
-        FileName.clear(); // error
+        ClearViewedFile(); // error
     else
     {
         CPathBuffer name; // Heap-allocated for long path support
         lstrcpyn(name, fileName, name.Size());
         if (SalGetFullName(name, NULL, NULL, NULL, NULL, name.Size()))
+        {
             FileName = (const char*)name;
+            FileNameW = AnsiToWide(name);
+        }
         else
-            FileName.clear();
+            ClearViewedFile();
     }
     Buffer = (unsigned char*)malloc(VIEW_BUFFER_SIZE);
     Seek = 0;

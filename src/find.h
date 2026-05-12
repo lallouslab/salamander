@@ -5,6 +5,8 @@
 #pragma once
 
 #include "common/widepath.h"
+#include "common/find/FindDialogSeed.h"
+#include "ui/UnicodeNameInputController.h"
 
 // structure for adding messages to the Find Log; sent as the message parameter
 // of WM_USER_ADDLOG; parameters will be copied into the log data (can be deallocated after returning)
@@ -74,6 +76,7 @@ class CMenuBar;
 struct CSearchForData
 {
     CPathBuffer Dir;
+    std::wstring DirW;
     CMaskGroup MasksGroup;
     BOOL IncludeSubDirs;
 
@@ -82,7 +85,13 @@ struct CSearchForData
         Set(dir, masksGroup, includeSubDirs);
     }
 
+    CSearchForData(const char* dir, const wchar_t* dirW, const char* masksGroup, BOOL includeSubDirs)
+    {
+        Set(dir, dirW, masksGroup, includeSubDirs);
+    }
+
     void Set(const char* dir, const char* masksGroup, BOOL includeSubDirs);
+    void Set(const char* dir, const wchar_t* dirW, const char* masksGroup, BOOL includeSubDirs);
     const char* GetText(int i)
     {
         switch (i)
@@ -499,6 +508,8 @@ struct CFoundFilesData
 {
     std::string Name;
     std::string Path;
+    std::wstring NameW;
+    std::wstring PathW;
     CQuadWord Size;
     DWORD Attr;
     FILETIME LastWrite;
@@ -529,11 +540,17 @@ struct CFoundFilesData
     ~CFoundFilesData() = default;
     BOOL Set(const char* path, const char* name, const CQuadWord& size, DWORD attr,
              const FILETIME* lastWrite, BOOL isDir);
+    BOOL Set(const char* path, const char* name, const wchar_t* pathW, const wchar_t* nameW,
+             const CQuadWord& size, DWORD attr, const FILETIME* lastWrite, BOOL isDir);
     // if 'i' refers to Name or Path, returns a pointer to the corresponding variable
     // otherwise fills the buffer 'text' (must be at least 50 characters long) with the appropriate value
     // and returns a pointer to 'text'
     // 'fileNameFormat' determines formatting of names of found items
     char* GetText(int i, char* text, int fileNameFormat);
+    std::wstring GetTextW(int i, int fileNameFormat) const;
+    std::wstring GetNameTextW(int fileNameFormat) const;
+    std::wstring GetFullNameW() const;
+    std::wstring GetFullNameTextW(int fileNameFormat) const;
 };
 
 class CFoundFilesListView : public CWindow
@@ -672,6 +689,24 @@ class CButton;
 class CFindDialog : public CCommonDialog
 {
 protected:
+    // Wide cache for the "Look in" edit field. Authoritative ONLY while
+    // LookInUnicodeInput.IsEnabled() is TRUE. While the Unicode edit control
+    // is active, every write to the wide control mirrors into this cache (see
+    // Transfer ttDataFromWindow, Validate, browse, insert-drives). While the
+    // Unicode control is disabled, the cache must stay empty so downstream
+    // readers fall through to AnsiToWide(Data.LookInText) — the live ANSI
+    // combo is the source of truth in that mode. See InitialLookInSeed for
+    // the constructor-time bootstrap that decides which mode the dialog runs
+    // in, and sally::find::ShouldOverrideEditWithWide for the decision.
+    std::wstring LookInTextW;
+    // Seed captured at construction time from the opening panel's
+    // (GetPath(), GetPathW()) pair. Consumed once by the deferred
+    // WM_USER_FIND_LOOKIN_W_OVERRIDE handler to decide whether to enable the
+    // Unicode edit control and, if so, to plant the initial wide text into
+    // both the control and LookInTextW. Not consulted elsewhere.
+    sally::find::LookInSeed InitialLookInSeed;
+    CUnicodeNameInputController LookInUnicodeInput;
+
     // data needed for laying out the dialog
     BOOL FirstWMSize;
     int VMargin; // space on the left and right between the dialog frame and controls
@@ -713,6 +748,7 @@ protected:
                        //    CFindAdvancedDialog FindAdvanced;
     CFoundFilesListView* FoundFilesListView;
     CPathBuffer FoundFilesDataTextBuffer; // for obtaining text from CFoundFilesData::GetText
+    std::wstring FoundFilesDataTextBufferW; // for obtaining text from CFoundFilesData::GetTextW
     CFindTBHeader* TBHeader;
     BOOL SearchInProgress;
     BOOL CanClose; // the window can be closed (we are not inside a method of this object)
@@ -748,7 +784,7 @@ public:
     CStateOfFindCloseQueryEnum StateOfFindCloseQuery; // main thread asks the Find thread whether the window can close; unsynchronized, used only during shutdown, more than enough...
 
 public:
-    CFindDialog(HWND hCenterAgainst, const char* initPath);
+    CFindDialog(HWND hCenterAgainst, const char* initPath, const wchar_t* initPathW = nullptr);
     ~CFindDialog();
 
     virtual void Validate(CTransferInfo& ti);
@@ -869,7 +905,11 @@ public:
 // externs
 //
 
-BOOL OpenFindDialog(HWND hCenterAgainst, const char* initPath);
+// Open the Find dialog seeded with the panel's path. `initPathW` carries
+// the wide source-of-truth; pass nullptr when only the ANSI mirror is
+// available. The wide pointer lets the dialog render Unicode-only roots
+// (e.g. zz中文) without CP_ACP loss in the visible "Look in" edit field.
+BOOL OpenFindDialog(HWND hCenterAgainst, const char* initPath, const wchar_t* initPathW = nullptr);
 
 extern CFindOptions FindOptions;
 extern CFindIgnore FindIgnore;

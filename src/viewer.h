@@ -125,6 +125,7 @@ public:
     ~CViewerWindow();
 
     void OpenFile(const char* file, const char* caption, BOOL wholeCaption); // does not manage Lock
+    void OpenFileW(const wchar_t* file, const char* caption, BOOL wholeCaption); // does not manage Lock
 
     virtual BOOL Is(int type) { return type == otViewerWindow || CWindow::Is(type); }
     BOOL IsGood() { return Buffer != NULL && ViewerFont != NULL; }
@@ -166,6 +167,8 @@ public:
 
 protected:
     void FatalFileErrorOccured(DWORD repeatCmd = -1); // called when a file error occurs (viewer refresh/clear is required)
+    HANDLE OpenViewedFile(DWORD flags) const;
+    void ClearViewedFile();
 
     void OnVScroll();
 
@@ -329,7 +332,8 @@ protected:
     int SalMessageBoxViewerPaintBlocked(HWND hParent, LPCTSTR lpText, LPCTSTR lpCaption, UINT uType);
 
     unsigned char* Buffer; // buffer with size VIEW_BUFFER_SIZE
-    std::string FileName;  // currently viewed file
+    std::string FileName;   // currently viewed file, ANSI compatibility mirror
+    std::wstring FileNameW; // currently viewed file, exact UTF-16 path when available
     __int64 Seek,          // offset of byte 0 in Buffer within the file
         Loaded,            // number of valid bytes in Buffer
         OriginX,           // first displayed column (in characters)
@@ -464,3 +468,7 @@ BOOL OpenViewer(const char* name, CViewType mode, int left, int top, int width, 
                 UINT showCmd, BOOL returnLock, HANDLE* lock, BOOL* lockOwner,
                 CSalamanderPluginViewerData* viewerData, int enumFileNamesSourceUID,
                 int enumFileNamesLastFileIndex);
+BOOL OpenViewerW(const wchar_t* nameW, const char* nameA, CViewType mode, int left, int top,
+                 int width, int height, UINT showCmd, BOOL returnLock, HANDLE* lock,
+                 BOOL* lockOwner, CSalamanderPluginViewerData* viewerData,
+                 int enumFileNamesSourceUID, int enumFileNamesLastFileIndex);

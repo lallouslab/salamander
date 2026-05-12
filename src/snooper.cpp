@@ -8,6 +8,7 @@
 #include "fileswnd.h"
 #include "mainwnd.h"
 #include "snooper.h"
+#include "common/unicode/helpers.h"
 
 CWindowArray WindowArray(10, 5);
 CObjectArray ObjectArray(10, 5);
@@ -564,6 +565,54 @@ void TerminateThread()
     HANDLES(DeleteCriticalSection(&SafeFindCloseCS));
 }
 
+void AddDirectoryW(CFilesWindow* win, const wchar_t* pathW, BOOL registerDevNotification)
+{
+    std::string tracePath = WideToAnsi(pathW != nullptr ? pathW : L"");
+    CALL_STACK_MESSAGE3("AddDirectoryW(, %s, %d)", tracePath.c_str(), registerDevNotification);
+    SetEvent(WantDataEvent);
+    WaitForSingleObject(DataUsageMutex, INFINITE);
+    SetEvent(WantDataEvent);
+
+    // Mirror the ANSI variant's space/dot guard, but in wide form, so paths
+    // like "C:\\foo \\" survive into FindFirstChangeNotificationW intact.
+    std::wstring pathCopy = MakeCopyWithBackslashIfNeededW(pathW != nullptr ? pathW : L"");
+    HANDLE h = HANDLES_Q(FindFirstChangeNotificationW(pathCopy.c_str(), FALSE,
+                                                      FILE_NOTIFY_CHANGE_FILE_NAME |
+                                                          FILE_NOTIFY_CHANGE_DIR_NAME |
+                                                          FILE_NOTIFY_CHANGE_ATTRIBUTES |
+                                                          FILE_NOTIFY_CHANGE_SIZE |
+                                                          FILE_NOTIFY_CHANGE_LAST_WRITE));
+    if (h != INVALID_HANDLE_VALUE)
+    {
+        win->SetAutomaticRefresh(TRUE);
+        WindowArray.Add(win);
+        ObjectArray.Add(h);
+
+        if (registerDevNotification)
+        {
+            DEV_BROADCAST_HANDLE dbh;
+            memset(&dbh, 0, sizeof(dbh));
+            dbh.dbch_size = sizeof(dbh);
+            dbh.dbch_devicetype = DBT_DEVTYP_HANDLE;
+            dbh.dbch_handle = h;
+            if (win->DeviceNotification != NULL)
+            {
+                TRACE_E("AddDirectoryW(): unexpected situation: win->DeviceNotification != NULL");
+                UnregisterDeviceNotification(win->DeviceNotification);
+            }
+            win->DeviceNotification = RegisterDeviceNotificationW(win->HWindow, &dbh, DEVICE_NOTIFY_WINDOW_HANDLE);
+        }
+    }
+    else
+    {
+        win->SetAutomaticRefresh(FALSE);
+        TRACE_W("Unable to receive change notifications for directory '" << tracePath.c_str() << "' (auto-refresh will not work).");
+    }
+
+    ReleaseMutex(DataUsageMutex);
+    WaitForSingleObject(ContinueEvent, INFINITE);
+}
+
 void AddDirectory(CFilesWindow* win, const char* path, BOOL registerDevNotification)
 {
     CALL_STACK_MESSAGE3("AddDirectory(, %s, %d)", path, registerDevNotification);
@@ -575,7 +624,7 @@ void AddDirectory(CFilesWindow* win, const char* path, BOOL registerDevNotificat
     // trims spaces/dots and thus works with a different path
     CPathBuffer pathCopy; // Heap-allocated for long path support
     MakeCopyWithBackslashIfNeeded(path, pathCopy);
-    HANDLE h = HANDLES_Q(FindFirstChangeNotification(path, FALSE,
+    HANDLE h = HANDLES_Q(FindFirstChangeNotification(pathCopy, FALSE,
                                                      FILE_NOTIFY_CHANGE_FILE_NAME |
                                                          FILE_NOTIFY_CHANGE_DIR_NAME |
                                                          FILE_NOTIFY_CHANGE_ATTRIBUTES |
@@ -683,6 +732,95 @@ DWORD WINAPI ThreadFindCloseChangeNotification(void* param)
     return ThreadFindCloseChangeNotificationEH(param);
 }
 
+void ChangeDirectoryW(CFilesWindow* win, const wchar_t* newPathW, BOOL registerDevNotification)
+{
+    std::string tracePath = WideToAnsi(newPathW != nullptr ? newPathW : L"");
+    CALL_STACK_MESSAGE3("ChangeDirectoryW(, %s, %d)", tracePath.c_str(), registerDevNotification);
+    SetEvent(WantDataEvent);
+    WaitForSingleObject(DataUsageMutex, INFINITE);
+    SetEvent(WantDataEvent);
+    BOOL registerDevNot = FALSE;
+    HANDLE registerDevNotHandle = NULL;
+    if (win->DeviceNotification != NULL)
+    {
+        UnregisterDeviceNotification(win->DeviceNotification);
+        win->DeviceNotification = NULL;
+    }
+
+    std::wstring newPathCopy = MakeCopyWithBackslashIfNeededW(newPathW != nullptr ? newPathW : L"");
+
+    int i;
+    for (i = 0; i < WindowArray.Count; i++)
+        if (win == WindowArray[i])
+        {
+            HANDLES(EnterCriticalSection(&SafeFindCloseCS));
+            SafeFindCloseCNArr.Add(ObjectArray[i]);
+            if (!SafeFindCloseCNArr.IsGood())
+                SafeFindCloseCNArr.ResetState();
+            HANDLES(LeaveCriticalSection(&SafeFindCloseCS));
+            ResetEvent(SafeFindCloseFinished);
+            SetEvent(SafeFindCloseStart);
+            WaitForSingleObject(SafeFindCloseFinished, 200);
+
+            ObjectArray[i] = HANDLES_Q(FindFirstChangeNotificationW(newPathCopy.c_str(), FALSE,
+                                                                    FILE_NOTIFY_CHANGE_FILE_NAME |
+                                                                        FILE_NOTIFY_CHANGE_DIR_NAME |
+                                                                        FILE_NOTIFY_CHANGE_ATTRIBUTES |
+                                                                        FILE_NOTIFY_CHANGE_SIZE |
+                                                                        FILE_NOTIFY_CHANGE_LAST_WRITE));
+            if ((HANDLE)ObjectArray[i] == INVALID_HANDLE_VALUE)
+            {
+                win->SetAutomaticRefresh(FALSE);
+                ObjectArray.Delete(i);
+                WindowArray.Delete(i);
+                TRACE_W("Unable to receive change notifications for directory '" << tracePath.c_str() << "' (auto-refresh will not work).");
+            }
+            else if (registerDevNotification)
+            {
+                registerDevNot = TRUE;
+                registerDevNotHandle = (HANDLE)ObjectArray[i];
+            }
+            break;
+        }
+    if (i == WindowArray.Count)
+    {
+        HANDLE h = HANDLES_Q(FindFirstChangeNotificationW(newPathCopy.c_str(), FALSE,
+                                                          FILE_NOTIFY_CHANGE_FILE_NAME |
+                                                              FILE_NOTIFY_CHANGE_DIR_NAME |
+                                                              FILE_NOTIFY_CHANGE_ATTRIBUTES |
+                                                              FILE_NOTIFY_CHANGE_SIZE |
+                                                              FILE_NOTIFY_CHANGE_LAST_WRITE));
+        if (h != INVALID_HANDLE_VALUE)
+        {
+            win->SetAutomaticRefresh(TRUE);
+            WindowArray.Add(win);
+            ObjectArray.Add(h);
+            if (registerDevNotification)
+            {
+                registerDevNot = TRUE;
+                registerDevNotHandle = h;
+            }
+        }
+        else
+        {
+            win->SetAutomaticRefresh(FALSE);
+            TRACE_W("Unable to receive change notifications for directory '" << tracePath.c_str() << "' (auto-refresh will not work).");
+        }
+    }
+    if (registerDevNot)
+    {
+        DEV_BROADCAST_HANDLE dbh;
+        memset(&dbh, 0, sizeof(dbh));
+        dbh.dbch_size = sizeof(dbh);
+        dbh.dbch_devicetype = DBT_DEVTYP_HANDLE;
+        dbh.dbch_handle = registerDevNotHandle;
+        win->DeviceNotification = RegisterDeviceNotificationW(win->HWindow, &dbh, DEVICE_NOTIFY_WINDOW_HANDLE);
+    }
+
+    ReleaseMutex(DataUsageMutex);
+    WaitForSingleObject(ContinueEvent, INFINITE);
+}
+
 void ChangeDirectory(CFilesWindow* win, const char* newPath, BOOL registerDevNotification)
 {
     CALL_STACK_MESSAGE3("ChangeDirectory(, %s, %d)", newPath, registerDevNotification);
@@ -717,7 +855,7 @@ void ChangeDirectory(CFilesWindow* win, const char* newPath, BOOL registerDevNot
             // trims spaces/dots and works with a different path
             CPathBuffer newPathCopy; // Heap-allocated for long path support
             MakeCopyWithBackslashIfNeeded(newPath, newPathCopy);
-            ObjectArray[i] = HANDLES_Q(FindFirstChangeNotification(newPath, FALSE,
+            ObjectArray[i] = HANDLES_Q(FindFirstChangeNotification(newPathCopy, FALSE,
                                                                    FILE_NOTIFY_CHANGE_FILE_NAME |
                                                                        FILE_NOTIFY_CHANGE_DIR_NAME |
                                                                        FILE_NOTIFY_CHANGE_ATTRIBUTES |
@@ -747,7 +885,7 @@ void ChangeDirectory(CFilesWindow* win, const char* newPath, BOOL registerDevNot
         // trims spaces/dots and works with a different path
         CPathBuffer newPathCopy; // Heap-allocated for long path support
         MakeCopyWithBackslashIfNeeded(newPath, newPathCopy);
-        HANDLE h = HANDLES_Q(FindFirstChangeNotification(newPath, FALSE,
+        HANDLE h = HANDLES_Q(FindFirstChangeNotification(newPathCopy, FALSE,
                                                          FILE_NOTIFY_CHANGE_FILE_NAME |
                                                              FILE_NOTIFY_CHANGE_DIR_NAME |
                                                              FILE_NOTIFY_CHANGE_ATTRIBUTES |

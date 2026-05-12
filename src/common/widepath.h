@@ -420,6 +420,15 @@ HANDLE SalLPCreateFile(
     DWORD dwFlagsAndAttributes,
     HANDLE hTemplateFile);
 
+HANDLE SalLPCreateFileWide(
+    const wchar_t* fileName,
+    DWORD dwDesiredAccess,
+    DWORD dwShareMode,
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+    DWORD dwCreationDisposition,
+    DWORD dwFlagsAndAttributes,
+    HANDLE hTemplateFile);
+
 // GetFileAttributes wrapper that supports long paths
 DWORD SalLPGetFileAttributes(const char* fileName);
 
@@ -444,6 +453,8 @@ BOOL SalLPCopyFile(const char* existingFileName, const char* newFileName, BOOL f
 // FindFirstFile wrapper that supports long paths
 // Note: Returns wide find data; caller must convert if needed
 HANDLE SalLPFindFirstFile(const char* fileName, WIN32_FIND_DATAW* findData);
+
+HANDLE SalLPFindFirstFileWide(const wchar_t* fileName, WIN32_FIND_DATAW* findData);
 
 // FindNextFile wrapper that supports long paths
 // Note: Returns wide find data; caller must convert if needed
@@ -472,8 +483,22 @@ BOOL SalLPFindNextFileA(HANDLE hFindFile, WIN32_FIND_DATAA* findData);
 #define SalCreateFileH(fileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile) \
     SalLPCreateFileTracked(fileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile, __FILE__, __LINE__)
 
+#define SalCreateFileWideH(fileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile) \
+    SalLPCreateFileTrackedWide(fileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile, __FILE__, __LINE__)
+
 HANDLE SalLPCreateFileTracked(
     const char* fileName,
+    DWORD dwDesiredAccess,
+    DWORD dwShareMode,
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+    DWORD dwCreationDisposition,
+    DWORD dwFlagsAndAttributes,
+    HANDLE hTemplateFile,
+    const char* srcFile,
+    int srcLine);
+
+HANDLE SalLPCreateFileTrackedWide(
+    const wchar_t* fileName,
     DWORD dwDesiredAccess,
     DWORD dwShareMode,
     LPSECURITY_ATTRIBUTES lpSecurityAttributes,
@@ -496,8 +521,16 @@ HANDLE SalLPFindFirstFileTracked(
 // FindFirstFile (wide data) with handle tracking - use instead of HANDLES_Q(FindFirstFileW(...))
 #define SalFindFirstFileHW(fileName, findData)     SalLPFindFirstFileTrackedW(fileName, findData, __FILE__, __LINE__)
 
+#define SalFindFirstFileWideH(fileName, findData)  SalLPFindFirstFileTrackedWide(fileName, findData, __FILE__, __LINE__)
+
 HANDLE SalLPFindFirstFileTrackedW(
     const char* fileName,
+    WIN32_FIND_DATAW* findData,
+    const char* srcFile,
+    int srcLine);
+
+HANDLE SalLPFindFirstFileTrackedWide(
+    const wchar_t* fileName,
     WIN32_FIND_DATAW* findData,
     const char* srcFile,
     int srcLine);
@@ -506,7 +539,9 @@ HANDLE SalLPFindFirstFileTrackedW(
 
 // In release builds, just use the regular wrapper
 #define SalCreateFileH SalLPCreateFile
+#define SalCreateFileWideH SalLPCreateFileWide
 #define SalFindFirstFileH SalLPFindFirstFileA
 #define SalFindFirstFileHW SalLPFindFirstFile
+#define SalFindFirstFileWideH SalLPFindFirstFileWide
 
 #endif // HANDLES_ENABLE

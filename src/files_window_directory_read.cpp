@@ -16,10 +16,12 @@
 #include "drivelst.h"
 #include "snooper.h"
 #include "zip.h"
+#include "common/IFileSystem.h"
 #include "shiconov.h"
 #include "common/widepath.h"
 #include "ui/IPrompter.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 #include "common/IEnvironment.h"
 
 //
@@ -35,6 +37,11 @@ int DeltaForTotalCount(int total)
     else if (delta > 10000)
         delta = 10000;
     return delta;
+}
+
+static IFileSystem* GetPanelFileSystem()
+{
+    return gFileSystem != NULL ? gFileSystem : GetWin32FileSystem();
 }
 
 #ifndef _WIN64
@@ -209,6 +216,7 @@ BOOL CFilesWindow::ReadDirectory(HWND parent, BOOL isRefresh)
             *st++ = '\\';
         strcpy(st, "*");
         char* fileNameEnd = st;
+        std::wstring fileNameW = sally::unicode::BuildPanelChildPathW(GetPathW(), NULL, L"*");
         //--- preparing for reading icons
         if (UseSystemIcons)
         {
@@ -306,7 +314,8 @@ BOOL CFilesWindow::ReadDirectory(HWND parent, BOOL isRefresh)
         CPathBuffer ansiFileName; // Heap-allocated for long path support; ANSI conversion buffer for cFileName (also used as scratch)
         BOOL nameConversionLossy = FALSE; // TRUE if wide->ANSI conversion lost characters
         HANDLE search;
-        search = SalFindFirstFileHW(fileName, &fileDataW);
+        IFileSystem* fileSystem = GetPanelFileSystem();
+        search = SalFindFirstFileWideH(fileNameW.c_str(), &fileDataW);
         if (search == INVALID_HANDLE_VALUE)
         {
             DWORD err = GetLastError();
@@ -341,7 +350,7 @@ BOOL CFilesWindow::ReadDirectory(HWND parent, BOOL isRefresh)
                 BOOL showErr = TRUE;
                 if (err == ERROR_INVALID_PARAMETER || err == ERROR_NOT_READY)
                 {
-                    DWORD attrs = GetFileAttributesW(AnsiToWide(GetPath()).c_str());
+                    DWORD attrs = fileSystem->GetFileAttributes(GetPathW());
                     if (attrs != INVALID_FILE_ATTRIBUTES &&
                         (attrs & FILE_ATTRIBUTE_DIRECTORY) &&
                         (attrs & FILE_ATTRIBUTE_REPARSE_POINT))
@@ -551,7 +560,25 @@ BOOL CFilesWindow::ReadDirectory(HWND parent, BOOL isRefresh)
                 file.NameLen = len;
 
                 //--- wide name (for Unicode filenames not representable in ANSI)
-                if (nameConversionLossy)
+                // Allocate NameW whenever the original wide name contains any
+                // non-ASCII codepoint. The CP_ACP lossy detector above is a
+                // necessary but not sufficient trigger: under e.g. CP_ACP=949
+                // (Korean) a Korean filename round-trips and detection says
+                // "not lossy", yet downstream consumers that later AnsiToWide()
+                // through a possibly-different CP_ACP still need the original
+                // wide form. Strict superset of prior behavior (lossy rows
+                // still get NameW); only added cost is one DupStr per non-ASCII
+                // row that previously had NameW=NULL.
+                BOOL hasNonAscii = FALSE;
+                for (const wchar_t* wp = fileDataW.cFileName; *wp; ++wp)
+                {
+                    if ((unsigned)*wp > 0x7f)
+                    {
+                        hasNonAscii = TRUE;
+                        break;
+                    }
+                }
+                if (nameConversionLossy || hasNonAscii)
                     file.NameW = DupStr(fileDataW.cFileName);
                 else
                     file.NameW = NULL;  // Reset from previous iteration
@@ -911,8 +938,7 @@ BOOL CFilesWindow::ReadDirectory(HWND parent, BOOL isRefresh)
                 RefreshListBox(0, -1, -1, FALSE, FALSE);
 
                 // TODO: Use wide format string when available
-                std::wstring pathW = AnsiToWide(GetPath());
-                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), (pathW + L": " + GetErrorTextW(err)).c_str());
+                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), (std::wstring(GetPathW()) + L": " + GetErrorTextW(err)).c_str());
             }
         }
 
@@ -920,8 +946,9 @@ BOOL CFilesWindow::ReadDirectory(HWND parent, BOOL isRefresh)
         {
             upDir = FALSE;
             *(fileNameEnd - 1) = 0; // it's not logical, but times ".." are from current directory
+            std::wstring currentPathW = GetPathW();
             if (!UNCRootUpDir)
-                search = SalFindFirstFileHW(fileName, &fileDataW);
+                search = SalFindFirstFileWideH(currentPathW.c_str(), &fileDataW);
             else
                 search = INVALID_HANDLE_VALUE;
             if (search == INVALID_HANDLE_VALUE)

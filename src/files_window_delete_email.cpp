@@ -17,6 +17,7 @@
 #include "common/fsutil.h"
 #include "common/IFileSystem.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 #include "common/widepath.h"
 #include "common/IEnvironment.h"
 
@@ -268,9 +269,12 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
         //---  build the target path for copy/move
         CPathBuffer path; // +200 is a reserve (Windows can create paths longer than MAX_PATH)
         target->GetGeneralPath(path, path.Size());
+        std::wstring pathW = AnsiToWide(path);
         if (target->Is(ptDisk))
         {
             SalPathAppend(path, "*.*", path.Size());
+            pathW = target->GetPathW();
+            SalPathAppendW(pathW, L"*.*");
         }
         else
         {
@@ -492,17 +496,19 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                                                (type == atCopy) ? LoadStr(IDS_COPY) : LoadStr(IDS_MOVE), &str,
                                                (type == atCopy) ? IDD_COPYDIALOG : IDD_MOVEDIALOG,
                                                Configuration.CopyHistory, COPY_HISTORY_SIZE,
-                                               &criteria, havePermissions, supportsADS);
-                // Note: SetUnicodePath is only needed when the path contains Unicode
-                // characters that cannot be represented in ANSI (e.g., from CFileData::NameW).
-                // Do NOT call it for normal ANSI paths — it creates an overlay edit control
-                // that breaks combobox focus and dropdown behavior.
+                                               &criteria, havePermissions, supportsADS,
+                                               Configuration.CopyHistoryW, COPY_HISTORY_SIZE);
+                if (pathW != AnsiToWide(path))
+                    copyMoveDlg.SetUnicodePath(pathW);
                 res = (int)copyMoveDlg.Execute();
                 if (res == IDOK && copyMoveDlg.IsUnicodeMode())
                 {
-                    std::string ansiPath = WideToAnsi(copyMoveDlg.GetUnicodeResult());
+                    pathW = copyMoveDlg.GetUnicodeResult();
+                    std::string ansiPath = WideToAnsi(pathW);
                     lstrcpyn(path, ansiPath.c_str(), path.Size());
                 }
+                else if (res == IDOK)
+                    pathW = AnsiToWide(path);
                 if (!havePermissions)
                     criteria.CopySecurity = FALSE;
                 if (res != IDOK)
@@ -526,10 +532,36 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                 int pathType;
                 BOOL pathIsDir;
                 char* secondPart;
+                std::wstring parsedPathW;
+                wchar_t* secondPartW = NULL;
+                std::wstring nextFocusW;
                 CPathBuffer textBuf;
-                if (ParsePath(path, pathType, pathIsDir, secondPart,
-                              type == atCopy ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
-                              count <= 1 ? nextFocus.Get() : NULL, NULL, path.Size()))
+                BOOL useWideTargetPath = copyMoveDlg.IsUnicodeMode() && target->Is(ptDisk);
+                BOOL parsedOk = FALSE;
+                if (useWideTargetPath)
+                {
+                    parsedPathW = pathW;
+                    for (size_t slash = 0; slash < parsedPathW.length(); ++slash)
+                        if (parsedPathW[slash] == L'/')
+                            parsedPathW[slash] = L'\\';
+                    parsedOk = ParsePathW(parsedPathW, pathType, pathIsDir, secondPartW,
+                                          type == atCopy ? LoadStrW(IDS_ERRORCOPY) : LoadStrW(IDS_ERRORMOVE),
+                                          count <= 1 ? &nextFocusW : NULL, NULL);
+                    if (parsedOk)
+                    {
+                        std::string ansiPath = WideToAnsi(parsedPathW);
+                        lstrcpyn(path, ansiPath.c_str(), path.Size());
+                        if (!nextFocusW.empty())
+                            lstrcpyn(nextFocus, WideToAnsi(nextFocusW).c_str(), nextFocus.Size());
+                    }
+                }
+                else
+                {
+                    parsedOk = ParsePath(path, pathType, pathIsDir, secondPart,
+                                         type == atCopy ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
+                                         count <= 1 ? nextFocus.Get() : NULL, NULL, path.Size());
+                }
+                if (parsedOk)
                 {
                     // use 'if' instead of a 'switch' to ensure that 'break' and 'continue' work correctly
                     if (pathType == PATH_TYPE_WINDOWS) // Windows path (drive + UNC)
@@ -545,14 +577,115 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                         }
 
                         CFileData* dir = (count == 0) ? f : ((indexes[0] < Dirs->Count) ? &Dirs->At(indexes[0]) : &Files->At(indexes[0] - Dirs->Count));
+                        BOOL splitOk = FALSE;
+                        if (useWideTargetPath)
+                        {
+                            // SalSplitWindowsPathW / SalSplitGeneralPathW mutate
+                            // the buffer assuming SAL_MAX_LONG_PATH writable
+                            // capacity (they SalPathAddBackslashW past wcslen,
+                            // wcscpy "*.*" at wcslen+1, memmove separators in
+                            // and out). std::wstring::data() only guarantees
+                            // size()+1 writable — give the splitter a dedicated
+                            // wide buffer instead of letting it scribble past
+                            // parsedPathW's allocation.
+                            std::vector<wchar_t> splitBuf(SAL_MAX_LONG_PATH, 0);
+                            lstrcpynW(splitBuf.data(), parsedPathW.c_str(), (int)splitBuf.size());
+                            wchar_t* secondPartInSplitBuf = splitBuf.data() +
+                                (secondPartW != NULL ? (secondPartW - parsedPathW.data()) : 0);
+                            wchar_t* maskW = NULL;
+                            splitOk = SalSplitWindowsPathW(HWindow, LoadStrW(type == atCopy ? IDS_COPY : IDS_MOVE),
+                                                           LoadStrW(type == atCopy ? IDS_ERRORCOPY : IDS_ERRORMOVE),
+                                                           count, splitBuf.data(), secondPartInSplitBuf, pathIsDir, backslashAtEnd || mustBePath,
+                                                           dir->NameW != NULL ? dir->NameW : AnsiToWide(dir->Name).c_str(), GetPathW(), maskW);
+                            if (splitOk)
+                            {
+                                // The splitter inserts an internal NUL at the
+                                // path/mask separator. assign(const wchar_t*)
+                                // stops at that NUL, so parsedPathW captures
+                                // just the path portion.
+                                parsedPathW.assign(splitBuf.data());
+                                std::string ansiPath = WideToAnsi(parsedPathW);
+                                lstrcpyn(path, ansiPath.c_str(), path.Size());
 
-                        if (SalSplitWindowsPath(HWindow, LoadStr(type == atCopy ? IDS_COPY : IDS_MOVE),
-                                                LoadStr(type == atCopy ? IDS_ERRORCOPY : IDS_ERRORMOVE),
-                                                count, path, secondPart, pathIsDir, backslashAtEnd || mustBePath,
-                                                dir->Name, GetPath(), mask))
+                                // Convert the wide mask (if present) into the
+                                // ANSI path buffer, placed just past the null
+                                // terminator lstrcpyn wrote — same layout the
+                                // legacy ANSI splitter would have produced.
+                                // Without this re-conversion, `mask` would
+                                // point at stale pre-splitter bytes in the
+                                // path buffer; that worked accidentally for
+                                // CP1252 with '?' substitution but corrupts
+                                // the mask under DBCS code pages or when the
+                                // splitter rewrites the mask (e.g. "*.*"
+                                // synthesized for a directory-only target).
+                                const int pathLen = (int)strlen(path);
+                                if (maskW != NULL)
+                                {
+                                    std::string maskA = WideToAnsi(maskW);
+                                    const int maskBytesWithNul = (int)maskA.length() + 1;
+                                    if (pathLen + 1 + maskBytesWithNul <= path.Size())
+                                    {
+                                        memcpy(path + pathLen + 1, maskA.c_str(),
+                                               (size_t)maskBytesWithNul);
+                                        mask = path + pathLen + 1;
+                                    }
+                                    else
+                                    {
+                                        mask = NULL;
+                                    }
+                                }
+                                else
+                                {
+                                    mask = NULL;
+                                }
+
+                                // secondPart points into the freshly written
+                                // ANSI buffer; compute its byte offset from
+                                // the splitter's wide result. For ASCII paths
+                                // the wide-to-ANSI mapping is identity, so
+                                // the offset survives directly. For mixed
+                                // CJK content under CP_ACP=1252, each lossy
+                                // wide char maps to one '?' byte, also 1-to-1.
+                                // Under DBCS code pages this can drift; treat
+                                // it as a separate known limitation tracked
+                                // alongside the larger Find/dropdown wide
+                                // propagation work in kb/unicode/TODO.md.
+                                if (secondPartInSplitBuf <= splitBuf.data() + wcslen(splitBuf.data()))
+                                    secondPart = path + (secondPartInSplitBuf - splitBuf.data());
+                                else
+                                {
+                                    // Boundary fell past the path portion's
+                                    // NUL → secondPart was the mask. Point
+                                    // it at the mask we just wrote into path.
+                                    secondPart = (mask != NULL) ? mask : (path + pathLen);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            splitOk = SalSplitWindowsPath(HWindow, LoadStr(type == atCopy ? IDS_COPY : IDS_MOVE),
+                                                          LoadStr(type == atCopy ? IDS_ERRORCOPY : IDS_ERRORMOVE),
+                                                          count, path, secondPart, pathIsDir, backslashAtEnd || mustBePath,
+                                                          dir->Name, GetPath(), mask);
+                        }
+                        if (splitOk)
                         {
                             if (nextFocus[0] != 0 && secondPart[0] == 0)
                                 copyToExistingDir = TRUE;
+                            // After SalSplitWindowsPath{,W} truncates 'path' at the
+                            // mask separator, refresh the wide cache so callers that
+                            // consume auxTargetPathW downstream do not see a stale
+                            // pathW that still contains the mask (e.g. "*.*"). Wide
+                            // branch already has the truncated form in parsedPathW;
+                            // ANSI branch must re-derive from the freshly truncated
+                            // ANSI path. Without this, BuildScriptFile composes
+                            // targetNameW = <pathW-with-mask> + leaf, producing paths
+                            // like "C:\Foo\*.*\file.txt" that fail CreateFileW with
+                            // ERROR_INVALID_NAME (123).
+                            if (useWideTargetPath)
+                                pathW = parsedPathW;
+                            else
+                                pathW = AnsiToWide(path);
                             break; // exit the Copy/Move loop and perform the operation
                         }
                         else
@@ -1052,9 +1185,16 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                     char* auxTargetPath = NULL;
                     if (type == atCopy || type == atMove)
                         auxTargetPath = path;
+                    const wchar_t* auxTargetPathW = NULL;
+                    if ((type == atCopy || type == atMove) && !pathW.empty())
+                        auxTargetPathW = pathW.c_str();
                     BOOL res2 = BuildScriptMain(script, type, auxTargetPath, mask, count, indexes.get(),
                                                 f, NULL, &changeCaseData, countSizeMode != 0,
-                                                criteriaPtr);
+                                                criteriaPtr, auxTargetPathW);
+                    // Repair only auto-widened source roots that still came from the ANSI
+                    // panel cache. Operations with explicit PathW+NameW are left intact.
+                    if (res2 && Is(ptDisk) && sally::unicode::HasWidePathW(GetPathW()))
+                        script->ReanchorWideSourcePaths(GetPath(), GetPathW());
                     // if there's nothing to do, don't show the progress dialog
                     BOOL emptyScript = script->Count == 0 && type != atCountSize;
 
@@ -1120,11 +1260,15 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                             {
                                 // change in the target directory and its subdirectories
                                 script->SetWorkPath1(path, TRUE);
+                                if (!pathW.empty())
+                                    script->SetWorkPath1W(pathW.c_str(), TRUE);
                             }
                             if (type == atMove)
                             {
                                 // change in the target directory and its subdirectories
                                 script->SetWorkPath2(path, TRUE);
+                                if (!pathW.empty())
+                                    script->SetWorkPath2W(pathW.c_str(), TRUE);
                             }
                         }
 
@@ -1469,13 +1613,19 @@ void CFilesWindow::ChangePathToOtherPanelPath()
 
     if (panel->Is(ptDisk))
     {
-        ChangePathToDisk(HWindow, panel->GetPath());
+        if (sally::unicode::HasWidePathW(panel->GetPathW()))
+            ChangePathToDiskW(HWindow, panel->GetPathW());
+        else
+            ChangePathToDisk(HWindow, panel->GetPath());
     }
     else
     {
         if (panel->Is(ptZIPArchive))
         {
-            ChangePathToArchive(panel->GetZIPArchive(), panel->GetZIPPath());
+            if (sally::unicode::HasWidePathW(panel->GetZIPArchiveW()))
+                ChangePathToArchiveW(panel->GetZIPArchiveW(), panel->GetZIPPathW());
+            else
+                ChangePathToArchive(panel->GetZIPArchive(), panel->GetZIPPath());
         }
         else
         {

@@ -58,7 +58,7 @@ SalFileInfo GetFileInfoW(const wchar_t* fullPath)
         info.FileName = findData.cFileName;
         if (findData.cAlternateFileName[0] != L'\0')
             info.AlternateName = findData.cAlternateFileName;
-        FindClose(hFind);
+        HANDLES(FindClose(hFind));
     }
     else
     {

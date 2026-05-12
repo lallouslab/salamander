@@ -422,6 +422,8 @@ CConfiguration::CConfiguration()
         SelectHistory[i] = NULL;
     for (i = 0; i < COPY_HISTORY_SIZE; i++)
         CopyHistory[i] = NULL;
+    for (i = 0; i < COPY_HISTORY_SIZE; i++)
+        CopyHistoryW[i] = NULL;
     for (i = 0; i < EDIT_HISTORY_SIZE; i++)
         EditHistory[i] = NULL;
     for (i = 0; i < CHANGEDIR_HISTORY_SIZE; i++)
@@ -434,6 +436,8 @@ CConfiguration::CConfiguration()
         QuickRenameHistory[i] = NULL;
     for (i = 0; i < EDITNEW_HISTORY_SIZE; i++)
         EditNewHistory[i] = NULL;
+    for (i = 0; i < CREATEDIR_HISTORY_SIZE; i++)
+        CreateDirHistoryW[i] = NULL;
     for (i = 0; i < QUICKRENAME_HISTORY_SIZE; i++)
         QuickRenameHistoryW[i] = NULL;
     for (i = 0; i < EDITNEW_HISTORY_SIZE; i++)
@@ -587,6 +591,14 @@ void CConfiguration::ClearHistory()
             CopyHistory[i] = NULL;
         }
     }
+    for (i = 0; i < COPY_HISTORY_SIZE; i++)
+    {
+        if (CopyHistoryW[i] != NULL)
+        {
+            free(CopyHistoryW[i]);
+            CopyHistoryW[i] = NULL;
+        }
+    }
 
     for (i = 0; i < EDIT_HISTORY_SIZE; i++)
     {
@@ -639,6 +651,15 @@ void CConfiguration::ClearHistory()
         {
             free(EditNewHistory[i]);
             EditNewHistory[i] = NULL;
+        }
+    }
+
+    for (i = 0; i < CREATEDIR_HISTORY_SIZE; i++)
+    {
+        if (CreateDirHistoryW[i] != NULL)
+        {
+            free(CreateDirHistoryW[i]);
+            CreateDirHistoryW[i] = NULL;
         }
     }
 

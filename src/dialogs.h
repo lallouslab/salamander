@@ -94,6 +94,8 @@ protected:
     int PathBufSize;
     char** History;
     int HistoryCount;
+    wchar_t** HistoryW;
+    int HistoryWCount;
     CCriteriaData* CriteriaInOut; // used to transfer data in and out of the dialog (on OK)
     CCriteriaData* Criteria;      // allocated because static declaration would require juggling headers
     BOOL HavePermissions;
@@ -108,9 +110,10 @@ protected:
     CButton* MoreButton;
 
     // Unicode support for filenames that cannot be represented in ANSI
+    BOOL UseUnicodeInput;
     std::wstring PathW;         // Unicode input path (set via SetUnicodePath)
     std::wstring ResultW;       // Unicode result (populated on OK)
-    HWND HUnicodeEdit;          // Overlay Unicode edit control (when PathW is set)
+    CUnicodeNameInputController UnicodeInput;
 
 public:
     // 'history' determines whether the dialog will contain a combobox (TRUE) or an editline (FALSE)
@@ -118,12 +121,13 @@ public:
     CCopyMoveMoreDialog(HWND parent, char* path, int pathBufSize, char* title,
                         CTruncatedString* subject, DWORD helpID,
                         char* history[], int historyCount, CCriteriaData* criteriaInOut,
-                        BOOL havePermissions, BOOL supportsADS);
+                        BOOL havePermissions, BOOL supportsADS,
+                        wchar_t* historyW[] = NULL, int historyWCount = 0);
     ~CCopyMoveMoreDialog();
 
     void SetUnicodePath(const std::wstring& pathW);
     const std::wstring& GetUnicodeResult() const { return ResultW; }
-    BOOL IsUnicodeMode() const { return !PathW.empty(); }
+    BOOL IsUnicodeMode() const { return UseUnicodeInput; }
 
     virtual void Validate(CTransferInfo& ti);
     virtual void Transfer(CTransferInfo& ti);
@@ -394,6 +398,8 @@ protected:
     char PrepositionCache[100];
     CPathBuffer SourceCache;
     CPathBuffer TargetCache;
+    std::wstring SourceCacheW;
+    std::wstring TargetCacheW;
 
     // values are stored and drawn only when the timer fires
     BOOL OperationProgressCacheIsDirty;
@@ -409,7 +415,7 @@ class CFileErrorDlg : public CCommonDialog
 {
 public:
     CFileErrorDlg(HWND parent, const char* caption, const char* file, const char* error,
-                  BOOL noSkip = FALSE, int altRes = 0);
+                  BOOL noSkip = FALSE, int altRes = 0, const wchar_t* fileW = NULL);
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -417,6 +423,7 @@ protected:
     const char *Caption,
         *File,
         *Error;
+    const wchar_t* FileW;
 };
 
 //
@@ -458,13 +465,16 @@ class CErrorCopyingPermissionsDlg : public CCommonDialog
 {
 public:
     CErrorCopyingPermissionsDlg(HWND parent, const char* sourceFile,
-                                const char* targetFile, DWORD error);
+                                const char* targetFile, DWORD error,
+                                const wchar_t* sourceFileW = NULL, const wchar_t* targetFileW = NULL);
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     const char* SourceFile;
     const char* TargetFile;
+    const wchar_t* SourceFileW;
+    const wchar_t* TargetFileW;
     DWORD Error;
 };
 
@@ -474,12 +484,14 @@ protected:
 class CErrorCopyingDirTimeDlg : public CCommonDialog
 {
 public:
-    CErrorCopyingDirTimeDlg(HWND parent, const char* targetFile, DWORD error);
+    CErrorCopyingDirTimeDlg(HWND parent, const char* targetFile, DWORD error,
+                            const wchar_t* targetFileW = NULL);
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     const char* TargetFile;
+    const wchar_t* TargetFileW;
     DWORD Error;
 };
 
@@ -491,7 +503,8 @@ class COverwriteDlg : public CCommonDialog
 public:
     COverwriteDlg(HWND parent, const char* sourceName, const char* sourceAttr,
                   const char* targetName, const char* targetAttr, BOOL yesnocancel = FALSE,
-                  BOOL dirOverwrite = FALSE);
+                  BOOL dirOverwrite = FALSE, const wchar_t* sourceNameW = NULL,
+                  const wchar_t* targetNameW = NULL);
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -500,6 +513,8 @@ protected:
         *SourceAttr,
         *TargetName,
         *TargetAttr;
+    const wchar_t *SourceNameW,
+        *TargetNameW;
 };
 
 //
@@ -574,7 +589,8 @@ class CCannotMoveDlg : public CCommonDialog
 {
 public:
     CCannotMoveDlg(HWND parent, int resID, char* sourceName, char* targetName,
-                   char* error);
+                   char* error, const wchar_t* sourceNameW = NULL,
+                   const wchar_t* targetNameW = NULL);
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -582,6 +598,8 @@ protected:
     char *SourceName,
         *TargetName,
         *Error;
+    const wchar_t *SourceNameW,
+        *TargetNameW;
 };
 
 //

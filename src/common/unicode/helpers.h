@@ -45,6 +45,35 @@ inline void WideToAnsi(const std::wstring& s, char* buffer, int bufferSize)
     buffer[bufferSize - 1] = '\0'; // Ensure null termination
 }
 
+// Trim spaces from the beginning and spaces/dots from the end of a filename
+// component, matching Explorer's manual-create behavior.
+inline BOOL MakeValidFileNameComponentW(wchar_t* path)
+{
+    if (path == NULL)
+        return FALSE;
+
+    BOOL changed = FALSE;
+    wchar_t* n = path;
+    while (*n != 0 && *n <= L' ')
+        n++;
+    if (n > path)
+    {
+        memmove(path, n, (wcslen(n) + 1) * sizeof(wchar_t));
+        changed = TRUE;
+    }
+
+    n = path + wcslen(path);
+    while (n > path && (*(n - 1) <= L' ' || *(n - 1) == L'.'))
+        n--;
+    if (*n != 0)
+    {
+        *n = 0;
+        changed = TRUE;
+    }
+
+    return changed;
+}
+
 // Format a wide string using printf-style formatting, returns std::wstring
 template <typename... Args>
 inline std::wstring FormatStrW(const wchar_t* format, Args... args)

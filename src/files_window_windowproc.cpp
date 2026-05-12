@@ -20,6 +20,7 @@ extern "C"
 }
 #include "salshlib.h"
 #include "zip.h"
+#include "common/unicode/PanelPathPolicy.h"
 
 //****************************************************************************
 
@@ -168,7 +169,10 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         case DBT_DEVICEQUERYREMOVEFAILED:
         {
             //          TRACE_I("WM_DEVICECHANGE: DBT_DEVICEQUERYREMOVEFAILED");
-            ChangeDirectory(this, GetPath(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
+            if (sally::unicode::HasWidePathW(GetPathW()))
+                ChangeDirectoryW(this, GetPathW(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
+            else
+                ChangeDirectory(this, GetPath(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
             return TRUE;
         }
 
@@ -476,7 +480,12 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (err == ERROR_SUCCESS)
             {
                 if (GetMonitorChanges()) // snooper might have removed it from the list
-                    ChangeDirectory(this, GetPath(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
+                {
+                    if (sally::unicode::HasWidePathW(GetPathW()))
+                        ChangeDirectoryW(this, GetPathW(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
+                    else
+                        ChangeDirectory(this, GetPath(), MyGetDriveType(GetPath()) == DRIVE_REMOVABLE);
+                }
             }
             else
             {
@@ -779,7 +788,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (data != NULL)
         {
             FocusFirstNewItem = TRUE;
-            DropCopyMove(data->Copy, data->TargetPath, data->Data);
+            DropCopyMove(data->Copy, data->TargetPath, data->TargetPathW.c_str(), data->Data);
             DestroyCopyMoveData(data->Data);
             delete data;
         }
@@ -880,6 +889,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     if (strcmp(f->Name, NextFocusName) == 0) // file found exactly
                     {
                         NextFocusName[0] = 0;
+                        NextFocusNameW.clear();
                         SetCaretIndex(i, FALSE);
                         break;
                     }
@@ -890,6 +900,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (i == total && found != -1)
             {
                 NextFocusName[0] = 0;
+                NextFocusNameW.clear();
                 SetCaretIndex(found, FALSE);
             }
         }

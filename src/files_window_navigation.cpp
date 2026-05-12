@@ -16,6 +16,7 @@
 #include "toolbar.h"
 #include "ui/IPrompter.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 
 //*****************************************************************************
 //
@@ -2519,14 +2520,21 @@ void CFilesWindow::RefreshDirectory(BOOL probablyUselessRefresh, BOOL forceReloa
     {
     case ptDisk:
     {
-        result = ChangePathToDisk(HWindow, GetPath(), -1, NULL, &noChange, FALSE, FALSE, TRUE);
+        if (sally::unicode::HasWidePathW(GetPathW()))
+            result = ChangePathToDiskW(HWindow, GetPathW(), -1, NULL, &noChange, FALSE, FALSE, TRUE);
+        else
+            result = ChangePathToDisk(HWindow, GetPath(), -1, NULL, &noChange, FALSE, FALSE, TRUE);
         break;
     }
 
     case ptZIPArchive:
     {
-        result = ChangePathToArchive(GetZIPArchive(), GetZIPPath(), -1, NULL, TRUE, &noChange,
-                                     FALSE, NULL, TRUE);
+        if (sally::unicode::HasWidePathW(GetZIPArchiveW()))
+            result = ChangePathToArchiveW(GetZIPArchiveW(), GetZIPPathW(), -1, NULL, TRUE, &noChange,
+                                          FALSE, NULL, TRUE);
+        else
+            result = ChangePathToArchive(GetZIPArchive(), GetZIPPath(), -1, NULL, TRUE, &noChange,
+                                         FALSE, NULL, TRUE);
 
         // path valid + no change, we perform common-refresh because of Ctrl+H (requires read-dir)
         if (result && noChange)
@@ -2935,7 +2943,54 @@ void CFilesWindow::RefreshDirectory(BOOL probablyUselessRefresh, BOOL forceReloa
 
     // we find the index of the focus item
     BOOL foundFocus = FALSE;
-    if (NextFocusName[0] != 0)
+    if (!NextFocusNameW.empty())
+    {
+        MainWindow->CancelPanelsUI(); // cancel QuickSearch and QuickEdit
+
+        std::wstring nextFocusName = NextFocusNameW;
+        size_t begin = 0;
+        while (begin < nextFocusName.size() && nextFocusName[begin] <= L' ')
+            begin++;
+        size_t end = nextFocusName.size();
+        while (end > begin && nextFocusName[end - 1] <= L' ')
+            end--;
+        nextFocusName = nextFocusName.substr(begin, end - begin);
+
+        int found = -1;
+        for (i = 0; i < count; i++)
+        {
+            CFileData* f = (i < Dirs->Count) ? &Dirs->At(i) : &Files->At(i - Dirs->Count);
+            std::wstring fallbackNameW;
+            const wchar_t* itemNameW = f->NameW;
+            if (itemNameW == NULL)
+            {
+                fallbackNameW = AnsiToWide(f->Name);
+                itemNameW = fallbackNameW.c_str();
+            }
+            if ((int)wcslen(itemNameW) == (int)nextFocusName.size() &&
+                _wcsicmp(itemNameW, nextFocusName.c_str()) == 0 &&
+                (firstNewItemIsDir == -1 /* we don't know what it is */ ||
+                 firstNewItemIsDir == 0 /* is file */ && i >= Dirs->Count ||
+                 firstNewItemIsDir == 1 /* is directory */ && i < Dirs->Count))
+            {
+                foundFocus = TRUE;
+                ensureFocusIndexVisible = TRUE;
+                wholeItemVisible = TRUE;
+                if (wcscmp(itemNameW, nextFocusName.c_str()) == 0)
+                {
+                    focusIndex = i;
+                    break;
+                }
+                if (found == -1)
+                    found = i;
+            }
+        }
+        if (i == count && found != -1)
+            focusIndex = found;
+        NextFocusNameW.clear();
+        NextFocusName[0] = 0;
+    }
+    else if (NextFocusName[0] != 0)
     {
         MainWindow->CancelPanelsUI();       // cancel QuickSearch and QuickEdit
         int l = (int)strlen(NextFocusName); // trim trailing spaces
@@ -2974,6 +3029,7 @@ void CFilesWindow::RefreshDirectory(BOOL probablyUselessRefresh, BOOL forceReloa
         if (i == count && found != -1)
             focusIndex = found; // found: ignore-case
         NextFocusName[0] = 0;
+        NextFocusNameW.clear();
     }
 
     // first, we search for the old focus in the new listing (according to the case-sensitivity of the current listing)
