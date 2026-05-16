@@ -1,5 +1,5 @@
 ﻿[EXPORTINFO]
-PROJECTNAME,"translator\salamand 4.0\projects\german\salamand.atp"
+PROJECTNAME,"translator\sally 4.0\projects\german\sally.atp"
 TEXTVERSION,"1.0 (x64)"
 VERSION,"1,0,0,183"
 
@@ -2640,7 +2640,7 @@ SLGINCOMPLETE,""
 12114,1,"(keine)"
 12115,1,"Befehl"
 12116,1,"Tastenkombination"
-12119,1,"Falsche Befehlszeilenparameter.\n\nAnwendung:\nSALAMAND.EXE [-L pfad-linkes-fenster] [-R pfad-rechtes-fenster] [-A pfad-aktives-fenster] [-C benutze-konfigurationsdatei] [-I icon-index] [-T titel-präfix] [-O nur-eine-instanz] [-P fenster-index]\n\n[X] der Parameter X ist optional"
+12119,1,"Falsche Befehlszeilenparameter.\n\nAnwendung:\nSALLY.EXE [-L pfad-linkes-fenster] [-R pfad-rechtes-fenster] [-A pfad-aktives-fenster] [-C benutze-konfigurationsdatei] [-I icon-index] [-T titel-präfix] [-O nur-eine-instanz] [-P fenster-index]\n\n[X] der Parameter X ist optional"
 12120,1,"Lesen der Datei "%s" nicht möglich."
 12121,1,"Fehler beim Schreiben der Datei "%s"."
 12122,1,"Diese Datei existiert bereits. Möchten Sie sie ersetzen?"
@@ -3331,8 +3331,8 @@ SLGINCOMPLETE,""
 13934,1,"Optionen und Standard wiederherstellen"
 
 [STRINGTABLE 148]
-13945,1,"Wenn Sie die Konfiguration bei jedem Start von Sally importieren wollen, exportieren Sie diese in eine Datei mit dem Namen config.reg im Installationsverzeichnis. Um eine andere Konfigurationsdatei zu importieren, benutzen Sie den Befehlszeilenparameter -C (z.B. "salamand.exe -C myconfig.reg").\n\nWir empfehlen, den Befehl zum Löschen des Registrierungsschlüssels der bisherigen Konfiguration in die exportierte Datei einzufügen. Andernfalls wird die importierte Konfiguration mit der bisherigen in der Registrierung gemischt, das könnte zu Problemen mit der Konfiguration führen."
-13946,1,"Wenn Sie die Konfiguration bei jedem Start von Sally importieren wollen, exportieren Sie diese in eine Datei mit dem Namen config.reg im Anwendungsdatenverzeichnis (oder im Installationsverzeichnis). Um eine andere Konfigurationsdatei zu importieren, benutzen Sie den Befehlszeilenparameter -C (z.B. "salamand.exe -C myconfig.reg").\n\nWir empfehlen, den Befehl zum Löschen des Registrierungsschlüssels der bisherigen Konfiguration in die exportierte Datei einzufügen. Andernfalls wird die importierte Konfiguration mit der bisherigen in der Registrierung gemischt, das könnte zu Problemen mit der Konfiguration führen."
+13945,1,"Wenn Sie die Konfiguration bei jedem Start von Sally importieren wollen, exportieren Sie diese in eine Datei mit dem Namen config.reg im Installationsverzeichnis. Um eine andere Konfigurationsdatei zu importieren, benutzen Sie den Befehlszeilenparameter -C (z.B. "sally.exe -C myconfig.reg").\n\nWir empfehlen, den Befehl zum Löschen des Registrierungsschlüssels der bisherigen Konfiguration in die exportierte Datei einzufügen. Andernfalls wird die importierte Konfiguration mit der bisherigen in der Registrierung gemischt, das könnte zu Problemen mit der Konfiguration führen."
+13946,1,"Wenn Sie die Konfiguration bei jedem Start von Sally importieren wollen, exportieren Sie diese in eine Datei mit dem Namen config.reg im Anwendungsdatenverzeichnis (oder im Installationsverzeichnis). Um eine andere Konfigurationsdatei zu importieren, benutzen Sie den Befehlszeilenparameter -C (z.B. "sally.exe -C myconfig.reg").\n\nWir empfehlen, den Befehl zum Löschen des Registrierungsschlüssels der bisherigen Konfiguration in die exportierte Datei einzufügen. Andernfalls wird die importierte Konfiguration mit der bisherigen in der Registrierung gemischt, das könnte zu Problemen mit der Konfiguration führen."
 13947,1,"&Befehl zum Löschen des Registrierungsschlüssels der bisherigen Konfiguration in die exportierte Datei einfügen"
 13950,1,"Die Konfigurationsdatei kann weder geöffnet noch gelesen werden.\n\nDatei: %s\nFehler: %s"
 13951,1,"Die Konfigurationsdatei ist zu groß.\n\nDatei: %s"
@@ -3445,3 +3445,8 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Schließe Suchfenster, bitte warten..."
+
+[STRINGTABLE 162]
+14205,1,"Alle"
+14206,1,"Dateien"
+14207,1,"Ordner"

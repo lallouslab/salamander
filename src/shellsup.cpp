@@ -7,6 +7,7 @@
 #include "menu.h"
 #include "ui/IPrompter.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 #include "common/clipboard/ClipboardOwnershipPolicy.h"
 #include "common/clipboard/HDropWideBuilder.h"
 #include "common/clipboard/HDropWideDataObject.h"
@@ -154,8 +155,12 @@ BOOL DoCopyMove(BOOL copy, char* targetDir, CCopyMoveData* data, void* param)
     {
         tmp->Copy = copy;
         strcpy(tmp->TargetPath, targetDir);
-        if (panel != NULL && panel->Is(ptDisk))
-            tmp->TargetPathW = panel->GetPathW();
+        if (panel != NULL && panel->Is(ptDisk) && sally::unicode::HasWidePathW(panel->GetPathW()))
+        {
+            tmp->TargetPathW = sally::unicode::MapRelatedAnsiPathToWidePath(targetDir, panel->GetPath(), panel->GetPathW());
+            if (tmp->TargetPathW.empty())
+                tmp->TargetPathW = AnsiToWide(targetDir);
+        }
         else
             tmp->TargetPathW = AnsiToWide(targetDir);
         tmp->Data = data;

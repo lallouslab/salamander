@@ -1771,7 +1771,7 @@ extern CPathBuffer WindowsDirectory; // cached result of GetWindowsDirectory (he
 extern char RTCErrorDescription[RTC_ERROR_DESCRIPTION_SIZE];
 //#endif // MSVC_RUNTIME_CHECKS
 
-// path where we create bug report and minidump, location: up to Vista near salamand.exe, in Vista (and later) in CSIDL_APPDATA + "\\Open Salamander"
+// path where we create bug report and minidump, location: up to Vista near sally.exe, in Vista (and later) in CSIDL_APPDATA + "\\Open Salamander"
 extern CPathBuffer BugReportPath; // Heap-allocated for long path support
 
 // file name that will be imported (if exists) to registry

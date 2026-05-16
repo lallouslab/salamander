@@ -68,7 +68,7 @@ UINT GetDriveTypeForPathW(const std::wstring& path)
 // CFilesWindowAncestor
 //
 
-CFilesWindowAncestor::CFilesWindowAncestor()
+CFilesWindowAncestor::CFilesWindowAncestor(BOOL headlessPanel)
 {
     CALL_STACK_MESSAGE_NONE
     Files = new CFilesArray;
@@ -77,6 +77,7 @@ CFilesWindowAncestor::CFilesWindowAncestor()
 
     Path[0] = 0;
     SuppressAutoRefresh = FALSE;
+    HeadlessPanel = headlessPanel;
     PanelType = ptDisk;
     MonitorChanges = TRUE;
     DriveType = DRIVE_UNKNOWN;
@@ -393,7 +394,7 @@ void CFilesWindowAncestor::SetPathW(const wchar_t* path)
         }
 
         // we handle suppression of auto refresh
-        if (SuppressAutoRefresh)
+        if (SuppressAutoRefresh || HeadlessPanel)
             MonitorChanges = FALSE;
 
         if (MonitorChanges)
@@ -1465,7 +1466,8 @@ DWORD WINAPI IconThreadThreadF(void* param)
 }
 
 CFilesWindow::CFilesWindow(CMainWindow* parent)
-    : Columns(20, 10), ColumnsTemplate(20, 10), VisibleItemsArray(FALSE), VisibleItemsArraySurround(TRUE)
+    : CFilesWindowAncestor(parent == NULL),
+      Columns(20, 10), ColumnsTemplate(20, 10), VisibleItemsArray(FALSE), VisibleItemsArraySurround(TRUE)
 {
     CALL_STACK_MESSAGE1("CFilesWindow::CFilesWindow()");
     NarrowedNameColumn = FALSE;
@@ -1497,11 +1499,15 @@ CFilesWindow::CFilesWindow(CMainWindow* parent)
     HANDLES(InitializeCriticalSection(&ICSectionUsingThumb));
     DWORD ThreadID;
     IconCacheThread = NULL;
-    if (ICEventTerminate != NULL && ICEventWork != NULL)
+    if (parent != NULL && ICEventTerminate != NULL && ICEventWork != NULL)
         IconCacheThread = HANDLES(CreateThread(NULL, 0, IconThreadThreadF, this, 0, &ThreadID));
-    if (ICEventTerminate == NULL ||
-        ICEventWork == NULL ||
-        IconCacheThread == NULL)
+    if (parent == NULL)
+    {
+        IconCache = NULL;
+    }
+    else if (ICEventTerminate == NULL ||
+             ICEventWork == NULL ||
+             IconCacheThread == NULL)
     {
         TRACE_E("Unable to start icon-reader thread.");
         IconCache = NULL;
@@ -1515,9 +1521,12 @@ CFilesWindow::CFilesWindow(CMainWindow* parent)
     OpenedDrivesList = NULL;
 
     Parent = parent;
-    ViewTemplate = &parent->ViewTemplates.Items[2]; // detailed view
-    BuildColumnsTemplate();
-    CopyColumnsTemplateToColumns();
+    ViewTemplate = parent != NULL ? &parent->ViewTemplates.Items[2] : NULL; // detailed view
+    if (ViewTemplate != NULL)
+    {
+        BuildColumnsTemplate();
+        CopyColumnsTemplateToColumns();
+    }
     ListBox = NULL;
     StatusLine = NULL;
     DirectoryLine = NULL;

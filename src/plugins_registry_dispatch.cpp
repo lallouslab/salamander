@@ -3353,7 +3353,7 @@ BOOL CPlugins::EnumInstalledModules(int* index, char* module, char* version)
     CALL_STACK_MESSAGE1("CPlugins::EnumInstalledModules()");
     if (*index == 0)
     {
-        // obtain the full name of salamand.exe
+        // obtain the full name of sally.exe
         GetModuleFileName(HInstance, module, MAX_PATH);
         // obtain the version
         const char* s = SALAMANDER_TEXT_VERSION;

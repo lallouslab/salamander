@@ -168,6 +168,7 @@ struct CGrepData
     DWORD AttributesMask;  // mask first
     DWORD AttributesValue; // then compare
     CFilterCriteria Criteria;
+    int FileTypeMode;
     // control and data
     BOOL StopSearch;    // the main thread sets this to terminate the grep thread
     BOOL SearchStopped; // has it been terminated or not?
@@ -188,6 +189,13 @@ struct CGrepData
 // CFindOptionsItem
 //
 
+enum CFindFileTypeMode
+{
+    fftmAll = 0,
+    fftmFiles = 1,
+    fftmFolders = 2
+};
+
 class CFindOptionsItem
 {
 public:
@@ -202,6 +210,7 @@ public:
     int CaseSensitive;
     int HexMode;
     int RegularExpresions;
+    int FileTypeMode;
 
     BOOL AutoLoad;
 

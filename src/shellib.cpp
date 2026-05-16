@@ -26,6 +26,43 @@ DWORD ExecuteAssociationTlsIndex = TLS_OUT_OF_INDEXES; // allows only one call a
 
 BOOL DragFromPluginFSEffectIsFromPlugin = FALSE;
 
+static DWORD GetOwnFolderDropEffect(DWORD allowedEffects, DWORD keyState)
+{
+    if ((keyState & (MK_SHIFT | MK_CONTROL)) == (MK_SHIFT | MK_CONTROL) &&
+        (allowedEffects & DROPEFFECT_LINK) != 0)
+    {
+        return DROPEFFECT_NONE;
+    }
+
+    allowedEffects &= DROPEFFECT_COPY | DROPEFFECT_MOVE;
+
+    if ((keyState & MK_SHIFT) != 0 && (keyState & MK_CONTROL) == 0 &&
+        (allowedEffects & DROPEFFECT_MOVE) != 0)
+    {
+        return DROPEFFECT_MOVE;
+    }
+
+    if ((keyState & MK_SHIFT) == 0 && (keyState & MK_CONTROL) != 0 &&
+        (allowedEffects & DROPEFFECT_COPY) != 0)
+    {
+        return DROPEFFECT_COPY;
+    }
+
+    if ((allowedEffects & DROPEFFECT_COPY) != 0)
+        return DROPEFFECT_COPY;
+    if ((allowedEffects & DROPEFFECT_MOVE) != 0)
+        return DROPEFFECT_MOVE;
+
+    return DROPEFFECT_NONE;
+}
+
+static BOOL CanUseOwnFolderDrop(IDataObject* dataObject, BOOL isFakeDataObject, BOOL tgtFile,
+                                CUseOwnRutine useOwnRutine)
+{
+    return dataObject != NULL && !isFakeDataObject && !tgtFile &&
+           (useOwnRutine == NULL || useOwnRutine(dataObject));
+}
+
 //*****************************************************************************
 //
 // CCopyMoveRecord
@@ -680,6 +717,7 @@ STDMETHODIMP CImpDropTarget::DragEnter(IDataObject* pDataObject,
 
     if (ImageDragging)
         ImageDragEnter(pt.x, pt.y);
+    BOOL ownFolderDrop = FALSE;
     if (GetCurDir != NULL)
     {
         BOOL tgtFile;
@@ -693,6 +731,8 @@ STDMETHODIMP CImpDropTarget::DragEnter(IDataObject* pDataObject,
             if (!OldDataObjectIsSimple)
                 SetDirectory(NULL, 0, pt, NULL, OldDataObject, FALSE, idtttWindows);
         }
+        ownFolderDrop = TgtType == idtttWindows && CurDirDropTarget == NULL && CurDir[0] != 0 && tgtPath != NULL &&
+                        CanUseOwnFolderDrop(OldDataObject, OldDataObjectIsFake, tgtFile, UseOwnRutine);
     }
 
     if (CurDirDropTarget != NULL) // only idtttWindows
@@ -735,6 +775,11 @@ STDMETHODIMP CImpDropTarget::DragEnter(IDataObject* pDataObject,
             }
             LastEffect = (pdwEffect != NULL) ? *pdwEffect : -1;
         }
+    }
+    else if (ownFolderDrop)
+    {
+        *pdwEffect = GetOwnFolderDropEffect(*pdwEffect, origKeyState);
+        LastEffect = *pdwEffect != DROPEFFECT_NONE ? *pdwEffect : -1;
     }
     else
     {
@@ -800,6 +845,7 @@ STDMETHODIMP CImpDropTarget::DragOver(DWORD grfKeyState, POINTL pt,
     if (ImageDragging)
         ImageDragMove(pt.x, pt.y);
 
+    BOOL ownFolderDrop = FALSE;
     if (GetCurDir != NULL)
     {
         BOOL tgtFile;
@@ -814,6 +860,8 @@ STDMETHODIMP CImpDropTarget::DragOver(DWORD grfKeyState, POINTL pt,
             if (!OldDataObjectIsSimple)
                 SetDirectory(NULL, grfKeyState, pt, pdwEffect, OldDataObject, FALSE, idtttWindows);
         }
+        ownFolderDrop = TgtType == idtttWindows && CurDirDropTarget == NULL && CurDir[0] != 0 && tgtPath != NULL &&
+                        CanUseOwnFolderDrop(OldDataObject, OldDataObjectIsFake, tgtFile, UseOwnRutine);
     }
     if (CurDirDropTarget != NULL) // only idtttWindows
     {
@@ -846,6 +894,12 @@ STDMETHODIMP CImpDropTarget::DragOver(DWORD grfKeyState, POINTL pt,
         }
         LastEffect = (pdwEffect != NULL) ? *pdwEffect : -1;
         return res;
+    }
+    else if (ownFolderDrop)
+    {
+        *pdwEffect = GetOwnFolderDropEffect(*pdwEffect, origKeyState);
+        LastEffect = *pdwEffect != DROPEFFECT_NONE ? *pdwEffect : -1;
+        return S_OK;
     }
     else
     {
@@ -1164,9 +1218,9 @@ STDMETHODIMP CImpDropTarget::Drop(IDataObject* pDataObject, DWORD grfKeyState,
                         CurDirDropTarget->DragLeave();
                         CurDirDropTarget->Release();
                         CurDirDropTarget = NULL;
-                        operationDone = TRUE;
-                        ret = S_OK;
                     }
+                    operationDone = TRUE;
+                    ret = S_OK;
                 }
             }
         }

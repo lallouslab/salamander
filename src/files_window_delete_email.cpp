@@ -383,6 +383,8 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
 
         CFileData* f = NULL;
         CPathBuffer formatedFileName; // +200 is a reserve (Windows can create paths longer than MAX_PATH)
+        std::wstring formatedFileNameW;
+        std::wstring expandedW;
         char expanded[200];
         BOOL deleteLink = FALSE;
         if (count <= 1) // one selected item or none
@@ -421,8 +423,15 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                     }
                 }
                 AlterFileName(formatedFileName, f->Name, -1, Configuration.FileNameFormat, 0, isDir);
+                if (f->NameW != NULL)
+                    formatedFileNameW = AlterFileNameW(f->NameW, Configuration.FileNameFormat, 0, isDir != 0);
                 if (expanded[0] == 0)
-                    lstrcpy(expanded, LoadStr(isDir ? IDS_QUESTION_DIRECTORY : IDS_QUESTION_FILE));
+                {
+                    int questionID = isDir ? IDS_QUESTION_DIRECTORY : IDS_QUESTION_FILE;
+                    lstrcpy(expanded, LoadStr(questionID));
+                    if (!formatedFileNameW.empty())
+                        expandedW = LoadStrW(questionID);
+                }
             }
             else
                 expanded[0] = 0; // not used
@@ -462,7 +471,16 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
         if (resID != 0)
         {
             sprintf(subject, LoadStr(resID), expanded);
-            str.Set(subject, count > 1 ? NULL : formatedFileName.Get());
+            if (count <= 1 && !formatedFileNameW.empty())
+            {
+                std::wstring expandedForSubjectW = !expandedW.empty() ? expandedW : AnsiToWide(expanded);
+                std::wstring subjectW = FormatStrW(LoadStrW(resID), expandedForSubjectW.c_str());
+                str.SetW(subjectW.c_str(), formatedFileNameW.c_str());
+            }
+            else
+            {
+                str.Set(subject, count > 1 ? NULL : formatedFileName.Get());
+            }
         }
 
         //---

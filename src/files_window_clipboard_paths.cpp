@@ -7,6 +7,7 @@
 #include "ui/IPrompter.h"
 #include "common/IClipboard.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 
 #include <shlwapi.h>
 #undef PathIsPrefix // otherwise collision with CSalamanderGeneral::PathIsPrefix
@@ -27,6 +28,88 @@ extern "C"
 #include "shexreg.h"
 }
 #include "salshlib.h"
+
+static void TrimSpacesFromBothSidesW(std::wstring& path)
+{
+    size_t start = 0;
+    while (start < path.length() && path[start] <= L' ')
+        start++;
+
+    size_t end = path.length();
+    while (end > start && path[end - 1] <= L' ')
+        end--;
+
+    if (start > 0 || end < path.length())
+        path = path.substr(start, end - start);
+}
+
+static void CutDoubleQuotesFromBothSidesW(std::wstring& path)
+{
+    if (path.length() >= 2 && path.front() == L'"' && path.back() == L'"')
+        path = path.substr(1, path.length() - 2);
+}
+
+static BOOL ContainsNonAsciiW(const std::wstring& text)
+{
+    for (wchar_t ch : text)
+    {
+        if (ch > 0x7f)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOL IsFileURLPathW(const std::wstring& path)
+{
+    const wchar_t* s = path.c_str();
+    while (*s != 0 && *s <= L' ')
+        s++;
+
+    const wchar_t* name = s;
+    while (*s != 0 && *s != L':' && s - name < 4)
+        s++;
+
+    return *s == L':' && s - name == 4 && _wcsnicmp(name, L"file", 4) == 0;
+}
+
+static BOOL PostProcessPathFromUserW(HWND parent, std::wstring& path)
+{
+    (void)parent;
+
+    TrimSpacesFromBothSidesW(path);
+    CutDoubleQuotesFromBothSidesW(path);
+
+    if (IsFileURLPathW(path))
+    {
+        DWORD pathLen = SAL_MAX_LONG_PATH;
+        std::wstring urlPath(pathLen, L'\0');
+        if (PathCreateFromUrlW(path.c_str(), &urlPath[0], &pathLen, 0) == S_OK)
+            path.assign(urlPath.c_str());
+        else
+        {
+            gPrompter->ShowError(LoadStrW(IDS_ERRORCHANGINGDIR), LoadStrW(IDS_THEPATHISINVALID));
+            return FALSE;
+        }
+    }
+
+    DWORD expandedLen = ExpandEnvironmentStringsW(path.c_str(), NULL, 0);
+    if (expandedLen == 0)
+    {
+        TRACE_E("ExpandEnvironmentStringsW failed.");
+        return FALSE;
+    }
+
+    std::wstring expandedPath(expandedLen, L'\0');
+    DWORD auxRes = ExpandEnvironmentStringsW(path.c_str(), &expandedPath[0], expandedLen);
+    if (auxRes == 0 || auxRes > expandedLen)
+    {
+        TRACE_E("ExpandEnvironmentStringsW failed.");
+        return FALSE;
+    }
+
+    path.assign(expandedPath.c_str());
+    return TRUE;
+}
 
 // !!! do not use StdColumnsPrivate directly, use GetStdColumn()
 CColumDataItem StdColumnsPrivate[STANDARD_COLUMNS_COUNT] =
@@ -759,23 +842,33 @@ void CFilesWindow::ClipboardPastePath()
         return;
     }
 
-    // Trim leading whitespace/CR/LF
-    size_t start = 0;
-    while (start < pathW.length() && pathW[start] <= L' ')
-        start++;
-    if (start > 0)
-        pathW = pathW.substr(start);
-
     if (pathW.empty())
         return;
 
-    // Convert to ANSI for ChangeDir (existing code expects ANSI)
-    CPathBuffer buff;  // Heap-allocated for long path support
-    std::string ansiPath = WideToAnsi(pathW);
-    lstrcpyn(buff, ansiPath.c_str(), buff.Size());
+    std::string ansiPath;
+    if (!ContainsNonAsciiW(pathW) &&
+        sally::unicode::TryExactAnsiFallback(pathW, ansiPath))
+    {
+        CPathBuffer buff; // Heap-allocated for long path support
+        lstrcpyn(buff, ansiPath.c_str(), buff.Size());
 
-    if (PostProcessPathFromUser(HWindow, buff))
+        if (PostProcessPathFromUser(HWindow, buff))
+            ChangeDir(buff); // change path
+        return;
+    }
+
+    if (!PostProcessPathFromUserW(HWindow, pathW) || pathW.empty())
+        return;
+
+    if (!ContainsNonAsciiW(pathW) &&
+        sally::unicode::TryExactAnsiFallback(pathW, ansiPath))
+    {
+        CPathBuffer buff; // Heap-allocated for long path support
+        lstrcpyn(buff, ansiPath.c_str(), buff.Size());
         ChangeDir(buff); // change path
+    }
+    else
+        ChangePathToDiskW(HWindow, pathW.c_str()); // change path
 }
 
 void CFilesWindow::ChangeFilter(BOOL disable)

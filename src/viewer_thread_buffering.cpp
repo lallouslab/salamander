@@ -681,7 +681,15 @@ void CViewerWindow::HeightChanged(BOOL& fatalErr)
 
     case vtText:
     {
-        MaxSeekY = FindSeekBefore(FileSize, max(Height / CharHeight, 1), fatalErr);
+        int fullLines = max(Height / CharHeight, 1);
+        MaxSeekY = FindSeekBefore(FileSize, fullLines, fatalErr);
+        if (!fatalErr && fullLines > 1)
+        {
+            BOOL lastLineFatalErr = FALSE;
+            __int64 lastLineSeekY = FindSeekBefore(FileSize, fullLines - 1, lastLineFatalErr);
+            if (!lastLineFatalErr && lastLineSeekY > MaxSeekY)
+                MaxSeekY = lastLineSeekY;
+        }
         break;
     }
     }

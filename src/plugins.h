@@ -2912,7 +2912,7 @@ public:
     // and -1 in 'pluginIndex'
     void OpenPackOrUnpackDlgForMarkedPlugins(CPluginData** data, int* pluginIndex);
 
-    // returns, one by one, salamand.exe and all plugins including their versions; index counts from zero (in/out)
+    // returns, one by one, sally.exe and all plugins including their versions; index counts from zero (in/out)
     // returns TRUE if the result is valid
     BOOL EnumInstalledModules(int* index, char* module, char* version);
 

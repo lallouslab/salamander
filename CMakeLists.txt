@@ -77,7 +77,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sal_nuget.cmake)
 # ==============================================================================
 
 # Source list (extracted from vcxproj)
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/targets/salamand_sources.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/targets/sally_sources.cmake)
 
 add_executable(sally WIN32)
 
@@ -116,7 +116,7 @@ elseif(MINGW)
 endif()
 
 # Resource file settings
-set_source_files_properties(${SALAMANDER_RC} PROPERTIES
+set_source_files_properties(${sally_RC} PROPERTIES
   COMPILE_DEFINITIONS "WINVER=0x0601;$<$<CONFIG:Debug>:_DEBUG>;$<${SAL_IS_RELEASE}:NDEBUG>;$<$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>:_WIN64>"
 )
 
@@ -138,13 +138,13 @@ target_compile_definitions(reglib PRIVATE ${SAL_COMMON_DEFINES})
 
 # Add sources excluding reglib (it's linked separately)
 set(SAL_SOURCES_NO_REGLIB)
-foreach(src IN LISTS SALAMANDER_SOURCES)
+foreach(src IN LISTS SALLY_SOURCES)
   if(NOT src MATCHES "/reglib/src/")
     list(APPEND SAL_SOURCES_NO_REGLIB ${src})
   endif()
 endforeach()
 
-target_sources(sally PRIVATE ${SAL_SOURCES_NO_REGLIB} ${SALAMANDER_RC})
+target_sources(sally PRIVATE ${SAL_SOURCES_NO_REGLIB} ${sally_RC})
 target_link_libraries(sally PRIVATE reglib)
 
 # Shell extension registration (C file with extern "C" linkage)

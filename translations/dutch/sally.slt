@@ -1,5 +1,5 @@
 ﻿[EXPORTINFO]
-PROJECTNAME,"translator\salamand 4.0\projects\dutch\salamand.atp"
+PROJECTNAME,"translator\sally 4.0\projects\dutch\sally.atp"
 TEXTVERSION,"1.0 (x64)"
 VERSION,"1,0,0,183"
 
@@ -2640,7 +2640,7 @@ SLGINCOMPLETE,""
 12114,1,"(geen)"
 12115,1,"Opdracht"
 12116,1,"Sneltoets"
-12119,1,"Ongeldige opdrachtregel parameters.\n\nGebruik:\n  SALAMAND.EXE [-L pad-naar-linker-paneel] [-R pad-naar-rechter-panel] [-A pad-naar-actief-paneel] [-C configuratiebestand-gebruiken] [-I pictogram-index] [-T titel-prefix] [-O een-instantie] [-P paneel-index]\n\n  [X] parameter X is optioneel"
+12119,1,"Ongeldige opdrachtregel parameters.\n\nGebruik:\n  SALLY.EXE [-L pad-naar-linker-paneel] [-R pad-naar-rechter-panel] [-A pad-naar-actief-paneel] [-C configuratiebestand-gebruiken] [-I pictogram-index] [-T titel-prefix] [-O een-instantie] [-P paneel-index]\n\n  [X] parameter X is optioneel"
 12120,1,"Kan bestand "%s" niet lezen."
 12121,1,"Kan bestand "%s" niet schrijven."
 12122,1,"Het bestand bestaat al. Wilt u het vervangen?"
@@ -3331,8 +3331,8 @@ SLGINCOMPLETE,""
 13934,1,"Reset opties en standaardwaarden"
 
 [STRINGTABLE 148]
-13945,1,"Als u de configuratie wilt importeren bij elke start van Sally, exporteer dan a.u.b. naar de installatie map naar een bestand met de naam config.reg. Om andere configuraties te importeren gebruikt a.u.b. de opdrachtregel parameter -C (bijv. "salamand.exe-C myconfig.reg").\n\nWe bevelen het wissen van de registersleutel aan tijdens het exporteren. Anders zal de geïmporteerde configuratie worden samengevoegd met de huidige configuratie in het register. Dit kan leiden tot inconsistente configuratie."
-13946,1,"Als u de configuratie wilt importeren bij elke start van Sally, exporteer dan a.u.b. naar de applicatie data map (of de installatie map) naar een bestand met de naam config.reg. Om andere configuraties te importeren gebruikt a.u.b. de opdrachtregel parameter -C (bijv. "salamand.exe-C myconfig.reg").\n\nWe adviseren om een opdracht tot wissen van de registersleutel van de huidige configuratie in het geëxporteerd bestand op te nemen. Anders zal de geïmporteerde configuratie worden samengevoegd met de huidige configuratie in het register. Dit kan leiden tot inconsistente configuratie."
+13945,1,"Als u de configuratie wilt importeren bij elke start van Sally, exporteer dan a.u.b. naar de installatie map naar een bestand met de naam config.reg. Om andere configuraties te importeren gebruikt a.u.b. de opdrachtregel parameter -C (bijv. "sally.exe-C myconfig.reg").\n\nWe bevelen het wissen van de registersleutel aan tijdens het exporteren. Anders zal de geïmporteerde configuratie worden samengevoegd met de huidige configuratie in het register. Dit kan leiden tot inconsistente configuratie."
+13946,1,"Als u de configuratie wilt importeren bij elke start van Sally, exporteer dan a.u.b. naar de applicatie data map (of de installatie map) naar een bestand met de naam config.reg. Om andere configuraties te importeren gebruikt a.u.b. de opdrachtregel parameter -C (bijv. "sally.exe-C myconfig.reg").\n\nWe adviseren om een opdracht tot wissen van de registersleutel van de huidige configuratie in het geëxporteerd bestand op te nemen. Anders zal de geïmporteerde configuratie worden samengevoegd met de huidige configuratie in het register. Dit kan leiden tot inconsistente configuratie."
 13947,1,"&Opdracht tot wissen van de registersleutel van de huidige configuratie in het geëxporteerd bestand opnemen"
 13950,1,"Kan het configuratiebestand niet openen of lezen.\n\nBestand: %s\nFout: %s"
 13951,1,"Het configuratiebestand is te groot.\n\nBestand: %s"
@@ -3445,3 +3445,8 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Zoeken vensters sluiten, moment geduld a.u.b..."
+
+[STRINGTABLE 162]
+14205,1,"Alles"
+14206,1,"Bestanden"
+14207,1,"Mappen"

@@ -13,11 +13,11 @@ Language=0x409 English (United States)
 Title=DemoView Help
 
 [WINDOWS]
-$global_ssdefault=,"sally.chm::\salamand.hhc","demoview.hhk","hh\demoview\introduction_intro.htm","hh\demoview\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
+$global_ssdefault=,"sally.chm::\sally.hhc","demoview.hhk","hh\demoview\introduction_intro.htm","hh\demoview\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
 
 [FILES]
-hh\salamander_help.css
-hh\salamander_help_shared.css
+hh\sally_help.css
+hh\sally_help_shared.css
 
 [ALIAS]
 IDH_VIEWBMPFROMCLIP=hh\demoview\basic_viewbmpfromclip.htm

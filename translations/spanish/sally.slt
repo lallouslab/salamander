@@ -1,5 +1,5 @@
 ﻿[EXPORTINFO]
-PROJECTNAME,"translator\salamand 4.0\projects\spanish\salamand.atp"
+PROJECTNAME,"translator\sally 4.0\projects\spanish\sally.atp"
 TEXTVERSION,"1.0 (x64)"
 VERSION,"1,0,0,183"
 
@@ -2640,7 +2640,7 @@ SLGINCOMPLETE,""
 12114,1,"(ninguno)"
 12115,1,"Comando"
 12116,1,"Tecla abreviada"
-12119,1,"Parámetros incorrectos de línea de comando.\n\nUso:\n  SALAMAND.EXE [-L ruta-a-panel-izdo] [-R ruta-a-panel-dcho] [-A ruta-a-panel-activo] [-C fichero-configuración-uso] [-I índice-icono] [-T prefijo-título] [-O sólo-una-copia] [-P índice-panel]\n\n  [X] significa que el parámetro X es opcional"
+12119,1,"Parámetros incorrectos de línea de comando.\n\nUso:\n  SALLY.EXE [-L ruta-a-panel-izdo] [-R ruta-a-panel-dcho] [-A ruta-a-panel-activo] [-C fichero-configuración-uso] [-I índice-icono] [-T prefijo-título] [-O sólo-una-copia] [-P índice-panel]\n\n  [X] significa que el parámetro X es opcional"
 12120,1,"Imposible leer fichero "%s"."
 12121,1,"Imposible grabar fichero "%s"."
 12122,1,"El fichero ya existe. ¿Desea sustituirlo?"
@@ -3331,8 +3331,8 @@ SLGINCOMPLETE,""
 13934,1,"Reiniciar opciones y valores por defecto"
 
 [STRINGTABLE 148]
-13945,1,"Si desea importar la configuración cada vez que se inicie Sally, expórtela al directorio de instalación al fichero denominado config.reg. Para importar otro fichero de configuración use el parámetro de línea de comando -C (p.ej. "salamand.exe -C miconfig.reg").\n\nRecomendamos añadir borrado de clave de registro con configuración directamente a fichero exportado. De lo contrario la configuración importada se mezclará con la actual en el registro y puede originar una configuración inconsistente."
-13946,1,"Si desea importar la configuración cada vez que se inicie Sally, expórtela al directorio de datos de la aplicación (o directorio de instalación) al fichero denominado config.reg. Para importar otro fichero de configuración use el parámetro de línea de comando -C (p.ej. "salamand.exe -C miconfig.reg").\n\nRecomendamos añadir borrado de clave de registro con configuración directamente a fichero exportado. De lo contrario la configuración importada se mezclará con la actual en el registro y puede originar una configuración inconsistente."
+13945,1,"Si desea importar la configuración cada vez que se inicie Sally, expórtela al directorio de instalación al fichero denominado config.reg. Para importar otro fichero de configuración use el parámetro de línea de comando -C (p.ej. "sally.exe -C miconfig.reg").\n\nRecomendamos añadir borrado de clave de registro con configuración directamente a fichero exportado. De lo contrario la configuración importada se mezclará con la actual en el registro y puede originar una configuración inconsistente."
+13946,1,"Si desea importar la configuración cada vez que se inicie Sally, expórtela al directorio de datos de la aplicación (o directorio de instalación) al fichero denominado config.reg. Para importar otro fichero de configuración use el parámetro de línea de comando -C (p.ej. "sally.exe -C miconfig.reg").\n\nRecomendamos añadir borrado de clave de registro con configuración directamente a fichero exportado. De lo contrario la configuración importada se mezclará con la actual en el registro y puede originar una configuración inconsistente."
 13947,1,"&Añadir borrado de clave de registro con configuración directamente a fichero exportado"
 13950,1,"Imposible abrir o leer fichero de configuración.\n\nFichero: %s\nError: %s"
 13951,1,"El fichero de configuración es demasiado grande.\n\nFichero: %s"
@@ -3445,3 +3445,8 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Cerrando ventanas de Búsqueda; por favor, espere..."
+
+[STRINGTABLE 162]
+14205,1,"Todo"
+14206,1,"Archivos"
+14207,1,"Carpetas"

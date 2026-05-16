@@ -13,10 +13,10 @@ Language=0x409 English (United States)
 Title=Registry Editor Help
 
 [WINDOWS]
-$global_ssdefault=,"sally.chm::\salamand.hhc","regedt.hhk","hh\regedt\introduction_intro.htm","hh\regedt\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
+$global_ssdefault=,"sally.chm::\sally.hhc","regedt.hhk","hh\regedt\introduction_intro.htm","hh\regedt\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
 
 [FILES]
-hh\salamander_help.css
+hh\sally_help.css
 
 [ALIAS]
 IDH_SEARCHREG=hh\regedt\using_searchreg.htm

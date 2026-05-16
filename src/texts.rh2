@@ -2722,6 +2722,11 @@
 #define IDS_THEME_MODE_DARK             14201
 #define IDS_THEME_MODE_SYSTEM           14202
 
+// Find Files dialog: Type combo box items
+#define IDS_FIND_TYPE_ALL               14205
+#define IDS_FIND_TYPE_FILES             14206
+#define IDS_FIND_TYPE_FOLDERS           14207
+
 //#define CM_TEXTS_MAX                  18000    // maximal texts id
 
 #endif // __TEXTS_RH2

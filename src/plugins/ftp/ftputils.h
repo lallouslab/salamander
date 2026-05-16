@@ -12,11 +12,11 @@ enum CFTPServerPathType
 {
     ftpsptEmpty,   // empty value (has not been evaluated yet at all)
     ftpsptUnknown, // does not match any of the following path types
-    ftpsptUnix,    // e.g. /pub/altap/salamand (but also /\dir-with-backslash)
-    ftpsptNetware, // e.g. /pub/altap/salamand or \pub\altap\salamand
+    ftpsptUnix,    // e.g. /pub/altap/sally (but also /\dir-with-backslash)
+    ftpsptNetware, // e.g. /pub/altap/sally or \pub\altap\sally
     ftpsptOpenVMS, // e.g. PUB$DEVICE:[PUB.VMS] or [PUB.VMS] (named "OpenVMS" so it is not confused with "MVS")
     ftpsptMVS,     // e.g. 'VEA0016.MAIN.CLIST'
-    ftpsptWindows, // e.g. /pub/altap/salamand or \pub\altap\salamand
+    ftpsptWindows, // e.g. /pub/altap/sally or \pub\altap\sally
     ftpsptIBMz_VM, // e.g. ACADEM:ANONYMOU.PICS or ACADEM:ANONYMOU. (root)
     ftpsptOS2,     // e.g. C:/DIR1/DIR2 or C:\DIR1\DIR2
     ftpsptTandem,  // e.g. \SYSTEM.$VVVVV.SUBVOLUM.FILENAME

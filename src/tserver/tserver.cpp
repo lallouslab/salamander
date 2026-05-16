@@ -969,7 +969,7 @@ wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR /*cmdLine*/, i
                                 NULL, NULL, NULL, NULL);
 
     // when TServer runs as Admin on Vista and we try to attach from another account (Salamander started
-    // using runas /user:test salamand.exe), Salamander refused to connect; the code was found here:
+    // using runas /user:test sally.exe), Salamander refused to connect; the code was found here:
     // http://www.vistax64.com/vista-security/72588-openprocess-process_set_information-protected-processes.html#post357171
     // Manik points to the book http://www.amazon.com/gp/product/0470101555?ie=UTF8&tag=protectyourwi-20
     // (Windows Vista Security: Securing Vista Against Malicious Attacks )

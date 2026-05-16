@@ -12,7 +12,7 @@ DWORD SalamanderExceptionTime = 0;
 
 // NOTE: sections are aligned to 4096 bytes, which is the amount by which
 // salamande.exe grows when adding a module containing only a single DWORD variable.
-// See PEViewer on salamand.exe, "Section Table" time.
+// See PEViewer on sally.exe, "Section Table" time.
 
 #pragma warning(disable : 4073)
 #pragma init_seg(lib)

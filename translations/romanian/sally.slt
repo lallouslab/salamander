@@ -1,5 +1,5 @@
 ﻿[EXPORTINFO]
-PROJECTNAME,"translator\salamand 4.0\projects\romanian\salamand.atp"
+PROJECTNAME,"translator\sally 4.0\projects\romanian\sally.atp"
 TEXTVERSION,"1.0 (x64)"
 VERSION,"1,0,0,183"
 
@@ -2640,7 +2640,7 @@ SLGINCOMPLETE,""
 12114,1,"(nimic)"
 12115,1,"Comanda"
 12116,1,"Scurtatura Tasta"
-12119,1,"Parametri invalizi comanda de linie.\n\nFolosit:\n  SALAMAND.EXE [-L cale-catre-panoul-stang] [-R cale-catre-panoul-drept] [-A  o cale-catre-panoul-activ] [-C foloseste-fisierul-configuratie] [-I icoana-index] [-T titlu-prefix] [-O doar-o-instanta] [-P panou-index]\n\n  [X] inseamna ca parametrul X e optional"
+12119,1,"Parametri invalizi comanda de linie.\n\nFolosit:\n  SALLY.EXE [-L cale-catre-panoul-stang] [-R cale-catre-panoul-drept] [-A  o cale-catre-panoul-activ] [-C foloseste-fisierul-configuratie] [-I icoana-index] [-T titlu-prefix] [-O doar-o-instanta] [-P panou-index]\n\n  [X] inseamna ca parametrul X e optional"
 12120,1,"Nu pot citi fisierul "%s"."
 12121,1,"Nu pot scrie fisierul "%s"."
 12122,1,"Fisierul exista deja. Doriti sa-l inlocuiti?"
@@ -3331,8 +3331,8 @@ SLGINCOMPLETE,""
 13934,1,"Reseteaza optiunile si defaults"
 
 [STRINGTABLE 148]
-13945,1,"Daca doriti sa importati configuratia la fiecare pornire a Sally, exportati-o in directorul de instalare in numele config.reg. Pentru a importa alt fisier de configurare folositi parametrul -C in linia de comanda (ex. "salamand.exe -C myconfig.reg").\n\nVa recomandam sa adaugati curatarea cheii din registri cu configurarea exportata direct in fisier. Altfel, configurarea importata va fi adaugata in cea curenta si poate rezulta intr-o configurare inconsistenta."
-13946,1,"Daca doriti sa importati configuratia la fiecare pornire a Sally, exportati-o in directorul aplicatiei in numele config.reg. Pentru a importa alt fisier de configurare folositi parametrul -C in linia de comanda (ex. "salamand.exe -C myconfig.reg").\n\nVa recomandam sa adaugati curatarea cheii din registri cu configurarea exportata direct in fisier. Altfel, configurarea importata va fi adaugata in cea curenta si poate rezulta intr-o configurare inconsistenta."
+13945,1,"Daca doriti sa importati configuratia la fiecare pornire a Sally, exportati-o in directorul de instalare in numele config.reg. Pentru a importa alt fisier de configurare folositi parametrul -C in linia de comanda (ex. "sally.exe -C myconfig.reg").\n\nVa recomandam sa adaugati curatarea cheii din registri cu configurarea exportata direct in fisier. Altfel, configurarea importata va fi adaugata in cea curenta si poate rezulta intr-o configurare inconsistenta."
+13946,1,"Daca doriti sa importati configuratia la fiecare pornire a Sally, exportati-o in directorul aplicatiei in numele config.reg. Pentru a importa alt fisier de configurare folositi parametrul -C in linia de comanda (ex. "sally.exe -C myconfig.reg").\n\nVa recomandam sa adaugati curatarea cheii din registri cu configurarea exportata direct in fisier. Altfel, configurarea importata va fi adaugata in cea curenta si poate rezulta intr-o configurare inconsistenta."
 13947,1,"&Adauga curatarea cheii din registri cu configurarea exportata direct in fisier"
 13950,1,"Nu pot deschide sau citi fisierul de configurare.\n\nFisier: %s\nEroare: %s"
 13951,1,"Fiserul de configurare e prea mare.\n\nFisier: %s"
@@ -3445,3 +3445,8 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Inchid ferestrele Find windows, te rog asteapta..."
+
+[STRINGTABLE 162]
+14205,1,"Toate"
+14206,1,"Fișiere"
+14207,1,"Foldere"

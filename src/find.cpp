@@ -28,6 +28,7 @@ const char* FINDOPTIONSITEM_WHOLEWORDS_REG = "WholeWords";
 const char* FINDOPTIONSITEM_CASESENSITIVE_REG = "CaseSensitive";
 const char* FINDOPTIONSITEM_HEXMODE_REG = "HexMode";
 const char* FINDOPTIONSITEM_REGULAR_REG = "RegularExpresions";
+const char* FINDOPTIONSITEM_FILETYPEMODE_REG = "FileTypeMode";
 const char* FINDOPTIONSITEM_AUTOLOAD_REG = "AutoLoad";
 const char* FINDOPTIONSITEM_NAMED_REG = "Named";
 const char* FINDOPTIONSITEM_LOOKIN_REG = "LookIn";
@@ -131,6 +132,7 @@ CFindOptionsItem::CFindOptionsItem()
     CaseSensitive = FALSE;
     HexMode = FALSE;
     RegularExpresions = FALSE;
+    FileTypeMode = fftmAll;
 
     AutoLoad = FALSE;
 
@@ -153,6 +155,7 @@ CFindOptionsItem::operator=(const CFindOptionsItem& s)
     CaseSensitive = s.CaseSensitive;
     HexMode = s.HexMode;
     RegularExpresions = s.RegularExpresions;
+    FileTypeMode = s.FileTypeMode;
 
     AutoLoad = s.AutoLoad;
 
@@ -187,6 +190,8 @@ BOOL CFindOptionsItem::Save(HKEY hKey)
         SetValue(hKey, FINDOPTIONSITEM_HEXMODE_REG, REG_DWORD, &HexMode, sizeof(DWORD));
     if (RegularExpresions != def.RegularExpresions)
         SetValue(hKey, FINDOPTIONSITEM_REGULAR_REG, REG_DWORD, &RegularExpresions, sizeof(DWORD));
+    if (FileTypeMode != def.FileTypeMode)
+        SetValue(hKey, FINDOPTIONSITEM_FILETYPEMODE_REG, REG_DWORD, &FileTypeMode, sizeof(DWORD));
     if (AutoLoad != def.AutoLoad)
         SetValue(hKey, FINDOPTIONSITEM_AUTOLOAD_REG, REG_DWORD, &AutoLoad, sizeof(DWORD));
     if (strcmp(NamedText, def.NamedText) != 0)
@@ -209,6 +214,9 @@ BOOL CFindOptionsItem::Load(HKEY hKey, DWORD cfgVersion)
     GetValue(hKey, FINDOPTIONSITEM_CASESENSITIVE_REG, REG_DWORD, &CaseSensitive, sizeof(DWORD));
     GetValue(hKey, FINDOPTIONSITEM_HEXMODE_REG, REG_DWORD, &HexMode, sizeof(DWORD));
     GetValue(hKey, FINDOPTIONSITEM_REGULAR_REG, REG_DWORD, &RegularExpresions, sizeof(DWORD));
+    GetValue(hKey, FINDOPTIONSITEM_FILETYPEMODE_REG, REG_DWORD, &FileTypeMode, sizeof(DWORD));
+    if (FileTypeMode < fftmAll || FileTypeMode > fftmFolders)
+        FileTypeMode = fftmAll;
     GetValue(hKey, FINDOPTIONSITEM_AUTOLOAD_REG, REG_DWORD, &AutoLoad, sizeof(DWORD));
     GetValue(hKey, FINDOPTIONSITEM_NAMED_REG, REG_SZ, NamedText, NamedText.Size());
     GetValue(hKey, FINDOPTIONSITEM_LOOKIN_REG, REG_SZ, LookInText, LookInText.Size());
@@ -1618,7 +1626,10 @@ void SearchDirectory(CPathBuffer& path, char* end, int startPathLen,
 
                     // test the criteria attributes, size, date and time
                     CQuadWord size(file.nFileSizeLow, file.nFileSizeHigh);
-                    if (data->Criteria.Test(file.dwFileAttributes, &size, &file.ftLastWriteTime))
+                    BOOL fileTypeOK = data->FileTypeMode == fftmAll ||
+                                      (data->FileTypeMode == fftmFiles && !isDir) ||
+                                      (data->FileTypeMode == fftmFolders && isDir);
+                    if (fileTypeOK && data->Criteria.Test(file.dwFileAttributes, &size, &file.ftLastWriteTime))
                     {
                         // file name
                         // let the extension be resolved if ext==NULL
@@ -1904,7 +1915,10 @@ void SearchDirectoryW(std::wstring& pathW, size_t endIndex, int startPathLen,
 
                     // test the criteria attributes, size, date and time
                     CQuadWord size(file.nFileSizeLow, file.nFileSizeHigh);
-                    if (data->Criteria.Test(file.dwFileAttributes, &size, &file.ftLastWriteTime))
+                    BOOL fileTypeOK = data->FileTypeMode == fftmAll ||
+                                      (data->FileTypeMode == fftmFiles && !isDir) ||
+                                      (data->FileTypeMode == fftmFolders && isDir);
+                    if (fileTypeOK && data->Criteria.Test(file.dwFileAttributes, &size, &file.ftLastWriteTime))
                     {
                         // file name
                         // let the extension be resolved if ext==NULL
@@ -2103,6 +2117,11 @@ void RefineData(CMaskGroup* masksGroup, CGrepData* data)
 
         // test the criteria
         BOOL ok = TRUE;
+
+        if (ok && data->FileTypeMode == fftmFiles && refineData->IsDir)
+            ok = FALSE;
+        if (ok && data->FileTypeMode == fftmFolders && !refineData->IsDir)
+            ok = FALSE;
 
         // attributes, size, date, time
         if (ok && !data->Criteria.Test(refineData->Attr, &refineData->Size, &refineData->LastWrite))

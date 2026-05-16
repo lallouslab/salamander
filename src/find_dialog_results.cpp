@@ -2844,6 +2844,16 @@ void CFindDialog::Transfer(CTransferInfo& ti)
     }
 
     ti.CheckBox(IDC_FIND_INCLUDE_SUBDIR, Data.SubDirectories);
+    HWND hFileType = GetDlgItem(HWindow, IDC_FIND_FILETYPE);
+    if (ti.Type == ttDataToWindow)
+    {
+        SendMessage(hFileType, CB_SETCURSEL, Data.FileTypeMode, 0);
+    }
+    else
+    {
+        int mode = (int)SendMessage(hFileType, CB_GETCURSEL, 0, 0);
+        Data.FileTypeMode = mode >= fftmAll && mode <= fftmFolders ? mode : fftmAll;
+    }
     HistoryComboBox(HWindow, ti, IDC_FIND_CONTAINING, Data.GrepText, GREP_TEXT_LEN,
                     !Data.RegularExpresions && Data.HexMode, FIND_GREP_HISTORY_SIZE,
                     FindGrepHistory);
@@ -3143,6 +3153,7 @@ void CFindDialog::StartSearch(WORD command)
 
     // advanced search
     memmove(&GrepData.Criteria, &Data.Criteria, sizeof(Data.Criteria));
+    GrepData.FileTypeMode = Data.FileTypeMode;
 
     GrepData.FoundFilesListView = FoundFilesListView;
     GrepData.FoundVisibleCount = 0;
@@ -3296,6 +3307,8 @@ void CFindDialog::EnableControls(BOOL nextIsButton)
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_LOOKIN_BROWSE), FALSE);
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_INCLUDE_SUBDIR), FALSE);
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_INCLUDE_ARCHIVES), FALSE);
+        EnableWindow(GetDlgItem(HWindow, IDC_FIND_FILETYPE_TEXT), FALSE);
+        EnableWindow(GetDlgItem(HWindow, IDC_FIND_FILETYPE), FALSE);
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_GREP), FALSE);
         if (Expanded)
         {
@@ -3342,6 +3355,8 @@ void CFindDialog::EnableControls(BOOL nextIsButton)
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_LOOKIN), TRUE);
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_LOOKIN_BROWSE), TRUE);
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_INCLUDE_SUBDIR), TRUE);
+        EnableWindow(GetDlgItem(HWindow, IDC_FIND_FILETYPE_TEXT), TRUE);
+        EnableWindow(GetDlgItem(HWindow, IDC_FIND_FILETYPE), TRUE);
         EnableWindow(GetDlgItem(HWindow, IDC_FIND_GREP), TRUE);
         if (Expanded)
         {
@@ -4013,6 +4028,11 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         // set the checkbox controlling the visibility of the Content section of the dialog
         CheckDlgButton(HWindow, IDC_FIND_GREP, Configuration.SearchFileContent);
+        HWND hFileType = GetDlgItem(HWindow, IDC_FIND_FILETYPE);
+        SendMessageW(hFileType, CB_ADDSTRING, 0, (LPARAM)LoadStrW(IDS_FIND_TYPE_ALL));
+        SendMessageW(hFileType, CB_ADDSTRING, 0, (LPARAM)LoadStrW(IDS_FIND_TYPE_FILES));
+        SendMessageW(hFileType, CB_ADDSTRING, 0, (LPARAM)LoadStrW(IDS_FIND_TYPE_FOLDERS));
+        SendMessage(hFileType, CB_SETCURSEL, Data.FileTypeMode, 0);
 
         // assign an icon to the window
         HICON findIcon = HANDLES(LoadIcon(ImageResDLL, MAKEINTRESOURCE(8)));
@@ -4107,7 +4127,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         HWND hCombo = GetDlgItem(HWindow, IDC_FIND_LOOKIN);
         EditLine->AttachToWindow(GetWindow(hCombo, GW_CHILD));
 
-        // not supported yet, hide the option
+        // Not supported yet: keep IDC_FIND_INCLUDE_ARCHIVES for code compatibility while IDC_FIND_FILETYPE reuses its layout slot.
         ShowWindow(GetDlgItem(HWindow, IDC_FIND_INCLUDE_ARCHIVES), FALSE);
 
         EnableControls();

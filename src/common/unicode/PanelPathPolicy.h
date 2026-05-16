@@ -311,7 +311,7 @@ inline std::wstring EffectiveItemNameW(const char* nameA, const wchar_t* nameW)
 
 // The wide-twin pair carried by a deferred history item. Plain data, no
 // ownership of plugin FS or icons, so it can be constructed in tests without
-// dragging the salamand.h object graph (CPathHistory / TIndirectArray /
+// dragging the sally.h object graph (CPathHistory / TIndirectArray /
 // CPluginFSInterfaceAbstract) into the test binary.
 //
 // Used by CPathHistory's deferred-flush block (the unlock path that re-adds

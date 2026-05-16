@@ -1045,7 +1045,7 @@ BOOL CData::Import(const char* project, BOOL trlPropOnly, BOOL onlyDlgLayouts)
         else
             SLGSignature.SLTDataChanged(); // Treat importing only SLG properties as if the SLG was edited manually.
         if (!onlyDlgLayouts &&
-            SLGSignature.HelpDirExist == oldData.SLGSignature.HelpDirExist) // Do not copy HelpDir when importing translation properties from salamand.atp into a plug-in.
+            SLGSignature.HelpDirExist == oldData.SLGSignature.HelpDirExist) // Do not copy HelpDir when importing translation properties from sally.atp into a plug-in.
         {
             lstrcpyW(SLGSignature.HelpDir, oldData.SLGSignature.HelpDir);
         }

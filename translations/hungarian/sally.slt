@@ -1,5 +1,5 @@
 ﻿[EXPORTINFO]
-PROJECTNAME,"translator\salamand 4.0\projects\hungarian\salamand.atp"
+PROJECTNAME,"translator\sally 4.0\projects\hungarian\sally.atp"
 TEXTVERSION,"1.0 (x64)"
 VERSION,"1,0,0,183"
 
@@ -2640,7 +2640,7 @@ SLGINCOMPLETE,""
 12114,1,"(nincs)"
 12115,1,"Parancs"
 12116,1,"Gyorsbillentyű"
-12119,1,"Érvénytelen parancssori paraméter.\n\nHasználat:\n  SALAMAND.EXE [-L bal-panel-elérési-útja] [-R jobb-panel-elérési-útja] [-A aktív-panel-elérési-útja] [-C konfigurációs-fájl-használata] [-I ikon-index] [-T fejléc-előtag] [-O csak-egy-alkalom] [-P panel-index]\n\n  [X] az a paraméter, amely elhagyható"
+12119,1,"Érvénytelen parancssori paraméter.\n\nHasználat:\n  SALLY.EXE [-L bal-panel-elérési-útja] [-R jobb-panel-elérési-útja] [-A aktív-panel-elérési-útja] [-C konfigurációs-fájl-használata] [-I ikon-index] [-T fejléc-előtag] [-O csak-egy-alkalom] [-P panel-index]\n\n  [X] az a paraméter, amely elhagyható"
 12120,1,"Fájl nem olvasható: "%s"."
 12121,1,"Fájl nem írható: "%s"."
 12122,1,"A fájl már létezik. Lecseréli?"
@@ -3331,8 +3331,8 @@ SLGINCOMPLETE,""
 13934,1,"Beállítások visszaállítása és alapértelmezése"
 
 [STRINGTABLE 148]
-13945,1,"Ha az Sally minden indulásakor beállításokat akar importálni, exportálja ki a telepítési mappába config.reg néven.  A  -C parancssori paraméterrel (pl. "salamand.exe -C myconfig.reg") beimportálhat egyéb konfigurációs fájlt.\n\nJavasoljuk, hogy adjon hozzá regisztrációs kulcstörlést a kiexportált fájlhoz. Egyéb esetben az importált beállítás egyesül az aktuális regisztrációs adatokkal és összeférhetetlenséget okozhat."
-13946,1,"Ha az Sally minden indulásakor beállításokat akar importálni, exportálja ki a program adatmappájába (vagy telepítési mappájába) config.reg névvel. A  -C parancssori paraméterrel (pl. "salamand.exe -C myconfig.reg") beimportálhat egyéb konfigurációs fájlt.\n\nJavasoljuk, hogy adjon hozzá regisztrációs kulcstörlést a kiexportált fájlhoz. Egyéb esetben az importált beállítás egyesül az aktuális regisztrációs adatokkal és összeférhetetlenséget okozhat."
+13945,1,"Ha az Sally minden indulásakor beállításokat akar importálni, exportálja ki a telepítési mappába config.reg néven.  A  -C parancssori paraméterrel (pl. "sally.exe -C myconfig.reg") beimportálhat egyéb konfigurációs fájlt.\n\nJavasoljuk, hogy adjon hozzá regisztrációs kulcstörlést a kiexportált fájlhoz. Egyéb esetben az importált beállítás egyesül az aktuális regisztrációs adatokkal és összeférhetetlenséget okozhat."
+13946,1,"Ha az Sally minden indulásakor beállításokat akar importálni, exportálja ki a program adatmappájába (vagy telepítési mappájába) config.reg névvel. A  -C parancssori paraméterrel (pl. "sally.exe -C myconfig.reg") beimportálhat egyéb konfigurációs fájlt.\n\nJavasoljuk, hogy adjon hozzá regisztrációs kulcstörlést a kiexportált fájlhoz. Egyéb esetben az importált beállítás egyesül az aktuális regisztrációs adatokkal és összeférhetetlenséget okozhat."
 13947,1,"Regisztrációs kulcstörlés hozzá&adása az exportált fájlhoz"
 13950,1,"A konfigurációs fájl nem olvasható vagy nyitható meg.\n\nFájl: %s\nHiba: %s"
 13951,1,"A konfigurációs fájl túl nagy.\n\nFájl: %s"
@@ -3445,3 +3445,8 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Keres ablak bezárása, kérem várjon..."
+
+[STRINGTABLE 162]
+14205,1,"Mind"
+14206,1,"Fájlok"
+14207,1,"Mappák"

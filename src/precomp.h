@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -83,7 +83,7 @@
 #include "iconlist.h"
 #include "consts.h"
 #include "icncache.h"
-#include "salamand.h"
+#include "sally.h"
 #include "sort.h"
 #include "masks.h"
 #include "str.h"
@@ -95,5 +95,5 @@
 
 #include "texts.rh2"
 #include "lang\lang.rh"
-#include "salamand.rh"
+#include "sally.rh"
 #include "resource.rh2"

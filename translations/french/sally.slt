@@ -1,5 +1,5 @@
 ﻿[EXPORTINFO]
-PROJECTNAME,"translator\salamand 4.0\projects\french\salamand.atp"
+PROJECTNAME,"translator\sally 4.0\projects\french\sally.atp"
 TEXTVERSION,"1.0 (x64)"
 VERSION,"1,0,0,183"
 
@@ -2640,7 +2640,7 @@ SLGINCOMPLETE,""
 12114,1,"(néant)"
 12115,1,"Commande"
 12116,1,"Touche de raccourci"
-12119,1,"Paramètres de commande incorrects.\n\nUsage :\n  SALAMAND.EXE [-L chemin-pour-panneau-gauche] [-R chemin-pour-panneau-droit] [-A chemin-pour-panneau-actif] [-C fichier-de-configuration] [-I index-des-icônes] [-T title-prefix] [-O une-instance-à-la-fois] [-P index-des-panneaux]\n\n  [X] signifie que le paramètre X est optionnel"
+12119,1,"Paramètres de commande incorrects.\n\nUsage :\n  SALLY.EXE [-L chemin-pour-panneau-gauche] [-R chemin-pour-panneau-droit] [-A chemin-pour-panneau-actif] [-C fichier-de-configuration] [-I index-des-icônes] [-T title-prefix] [-O une-instance-à-la-fois] [-P index-des-panneaux]\n\n  [X] signifie que le paramètre X est optionnel"
 12120,1,"Impossible de lire le fichier "%s"."
 12121,1,"Impossible d'écrire le fichier "%s"."
 12122,1,"Ce fichier existe déjà. Le remplacer ?"
@@ -3331,8 +3331,8 @@ SLGINCOMPLETE,""
 13934,1,"RAZ des options par défaut"
 
 [STRINGTABLE 148]
-13945,1,"Si vous voulez relire la configuration lors de chaque démarrage d'Sally, l'exporter vers le épertoire d'installation dans un fichier intitulé config.reg. Pour importer un autre fichier de configuration utiliser le paramètre -C (e.g. "salamand.exe -C myconfig.reg") de la ligne de commande.\n\nIl est recommandé d'effacer la configuration du registre après enregistrement de celle-ci dans un fichier. Autrement, les éléments de la configuration lue seraient ajoutés à ceux déjà présents dans le registre : il pourrait en résulter une configuration incohérente."
-13946,1,"Si vous voulez relire la configuration lors de chaque démarrage d'Sally, l'exporter vers le répertoire d'application data (ou d'installation) dans un fichier intitulé config.reg. Pour importer un autre fichier de configuration utiliser le paramètre -C (e.g. "salamand.exe -C myconfig.reg") de la ligne de commande.\n\nIl est recommandé d'effacer la configuration du registre après enregistrement de celle-ci dans un fichier. Autrement, les éléments de la configuration lue seraient ajoutés à ceux déjà présents dans le registre : il pourrait en résulter une configuration incohérente."
+13945,1,"Si vous voulez relire la configuration lors de chaque démarrage d'Sally, l'exporter vers le épertoire d'installation dans un fichier intitulé config.reg. Pour importer un autre fichier de configuration utiliser le paramètre -C (e.g. "sally.exe -C myconfig.reg") de la ligne de commande.\n\nIl est recommandé d'effacer la configuration du registre après enregistrement de celle-ci dans un fichier. Autrement, les éléments de la configuration lue seraient ajoutés à ceux déjà présents dans le registre : il pourrait en résulter une configuration incohérente."
+13946,1,"Si vous voulez relire la configuration lors de chaque démarrage d'Sally, l'exporter vers le répertoire d'application data (ou d'installation) dans un fichier intitulé config.reg. Pour importer un autre fichier de configuration utiliser le paramètre -C (e.g. "sally.exe -C myconfig.reg") de la ligne de commande.\n\nIl est recommandé d'effacer la configuration du registre après enregistrement de celle-ci dans un fichier. Autrement, les éléments de la configuration lue seraient ajoutés à ceux déjà présents dans le registre : il pourrait en résulter une configuration incohérente."
 13947,1,"&Effacer la configuration du registre après exportation de celle-ci dans un fichier"
 13950,1,"Impossible d'ouvrir ou de lire le fichier de configuration.\n\nFichier : %s\nErreur : %s"
 13951,1,"Fichier de configuration trop grand.\n\nFichier : %s"
@@ -3445,3 +3445,8 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Fermeture de la fenêtre Rechercher, veuillez patienter..."
+
+[STRINGTABLE 162]
+14205,1,"Tous"
+14206,1,"Fichiers"
+14207,1,"Dossiers"

@@ -2100,6 +2100,16 @@ C__Handles::LoadLibrary(LPCTSTR lpLibFileName)
     return ret;
 }
 
+#ifndef UNICODE
+HINSTANCE
+C__Handles::LoadLibraryW(LPCWSTR lpLibFileName)
+{
+    HINSTANCE ret = ::LoadLibraryW(lpLibFileName);
+    CheckCreate(ret != NULL, __htLibrary, __hoLoadLibrary, ret, GetLastError(), TRUE, NULL, NULL, lpLibFileName);
+    return ret;
+}
+#endif // UNICODE
+
 HINSTANCE
 C__Handles::LoadLibraryEx(LPCTSTR lpLibFileName, HANDLE hFile, DWORD dwFlags)
 {

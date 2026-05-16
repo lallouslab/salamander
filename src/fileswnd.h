@@ -485,6 +485,7 @@ private:
     CPathBuffer Path; // path for a ptDisk panel - normal ("c:\path") or UNC ("\\server\share\path")
     std::wstring PathW; // wide source of truth for disk paths; Path is the ANSI compatibility cache
     BOOL SuppressAutoRefresh;     // TRUE if the user canceled directory listing during reading and chose temporary auto-refresh suppression
+    BOOL HeadlessPanel;           // TRUE for test/headless panels without a CMainWindow parent
 
     CPanelType PanelType; // type of panel (disk, archive, plugin FS)
 
@@ -535,7 +536,7 @@ public:
     CIconCache* NewFSIconCache;             // if not NULL, new empty object for IconCache (not here, in the descendant)
 
 public:
-    CFilesWindowAncestor();
+    CFilesWindowAncestor(BOOL headlessPanel);
     ~CFilesWindowAncestor();
 
     // NULL -> Path; echo && err != ERROR_SUCCESS -> only report the error

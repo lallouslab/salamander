@@ -344,6 +344,9 @@ STRINGTABLE
  IDS_FIND_INIT_HINT, "Specify find options and click Find Now."
  IDS_FIND_DUPS_NO_OPTION, "At least one option must be selected."
  IDS_FIND_DUPS_RESULTS, "Determining file duplicates..."
+ IDS_FIND_TYPE_ALL, "All"
+ IDS_FIND_TYPE_FILES, "Files"
+ IDS_FIND_TYPE_FOLDERS, "Folders"
 
  IDS_SEARCHFORCOLUMN1, "Mask"
  IDS_SEARCHFORCOLUMN2, "Path"

@@ -13,11 +13,11 @@ Language=0x409 English (United States)
 Title=Quake PAK Help
 
 [WINDOWS]
-$global_ssdefault=,"sally.chm::\salamand.hhc","pak.hhk","hh\pak\introduction_intro.htm","hh\pak\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
+$global_ssdefault=,"sally.chm::\sally.hhc","pak.hhk","hh\pak\introduction_intro.htm","hh\pak\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
 
 [FILES]
-hh\salamander_help.css
-hh\salamander_help_shared.css
+hh\sally_help.css
+hh\sally_help_shared.css
 
 [MAP]
 #include "..\pak.rh"

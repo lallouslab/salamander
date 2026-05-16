@@ -6,8 +6,8 @@
 
 // The Salamander project contains four groups of modules
 //
-// 1) module precomp.cpp which builds salamand.pch (/Yc"precomp.h")
-// 2) modules using salamand.pch (/Yu"precomp.h")
+// 1) module precomp.cpp which builds sally.pch (/Yc"precomp.h")
+// 2) modules using sally.pch (/Yu"precomp.h")
 // 3) shelext.c which does not use precompiled headers
 // 4) common files and tasklist.cpp have their own automatically generated
 //    WINDOWS.PCH (/YX"windows.h" /Fp"$(OutDir)\WINDOWS.PCH")

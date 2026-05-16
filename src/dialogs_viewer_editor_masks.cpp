@@ -18,6 +18,39 @@
 #include "gui.h"
 #include "shellib.h"
 
+static BOOL BuildModuleRelativePathW(HINSTANCE module, const wchar_t* relativePath, std::wstring& path)
+{
+    DWORD capacity = MAX_PATH;
+    for (;;)
+    {
+        std::wstring modulePath;
+        modulePath.resize(capacity);
+
+        SetLastError(ERROR_SUCCESS);
+        DWORD len = GetModuleFileNameW(module, &modulePath[0], capacity);
+        if (len == 0)
+            return FALSE;
+
+        DWORD err = GetLastError();
+        // Some Windows versions report truncation as capacity - 1 plus ERROR_INSUFFICIENT_BUFFER.
+        BOOL truncated = len >= capacity || (len == capacity - 1 && err == ERROR_INSUFFICIENT_BUFFER);
+        if (!truncated)
+        {
+            modulePath.resize(len);
+            size_t slash = modulePath.find_last_of(L"\\/");
+            if (slash == std::wstring::npos)
+                return FALSE;
+            path.assign(modulePath, 0, slash + 1);
+            path.append(relativePath);
+            return TRUE;
+        }
+
+        if (capacity >= SAL_MAX_LONG_PATH)
+            return FALSE;
+        capacity = capacity > SAL_MAX_LONG_PATH / 2 ? SAL_MAX_LONG_PATH : capacity * 2;
+    }
+}
+
 //****************************************************************************
 //
 // CViewerMasksItem
@@ -745,10 +778,10 @@ int CLanguageSelectorDialog::Execute()
     {
         // load the template from the best available SLG
         int index = GetPreferredLanguageIndex(SLGName);
-        CPathBuffer path; // Heap-allocated for long path support
-        GetModuleFileName(HInstance, path, path.Size());
-        sprintf(strrchr(path, '\\') + 1, "lang\\%s", Items[index].FileName);
-        hTmpLanguage = HANDLES(LoadLibrary(path));
+        std::wstring pathW;
+        std::wstring slgNameW = AnsiToWide(Items[index].FileName);
+        if (BuildModuleRelativePathW(HInstance, (L"lang\\" + slgNameW).c_str(), pathW))
+            hTmpLanguage = HANDLES(LoadLibraryW(pathW.c_str()));
         if (hTmpLanguage != NULL)
             Modul = hTmpLanguage;
     }
@@ -863,16 +896,19 @@ void CLanguageSelectorDialog::Transfer(CTransferInfo& ti)
 BOOL CLanguageSelectorDialog::Initialize(const char* slgSearchPath, HINSTANCE pluginDLL)
 {
     CPathBuffer path; // Heap-allocated for long path support
+    std::wstring pathW;
+    BOOL useWideSearchPath = FALSE;
     if (slgSearchPath == NULL)
     {
-        GetModuleFileName(NULL, path, path.Size());
-        lstrcpy(strrchr(path, '\\') + 1, "lang\\*.slg");
+        if (!BuildModuleRelativePathW(NULL, L"lang\\*.slg", pathW))
+            return FALSE;
+        useWideSearchPath = TRUE;
     }
     else
         lstrcpyn(path, slgSearchPath, path.Size());
 
     WIN32_FIND_DATAW file;
-    HANDLE hFind = SalFindFirstFileHW(path, &file);
+    HANDLE hFind = useWideSearchPath ? SalFindFirstFileWideH(pathW.c_str(), &file) : SalFindFirstFileHW(path, &file);
     if (hFind != INVALID_HANDLE_VALUE)
     {
         do

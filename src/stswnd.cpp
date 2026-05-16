@@ -2245,7 +2245,11 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                             if (UseWideText && FilesWindow->Is(ptDisk))
                             {
                                 std::wstring pathW = TextW.substr(0, HotItem->Chars);
-                                FilesWindow->ChangePathToDiskW(FilesWindow->HWindow, pathW.c_str(), -1, NULL, NULL, FALSE);
+                                if (FilesWindow->ChangePathToDiskW(FilesWindow->HWindow, pathW.c_str(), -1, NULL, NULL, FALSE))
+                                {
+                                    FilesWindow->DirectoryLine->InvalidateAndUpdate(TRUE);
+                                    UpdateWindow(MainWindow->HWindow);
+                                }
                             }
                             else
                             {
@@ -2257,7 +2261,11 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                                 if (FilesWindow->Is(ptPluginFS) && FilesWindow->GetPluginFS()->NotEmpty())
                                     FilesWindow->GetPluginFS()->CompleteDirectoryLineHotPath(path, path.Size());
 
-                                FilesWindow->ChangeDir(path, -1, NULL, 2 /* as back/forward in history*/, NULL, FALSE);
+                                if (FilesWindow->ChangeDir(path, -1, NULL, 2 /* as back/forward in history*/, NULL, FALSE))
+                                {
+                                    FilesWindow->DirectoryLine->InvalidateAndUpdate(TRUE);
+                                    UpdateWindow(MainWindow->HWindow);
+                                }
                             }
                         }
                         else

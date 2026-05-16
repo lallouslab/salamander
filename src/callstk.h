@@ -61,7 +61,7 @@ protected:
     BOOL FirstCallstack;             // are we the first instance?
 
     const char* PluginDLLName; // plug-in DLL currently running in the thread
-                               // (NULL if it is salamand.exe)
+                               // (NULL if it is sally.exe)
     int PluginDLLNameUses;     // the Pop() operation count at which PluginDLLName should be set to NULL
                                // (nesting level)
 

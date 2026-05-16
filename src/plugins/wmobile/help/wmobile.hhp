@@ -13,11 +13,11 @@ Language=0x409 English (United States)
 Title=Windows Mobile Help
 
 [WINDOWS]
-$global_ssdefault=,"sally.chm::\salamand.hhc","wmobile.hhk","hh\wmobile\introduction_intro.htm","hh\wmobile\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
+$global_ssdefault=,"sally.chm::\sally.hhc","wmobile.hhk","hh\wmobile\introduction_intro.htm","hh\wmobile\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
 
 [FILES]
-hh\salamander_help.css
-hh\salamander_help_shared.css
+hh\sally_help.css
+hh\sally_help_shared.css
 
 [ALIAS]
 IDD_ATTRIBUTES=hh\wmobile\dlgboxes_chattr.htm

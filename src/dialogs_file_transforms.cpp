@@ -561,7 +561,12 @@ CCopyMoveDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         SetWindowText(HWindow, Title);
         HWND hSubject = GetDlgItem(HWindow, IDS_SUBJECT);
         if (Subject->TruncateText(hSubject))
-            SetWindowText(hSubject, Subject->Get());
+        {
+            if (Subject->IsWide())
+                SetWindowTextW(hSubject, Subject->GetW());
+            else
+                SetWindowText(hSubject, Subject->Get());
+        }
 
         INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
 

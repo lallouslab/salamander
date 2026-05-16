@@ -590,6 +590,10 @@ public:
 
     HINSTANCE LoadLibrary(LPCTSTR lpLibFileName);
 
+#ifndef UNICODE
+    HINSTANCE LoadLibraryW(LPCWSTR lpLibFileName);
+#endif // UNICODE
+
     HINSTANCE LoadLibraryEx(LPCTSTR lpLibFileName, HANDLE hFile, DWORD dwFlags);
 
     BOOL FreeLibrary(HMODULE hLibModule);

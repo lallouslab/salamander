@@ -906,7 +906,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                             cmdLine[cmdLen - 2] = 0;
                         }
                         // better not swallow backslashes so that we don't destroy some OLE paths
-                        //RemoveRedundantBackslahes(cmdLine); // ShellExecuteEx dislikes multiple backslashes, "$(SalDir)\salamand.exe"
+                        //RemoveRedundantBackslahes(cmdLine); // ShellExecuteEx dislikes multiple backslashes, "$(SalDir)\sally.exe"
 
                         CShellExecuteWnd shellExecuteWnd;
                         SHELLEXECUTEINFO sei;

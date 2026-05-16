@@ -13,11 +13,11 @@ Language=0x409 English (United States)
 Title=7-ZIP Help
 
 [WINDOWS]
-$global_ssdefault=,"sally.chm::\salamand.hhc","7zip.hhk","hh\7zip\introduction_intro.htm","hh\7zip\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
+$global_ssdefault=,"sally.chm::\sally.hhc","7zip.hhk","hh\7zip\introduction_intro.htm","hh\7zip\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
 
 [FILES]
-hh\salamander_help.css
-hh\salamander_help_shared.css
+hh\sally_help.css
+hh\sally_help_shared.css
 
 [ALIAS]
 IDH_TESTARCHIVE=hh\7zip\using_testingarc.htm

@@ -13,12 +13,12 @@ Language=0x409 English (United States)
 Title=Automation Help
 
 [WINDOWS]
-$global_ssdefault=,"sally.chm::\salamand.hhc","automation.hhk","hh\automation\introduction_intro.htm","hh\automation\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
+$global_ssdefault=,"sally.chm::\sally.hhc","automation.hhk","hh\automation\introduction_intro.htm","hh\automation\introduction_intro.htm",,,,"Web Help",0x3520,,0x180e,,,,,,,,0
 
 
 [FILES]
-hh\salamander_help.css
-hh\salamander_help_shared.css
+hh\sally_help.css
+hh\sally_help_shared.css
 hh\automation\appendix_engines.htm
 hh\automation\appendix_samples.htm
 hh\automation\dlgboxes_config.htm

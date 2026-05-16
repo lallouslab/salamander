@@ -1,5 +1,5 @@
 ﻿[EXPORTINFO]
-PROJECTNAME,"translator\salamand 4.0\projects\czech\salamand.atp"
+PROJECTNAME,"translator\sally 4.0\projects\czech\sally.atp"
 TEXTVERSION,"1.0 (x86)"
 VERSION,"1,0,0,183"
 
@@ -2640,7 +2640,7 @@ SLGINCOMPLETE,""
 12114,1,"(není)"
 12115,1,"Příkaz"
 12116,1,"Klávesová zkratka"
-12119,1,"Chybné parametry příkazové řádky.\n\nPoužití:\n  SALAMAND.EXE [-L cesta-levého-panelu] [-R cesta-pravého-panelu] [-A cesta-aktivního-panelu] [-C použít-soubor-s-konfigurací] [-I index-ikony] [-T předpony-titulku] [-O jen-jedna-instance] [-P index-panelu]\n\n  [X] znamená, že parametr X je volitelný"
+12119,1,"Chybné parametry příkazové řádky.\n\nPoužití:\n  SALLY.EXE [-L cesta-levého-panelu] [-R cesta-pravého-panelu] [-A cesta-aktivního-panelu] [-C použít-soubor-s-konfigurací] [-I index-ikony] [-T předpony-titulku] [-O jen-jedna-instance] [-P index-panelu]\n\n  [X] znamená, že parametr X je volitelný"
 12120,1,"Nelze číst ze souboru "%s"."
 12121,1,"Nelze zapsat do souboru "%s"."
 12122,1,"Soubor již existuje. Chcete soubor nahradit?"
@@ -3331,8 +3331,8 @@ SLGINCOMPLETE,""
 13934,1,"Obnovit výchozí možnosti"
 
 [STRINGTABLE 148]
-13945,1,"Pokud chcete importovat konfiguraci při každém spuštění programu Sally, exportujte do instalačního adresáře soubor s názvem config.reg. Pro importování jiného souboru s konfigurací použijte v příkazovém řádku parametr -C (např. "salamand.exe -C myconfig.reg").\n\nDoporučujeme přidat vyčištění klíče registru s konfigurací přímo do exportovaného souboru. Jinak bude importovaná konfigurace sloučena s aktuální v registru, což může mít za následek nekonzistentní konfiguraci."
-13946,1,"Pokud chcete importovat konfiguraci při každém spuštění Sally, exportujte do datového adresáře aplikace (nebo instalačního adresáře) soubor s názvem config.reg. Pro importování jiného souboru s konfigurací použijte v příkazovém řádku parametr -C (např. "salamand.exe -C myconfig.reg").\n\nDoporučujeme přidat vyčištění klíče registru s konfigurací přímo do exportovaného souboru. Jinak bude importovaná konfigurace sloučena s aktuální v registru, což může mít za následek nekonzistentní konfiguraci."
+13945,1,"Pokud chcete importovat konfiguraci při každém spuštění programu Sally, exportujte do instalačního adresáře soubor s názvem config.reg. Pro importování jiného souboru s konfigurací použijte v příkazovém řádku parametr -C (např. "sally.exe -C myconfig.reg").\n\nDoporučujeme přidat vyčištění klíče registru s konfigurací přímo do exportovaného souboru. Jinak bude importovaná konfigurace sloučena s aktuální v registru, což může mít za následek nekonzistentní konfiguraci."
+13946,1,"Pokud chcete importovat konfiguraci při každém spuštění Sally, exportujte do datového adresáře aplikace (nebo instalačního adresáře) soubor s názvem config.reg. Pro importování jiného souboru s konfigurací použijte v příkazovém řádku parametr -C (např. "sally.exe -C myconfig.reg").\n\nDoporučujeme přidat vyčištění klíče registru s konfigurací přímo do exportovaného souboru. Jinak bude importovaná konfigurace sloučena s aktuální v registru, což může mít za následek nekonzistentní konfiguraci."
 13947,1,"&Přidat vyčištění klíče registru s konfigurací přímo do exportovaného souboru"
 13950,1,"Nelze otevřít nebo číst soubor s konfigurací.\n\nSoubor: %s\nChyba: %s"
 13951,1,"Soubor s konfigurací je příliš velký.\n\nSoubor: %s"
@@ -3445,3 +3445,8 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Zavírání oken Vyhledat, čekejte prosím..."
+
+[STRINGTABLE 162]
+14205,1,"Vše"
+14206,1,"Soubory"
+14207,1,"Adresáře"
