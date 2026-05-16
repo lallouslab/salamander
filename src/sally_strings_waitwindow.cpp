@@ -3169,6 +3169,12 @@ void ShowFileError(HWND hParent, int errTextID, const char* fileName, DWORD err)
     gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
 }
 
+static void ShowFileErrorW(HWND hParent, int errTextID, const wchar_t* fileName, DWORD err)
+{
+    std::wstring msg = FormatStrW(LoadStrW(errTextID), fileName, GetErrorTextW(err));
+    gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
+}
+
 BOOL ExportConfiguration(HWND hParent, const char* fileName, BOOL clearKeyBeforeImport)
 {
     if (SALAMANDER_ROOT_REG == NULL)
@@ -3208,19 +3214,19 @@ BOOL ExportConfiguration(HWND hParent, const char* fileName, BOOL clearKeyBefore
 
 // ****************************************************************************
 
-BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExists,
-                         BOOL autoImportConfig, BOOL* importCfgFromFileWasSkipped)
+BOOL ImportConfigurationW(HWND hParent, const wchar_t* fileName, BOOL ignoreIfNotExists,
+                          BOOL autoImportConfig, BOOL* importCfgFromFileWasSkipped)
 {
-    TRACE_I("ImportConfiguration(): begin");
+    TRACE_I("ImportConfigurationW(): begin");
     DWORD err = 0;
-    HANDLE file = HANDLES_Q(CreateFileW(AnsiToWide(fileName).c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
-                                       OPEN_EXISTING, 0, 0));
+    HANDLE file = HANDLES_Q(CreateFileW(fileName, GENERIC_READ, FILE_SHARE_READ, NULL,
+                                        OPEN_EXISTING, 0, 0));
     if (file == INVALID_HANDLE_VALUE)
     {
         err = GetLastError();
         if (!ignoreIfNotExists || err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND)
-            ShowFileError(hParent, IDS_IMPORTCFG_OPENERR, fileName, err);
-        TRACE_I("ImportConfiguration(): end");
+            ShowFileErrorW(hParent, IDS_IMPORTCFG_OPENERR, fileName, err);
+        TRACE_I("ImportConfigurationW(): end");
         return FALSE;
     }
 
@@ -3228,7 +3234,7 @@ BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExi
     {
         HANDLES(CloseHandle(file));
         *importCfgFromFileWasSkipped = TRUE;
-        TRACE_I("ImportConfiguration(): end");
+        TRACE_I("ImportConfigurationW(): end");
         return FALSE;
     }
 
@@ -3247,7 +3253,7 @@ BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExi
                 DWORD bytesRead;
                 if (!ReadFile(file, buf, (DWORD)size.Value, &bytesRead, NULL))
                 {
-                    ShowFileError(hParent, IDS_IMPORTCFG_OPENERR, fileName, GetLastError());
+                    ShowFileErrorW(hParent, IDS_IMPORTCFG_OPENERR, fileName, GetLastError());
                     free(buf);
                     buf = NULL;
                 }
@@ -3256,16 +3262,16 @@ BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExi
                     if ((DWORD)size.Value > bytesRead)
                     {
                         size.Set(bytesRead, 0);
-                        TRACE_E("ImportConfiguration(): reading only " << bytesRead << " bytes from configuration file (" << fileName << ")");
+                        TRACE_E("ImportConfigurationW(): reading only " << bytesRead << " bytes from configuration file (" << WideToAnsi(fileName) << ")");
                     }
                 }
             }
         }
         else
-            ShowFileError(hParent, IDS_IMPORTCFG_TOOBIG, fileName, 0 /* not used */);
+            ShowFileErrorW(hParent, IDS_IMPORTCFG_TOOBIG, fileName, 0 /* not used */);
     }
     else
-        ShowFileError(hParent, IDS_IMPORTCFG_OPENERR, fileName, GetLastError());
+        ShowFileErrorW(hParent, IDS_IMPORTCFG_OPENERR, fileName, GetLastError());
 
     HANDLES(CloseHandle(file));
 
@@ -3284,9 +3290,9 @@ BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExi
         // first try to parse it into memory; if it contains format errors we will not shove it into the registry at all
         CSalamanderRegistryExAbstract* memReg = REG_MemRegistryFactory();
         LPTSTR bufMem = _tcsdup(buf); // the Parse call changes the buffer, so we must keep the original for the next Parse
-        TRACE_I("ImportConfiguration(): Parse to memory: begin");
+        TRACE_I("ImportConfigurationW(): Parse to memory: begin");
         eRPE_ERROR regerr = bufMem != NULL ? Parse(bufMem, memReg, TRUE) : RPE_OUT_OF_MEMORY; // dirty hack: when deleting the configuration key, we do not remove .hidden keys and values (because of the trial version + checkver)
-        TRACE_I("ImportConfiguration(): Parse to memory: end");
+        TRACE_I("ImportConfigurationW(): Parse to memory: end");
         free(bufMem);
         BOOL verIsOK = RPE_OK == regerr; // verify whether the file even contains our configuration version
         if (verIsOK)
@@ -3296,7 +3302,7 @@ BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExi
                 memReg->CloseKey(key);
             else
             {
-                std::wstring msg = FormatStrW(LoadStrW(IDS_IMPORTCFG_NOTOURVER), AnsiToWide(fileName).c_str());
+                std::wstring msg = FormatStrW(LoadStrW(IDS_IMPORTCFG_NOTOURVER), fileName);
                 if (gPrompter->AskYesNo(LoadStrW(IDS_QUESTION), msg.c_str()).type != PromptResult::kYes)
                 {
                     verIsOK = FALSE;
@@ -3309,9 +3315,9 @@ BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExi
             CSalamanderRegistryExAbstract* sysReg = REG_SysRegistryFactory();
 
             LoadSaveToRegistryMutex.Enter();
-            TRACE_I("ImportConfiguration(): Parse to registry: begin");
+            TRACE_I("ImportConfigurationW(): Parse to registry: begin");
             regerr = Parse(buf, sysReg, TRUE); // dirty hack: when deleting the configuration key, we do not remove .hidden keys and values (because of the trial version + checkver)
-            TRACE_I("ImportConfiguration(): Parse to registry: end");
+            TRACE_I("ImportConfigurationW(): Parse to registry: end");
             if (RPE_OK == regerr)
                 ret = TRUE; // success
             LoadSaveToRegistryMutex.Leave();
@@ -3348,13 +3354,20 @@ BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExi
                 // case RPE_VALUE_GET:
                 // case RPE_VALUE_SET: errTextID = IDS_IMPORTCFG_REGERR; break;   // other error (memory + registry write failure)
             }
-            ShowFileError(hParent, errTextID, fileName, 0 /* not used */);
+            ShowFileErrorW(hParent, errTextID, fileName, 0 /* not used */);
         }
 
         free(buf);
     }
-    TRACE_I("ImportConfiguration(): end");
+    TRACE_I("ImportConfigurationW(): end");
     return ret;
+}
+
+BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExists,
+                         BOOL autoImportConfig, BOOL* importCfgFromFileWasSkipped)
+{
+    return ImportConfigurationW(hParent, AnsiToWide(fileName).c_str(), ignoreIfNotExists,
+                                autoImportConfig, importCfgFromFileWasSkipped);
 }
 
 //****************************************************************************

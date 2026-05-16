@@ -5,6 +5,9 @@
 #include "precomp.h"
 
 #include "salmoncl.h"
+#include "common/unicode/helpers.h"
+
+#define MAX_ENV_PATH 32766
 
 CSalmonSharedMemory* SalmonSharedMemory = NULL;
 HANDLE SalmonFileMapping = NULL;
@@ -147,74 +150,85 @@ void GetStartupSLGName(char* slgName, DWORD slgNameMax)
 
 BOOL SalmonStartProcess(const char* fileMappingName) //Configuration.LoadedSLGName
 {
-    STARTUPINFO si;
+    STARTUPINFOW si;
     PROCESS_INFORMATION pi;
-    CPathBuffer cmd;
-    CPathBuffer rtlDir;    // Heap-allocated for long path support
-    CPathBuffer oldCurDir; // Heap-allocated for long path support
-    CPathBuffer slgName;   // Heap-allocated for long path support
-#define MAX_ENV_PATH 32766
-    char envPATH[MAX_ENV_PATH];
-    BOOL ret;
+    CPathBuffer slgName; // Heap-allocated for long path support (registry value, ASCII filename)
 
     HSalmonProcess = NULL;
 
-    ret = FALSE;
-    GetModuleFileName(NULL, cmd, cmd.Size());
-    *(strrchr(cmd, '\\') + 1) = 0;
-    lstrcat(cmd, "utils\\salmon.exe");
-    AddDoubleQuotesIfNeeded(cmd, cmd.Size()); // CreateProcess wants the name with spaces in quotes (otherwise it tries various variants, see help)
-    GetStartupSLGName(slgName, slgName.Size());
-    wsprintf(cmd + strlen(cmd), " \"%s\" \"%s\"", fileMappingName, slgName.Get()); // slgName can be an empty string if configuration does not exist
-    memset(&si, 0, sizeof(STARTUPINFO));
-    si.cb = sizeof(STARTUPINFO);
-    si.wShowWindow = SW_SHOWNORMAL;
-    GetModuleFileName(NULL, rtlDir, rtlDir.Size());
-    *(strrchr(rtlDir, '\\') + 1) = 0;
-    GetCurrentDirectory(oldCurDir.Size(), oldCurDir);
+    // issue #63: wide install paths so non-ASCII directories (Cyrillic, etc.)
+    // don't get mangled by ANSI GetModuleFileName -> CreateProcess.
+    std::wstring exePath(SAL_MAX_LONG_PATH, L'\0');
+    DWORD moduleLen = GetModuleFileNameW(NULL, &exePath[0], SAL_MAX_LONG_PATH);
+    if (moduleLen == 0 || moduleLen >= SAL_MAX_LONG_PATH)
+        return FALSE;
+    exePath.resize(moduleLen);
+    size_t slash = exePath.find_last_of(L'\\');
+    if (slash == std::wstring::npos)
+        return FALSE;
+    std::wstring rtlDirW(exePath, 0, slash + 1);
+    std::wstring salmonExeW = rtlDirW + L"utils\\salmon.exe";
 
-    // another attempt to solve the problem before we split SALMON.EXE into EXE+DLL
-    // we try to extend the PATH env variable for the child process (SALMON.EXE) with the path to RTL
-    if (GetEnvironmentVariable("PATH", envPATH, MAX_ENV_PATH) != 0)
+    GetStartupSLGName(slgName, slgName.Size());
+
+    std::wstring cmdW;
+    cmdW.reserve(salmonExeW.size() + lstrlenA(fileMappingName) + 64);
+    cmdW.append(L"\"").append(salmonExeW).append(L"\"");
+    cmdW.append(L" \"").append(AnsiToWide(fileMappingName)).append(L"\"");
+    cmdW.append(L" \"").append(AnsiToWide(slgName.Get())).append(L"\"");
+
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    si.wShowWindow = SW_SHOWNORMAL;
+
+    std::wstring oldCurDirW(SAL_MAX_LONG_PATH, L'\0');
+    DWORD oldLen = GetCurrentDirectoryW(SAL_MAX_LONG_PATH, &oldCurDirW[0]);
+    if (oldLen == 0 || oldLen >= SAL_MAX_LONG_PATH)
+        oldCurDirW.clear();
+    else
+        oldCurDirW.resize(oldLen);
+
+    // another attempt to solve the problem before we split SALMON.EXE into EXE+DLL:
+    // extend PATH for the child so it can see the install-dir-local RTL.
+    std::wstring envPATHW(MAX_ENV_PATH, L'\0');
+    DWORD envLen = GetEnvironmentVariableW(L"PATH", &envPATHW[0], MAX_ENV_PATH);
+    BOOL envExtended = FALSE;
+    if (envLen != 0 && envLen < MAX_ENV_PATH)
     {
-        if (lstrlen(envPATH) + 2 + lstrlen(rtlDir) < MAX_ENV_PATH)
+        envPATHW.resize(envLen);
+        if (envPATHW.size() + 1 + rtlDirW.size() < MAX_ENV_PATH)
         {
-            char newPATH[MAX_ENV_PATH];
-            lstrcpy(newPATH, envPATH);
-            lstrcat(newPATH, ";");
-            lstrcat(newPATH, rtlDir);
-            SetEnvironmentVariable("PATH", newPATH);
+            std::wstring newPATH = envPATHW;
+            newPATH.append(L";").append(rtlDirW);
+            SetEnvironmentVariableW(L"PATH", newPATH.c_str());
+            envExtended = TRUE;
         }
-        else
-            envPATH[0] = 0;
     }
     else
-        envPATH[0] = 0;
-
-    // originally we only passed rtlDir to CreateProcess, but in some UAC combinations salmon.exe could not be started,
-    // because it couldn't see RTL: https://forum.altap.cz/viewtopic.php?f=2&t=6957&p=26548#p26548
-    // let's also try setting the current directory
-    // if that doesn't work, we can try passing NULL instead of rtlDir to CreateProcess, then according to MSDN the current directory should be inherited from the launching process
-    SetCurrentDirectory(rtlDir);
-    // EDIT 4/2014: did several tests with Support@bluesware.ch and chr.mue@gmail.com see emails
-    // I see two possible solutions: try to extend PATH env variable for child process to SALRTL.
-    // Second option is to split SALMON.EXE into EXE without RTL and DLL with implicitly linked RTL. Before loading SALMON.DLL
-    // it would be possible to set current dir from running SALMON.EXE and load SALMON.DLL runtime, which should hopefully work.
-    // ----
-    // On my machine each of the three path settings works on its own (ENV PATH, SetCurrentDirectory and rtlDir parameter in CreateProcess call
-    if (NOHANDLES(CreateProcess(NULL, cmd, NULL, NULL, TRUE, //bInheritHandles==TRUE, needs to pass event handles!
-                                CREATE_DEFAULT_ERROR_MODE | HIGH_PRIORITY_CLASS, NULL,
-                                rtlDir, &si, &pi)))
     {
-        HSalmonProcess = pi.hProcess;                           // we need salmon process handle to be able to detect that it's alive
-        AllowSetForegroundWindow(SalGetProcessId(pi.hProcess)); // let salmon come to foreground above us
-        //NOHANDLES(CloseHandle(pi.hProcess)); // let them leak, they would be the last released handles before process end anyway
-        //NOHANDLES(CloseHandle(pi.hThread));
+        envPATHW.clear();
+    }
+
+    SetCurrentDirectoryW(rtlDirW.c_str());
+
+    // CreateProcessW takes a writable command-line buffer.
+    std::vector<wchar_t> cmdBuf(cmdW.begin(), cmdW.end());
+    cmdBuf.push_back(L'\0');
+
+    BOOL ret = FALSE;
+    if (NOHANDLES(CreateProcessW(NULL, cmdBuf.data(), NULL, NULL, TRUE,
+                                 CREATE_DEFAULT_ERROR_MODE | HIGH_PRIORITY_CLASS, NULL,
+                                 rtlDirW.c_str(), &si, &pi)))
+    {
+        HSalmonProcess = pi.hProcess;
+        AllowSetForegroundWindow(SalGetProcessId(pi.hProcess));
         ret = TRUE;
     }
-    SetCurrentDirectory(oldCurDir);
-    if (envPATH[0] != 0)
-        SetEnvironmentVariable("PATH", envPATH);
+
+    if (!oldCurDirW.empty())
+        SetCurrentDirectoryW(oldCurDirW.c_str());
+    if (envExtended)
+        SetEnvironmentVariableW(L"PATH", envPATHW.c_str());
     return ret;
 }
 

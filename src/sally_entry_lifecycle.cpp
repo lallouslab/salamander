@@ -41,6 +41,30 @@
 #include "toolbar.h"
 #include "darkmode.h"
 
+static BOOL FileExistsWLocal(const wchar_t* path)
+{
+    DWORD attr = GetFileAttributesW(path);
+    if (attr == INVALID_FILE_ATTRIBUTES)
+    {
+        DWORD err = GetLastError();
+        return err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND;
+    }
+    return (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+static BOOL GetOurPathInRoamingAPPDATAW(std::wstring& path)
+{
+    wchar_t buf[MAX_PATH];
+    buf[0] = L'\0';
+    if (SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
+        return FALSE;
+    path.assign(buf);
+    if (!path.empty() && path.back() != L'\\')
+        path.push_back(L'\\');
+    path.append(L"Sally");
+    return TRUE;
+}
+
 static BOOL BuildModuleRelativePathW(HINSTANCE module, const wchar_t* relativePath, std::wstring& path)
 {
     DWORD capacity = MAX_PATH;
@@ -198,7 +222,8 @@ BOOL RunningAsAdmin = FALSE;
 DWORD CCVerMajor = 0;
 DWORD CCVerMinor = 0;
 
-CPathBuffer ConfigurationName; // Heap-allocated for long path support
+CPathBuffer ConfigurationName; // Heap-allocated for long path support (ANSI mirror)
+std::wstring ConfigurationNameW; // Authoritative wide path (supports non-ASCII install dirs)
 BOOL ConfigurationNameIgnoreIfNotExists = TRUE;
 
 int StopRefresh = 0;
@@ -3637,15 +3662,48 @@ BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams
     int p = 20; // number of elements in argv array
 
     CPathBuffer curDir; // Heap-allocated for long path support
-    GetModuleFileName(HInstance, ConfigurationName.Get(), ConfigurationName.Size());
-    *(strrchr(ConfigurationName.Get(), '\\') + 1) = 0;
-    const char* configReg = "config.reg";
-    strcat(ConfigurationName.Get(), configReg);
-    if (!FileExists(ConfigurationName) && GetOurPathInRoamingAPPDATA(curDir) &&
-        SalPathAppend(curDir, configReg, curDir.Size()) && FileExists(curDir))
-    { // if config.reg file doesn't exist next to .exe, we also look for it in APPDATA
-        lstrcpyn(ConfigurationName, curDir, ConfigurationName.Size());
-        ConfigurationNameIgnoreIfNotExists = FALSE;
+    // Build the install-relative config.reg path in Unicode so non-ASCII install
+    // directories (issue #63) survive intact. The ANSI ConfigurationName mirrors
+    // the wide path lossy-encoded for legacy readers; ConfigurationNameW is the
+    // authoritative form used by ImportConfigurationW.
+    ConfigurationNameW.clear();
+    if (!BuildModuleRelativePathW(HInstance, L"config.reg", ConfigurationNameW))
+        ConfigurationNameW.clear();
+    if (!ConfigurationNameW.empty() && !FileExistsWLocal(ConfigurationNameW.c_str()))
+    {
+        std::wstring appdataW;
+        if (GetOurPathInRoamingAPPDATAW(appdataW))
+        {
+            if (!appdataW.empty() && appdataW.back() != L'\\')
+                appdataW.push_back(L'\\');
+            appdataW.append(L"config.reg");
+            if (FileExistsWLocal(appdataW.c_str()))
+            {
+                ConfigurationNameW = appdataW;
+                ConfigurationNameIgnoreIfNotExists = FALSE;
+            }
+        }
+    }
+    if (!ConfigurationNameW.empty())
+    {
+        std::string ansi = WideToAnsi(ConfigurationNameW);
+        lstrcpyn(ConfigurationName.Get(), ansi.c_str(), ConfigurationName.Size());
+    }
+    else
+    {
+        // Wide build failed; fall back to legacy ANSI lookup so behavior on ASCII
+        // install paths is preserved.
+        GetModuleFileName(HInstance, ConfigurationName.Get(), ConfigurationName.Size());
+        *(strrchr(ConfigurationName.Get(), '\\') + 1) = 0;
+        const char* configReg = "config.reg";
+        strcat(ConfigurationName.Get(), configReg);
+        if (!FileExists(ConfigurationName) && GetOurPathInRoamingAPPDATA(curDir) &&
+            SalPathAppend(curDir, configReg, curDir.Size()) && FileExists(curDir))
+        {
+            lstrcpyn(ConfigurationName, curDir, ConfigurationName.Size());
+            ConfigurationNameIgnoreIfNotExists = FALSE;
+        }
+        ConfigurationNameW = AnsiToWide(ConfigurationName.Get());
     }
     *OpenReadmeInNotepad = 0;
     if (GetCmdLine(buf, _countof(buf), argv, p, cmdLine))
@@ -3714,6 +3772,7 @@ BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams
                             lstrcpyn(ConfigurationName, curDir, ConfigurationName.Size());
                         }
                     }
+                    ConfigurationNameW = AnsiToWide(ConfigurationName.Get());
                     ConfigurationNameIgnoreIfNotExists = FALSE;
                     i++;
                     continue;
@@ -4206,8 +4265,8 @@ FIND_NEW_SLG_FILE:
 
     // if file exists, it will be imported to registry
     BOOL importCfgFromFileWasSkipped = FALSE;
-    ImportConfiguration(NULL, ConfigurationName, ConfigurationNameIgnoreIfNotExists, autoImportConfig,
-                        &importCfgFromFileWasSkipped);
+    ImportConfigurationW(NULL, ConfigurationNameW.c_str(), ConfigurationNameIgnoreIfNotExists, autoImportConfig,
+                         &importCfgFromFileWasSkipped);
 
     // handle transition from old config to new
 

@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "registry_names.h"
 
 // current configuration version (see main_window_config_persistence.cpp for description)
@@ -1775,7 +1777,8 @@ extern char RTCErrorDescription[RTC_ERROR_DESCRIPTION_SIZE];
 extern CPathBuffer BugReportPath; // Heap-allocated for long path support
 
 // file name that will be imported (if exists) to registry
-extern CPathBuffer ConfigurationName;
+extern CPathBuffer ConfigurationName;     // ANSI mirror (lossy for non-ASCII install paths)
+extern std::wstring ConfigurationNameW;   // authoritative wide path (use this for file I/O)
 extern BOOL ConfigurationNameIgnoreIfNotExists;
 
 extern HWND PluginProgressDialog; // if plug-in opens progress dialog, its HWND is here, otherwise NULL
@@ -1860,6 +1863,8 @@ BOOL SaveEditors(HKEY hKey, const char* name, CEditorMasks* editorMasks);
 BOOL ExportConfiguration(HWND hParent, const char* fileName, BOOL clearKeyBeforeImport);
 BOOL ImportConfiguration(HWND hParent, const char* fileName, BOOL ignoreIfNotExists,
                          BOOL autoImportConfig, BOOL* importCfgFromFileWasSkipped);
+BOOL ImportConfigurationW(HWND hParent, const wchar_t* fileName, BOOL ignoreIfNotExists,
+                          BOOL autoImportConfig, BOOL* importCfgFromFileWasSkipped);
 
 class CHighlightMasks;
 void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL processColors, BOOL processMasks);
