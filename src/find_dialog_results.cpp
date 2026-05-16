@@ -2441,13 +2441,19 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath, const wchar_
 
     // if any option has AutoLoad set, load it now
     int i;
+    BOOL autoLoaded = FALSE;
     for (i = 0; i < FindOptions.GetCount(); i++)
         if (FindOptions.At(i)->AutoLoad)
         {
             Data = *FindOptions.At(i);
             Data.AutoLoad = FALSE;
+            autoLoaded = TRUE;
             break;
         }
+    // No AutoLoad profile applied: restore last-used global Type filter so the
+    // user's Folders/Files choice persists across dialog reopens and Sally runs.
+    if (!autoLoaded)
+        Data.FileTypeMode = Configuration.FindFileTypeMode;
 
     // data for controls
     //
@@ -2853,6 +2859,7 @@ void CFindDialog::Transfer(CTransferInfo& ti)
     {
         int mode = (int)SendMessage(hFileType, CB_GETCURSEL, 0, 0);
         Data.FileTypeMode = mode >= fftmAll && mode <= fftmFolders ? mode : fftmAll;
+        Configuration.FindFileTypeMode = Data.FileTypeMode;
     }
     HistoryComboBox(HWindow, ti, IDC_FIND_CONTAINING, Data.GrepText, GREP_TEXT_LEN,
                     !Data.RegularExpresions && Data.HexMode, FIND_GREP_HISTORY_SIZE,

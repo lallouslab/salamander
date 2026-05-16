@@ -277,6 +277,8 @@ CConfiguration::CConfiguration()
     CloseShell = FALSE;
     ShowGrepErrors = FALSE; // other search tools (FAR/WinCmd/PowerDesk/Windows Find) do not show errors
     FindFullRowSelect = FALSE;
+    FindFileTypeMode = 0; // fftmAll
+
     MinBeepWhenDone = TRUE;
     UseRecycleBin = 1;
     FileNameFormat = 4; // as on the disk

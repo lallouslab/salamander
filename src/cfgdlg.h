@@ -183,6 +183,7 @@ struct CConfiguration
         CloseShell,             // close the shell after launching the command line
         ShowGrepErrors,         // should the Find Files dialog show error messages?
         FindFullRowSelect,      // enable full row select in the Find dialog
+        FindFileTypeMode,       // last-used Type filter (All/Files/Folders) in the Find dialog
         MinBeepWhenDone,        // beep when processing ends in an inactive window
         ClearReadOnly,          // remove the read-only flag during CD-ROM operations
         PrimaryContextMenu,     // is a context menu displayed on the right mouse button?
