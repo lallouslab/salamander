@@ -93,7 +93,8 @@ protected:
     CSecurityIconState Security;
     std::string SecurityTooltip; // if empty, it will not be shown
 
-    int Allocated;
+    int Allocated;      // Text allocation, including terminator
+    int AlpDXAllocated; // AlpDX allocation, in int elements
     int* AlpDX; // array of lengths (from 0th to Xth character in the string)
     BOOL Left;
 

@@ -4204,10 +4204,8 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         // we must not override it with the panel's wide form. This mirrors
         // the gating the constructor used to do before LookInTextW was made
         // a strictly-IsEnabled-coupled cache.
-        if (InitialLookInSeed.ansi != Data.LookInText.Get())
-            return TRUE;
         const sally::find::LookInSeed& seed = InitialLookInSeed;
-        if (sally::find::ShouldOverrideEditWithWide(seed))
+        if (sally::find::ShouldApplyInitialLookInWideOverride(seed, Data.LookInText.Get()))
         {
             HWND hLegacyCombo = GetDlgItem(HWindow, IDC_FIND_LOOKIN);
             HWND hFocus = GetFocus();

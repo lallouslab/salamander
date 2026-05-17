@@ -66,6 +66,18 @@ inline bool ShouldOverrideEditWithWide(const LookInSeed& seed)
     return backToWide != seed.wide;
 }
 
+// Returns true when the constructor-time panel seed is still the active
+// "Look in" value and should be promoted to the Unicode combo.
+//
+// AutoLoad and saved Find presets can replace Data.LookInText before the
+// delayed override runs. In that case the preset is the user's explicit
+// search root, so the panel seed must stay out of the way.
+inline bool ShouldApplyInitialLookInWideOverride(const LookInSeed& seed, const char* currentAnsiLookIn)
+{
+    const char* current = currentAnsiLookIn != nullptr ? currentAnsiLookIn : "";
+    return seed.ansi == current && ShouldOverrideEditWithWide(seed);
+}
+
 inline void TrimLookInPathW(std::wstring& path)
 {
     size_t first = 0;

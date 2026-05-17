@@ -71,6 +71,7 @@ CStatusWindow::CStatusWindow(CFilesWindow* filesWindow, int border, CObjectOrigi
     UseWideText = FALSE;
     AlpDX = NULL;
     Allocated = 0;
+    AlpDXAllocated = 0;
     PathLen = -1;
     TextLen = 0;
     Border = border;
@@ -162,10 +163,9 @@ BOOL CStatusWindow::SetSubTexts(DWORD* subTexts, DWORD subTextsCount)
 
 BOOL CStatusWindow::SetText(const char* txt, int pathLen)
 {
-    CALL_STACK_MESSAGE3("CStatusWindow::SetText(%s, %d)", txt, pathLen);
-    UseWideText = FALSE;
-    TextW.clear();
-    if (Text != NULL && strcmp(Text, txt) == 0)
+    const char* newTextValue = txt != NULL ? txt : "";
+    CALL_STACK_MESSAGE3("CStatusWindow::SetText(%s, %d)", newTextValue, pathLen);
+    if (!UseWideText && Text != NULL && strcmp(Text, newTextValue) == 0)
     {
         PathLen = pathLen;
         return TRUE;
@@ -174,21 +174,32 @@ BOOL CStatusWindow::SetText(const char* txt, int pathLen)
     HotItem = NULL;
     LastHotItem = NULL;
 
-    int l = (int)strlen(txt) + 1;
+    int l = (int)strlen(newTextValue) + 1;
     if (Allocated < l)
     {
         char* newText = (char*)realloc(Text, l);
-        int* newAlpDX = (int*)realloc(AlpDX, l * sizeof(int));
-        if (newText == NULL || newAlpDX == NULL)
+        if (newText == NULL)
         {
             TRACE_E(LOW_MEMORY);
             return FALSE;
         }
         Text = newText;
-        AlpDX = newAlpDX;
         Allocated = l;
     }
-    memmove(Text, txt, l);
+    if (AlpDXAllocated < l)
+    {
+        int* newAlpDX = (int*)realloc(AlpDX, l * sizeof(int));
+        if (newAlpDX == NULL)
+        {
+            TRACE_E(LOW_MEMORY);
+            return FALSE;
+        }
+        AlpDX = newAlpDX;
+        AlpDXAllocated = l;
+    }
+    UseWideText = FALSE;
+    TextW.clear();
+    memmove(Text, newTextValue, l);
     PathLen = pathLen;
     TextLen = l - 1;
 
@@ -220,14 +231,7 @@ BOOL CStatusWindow::SetTextW(const wchar_t* txt, int pathLen)
         return TRUE;
     }
 
-    HotTrackItemsMeasured = FALSE;
-    HotItem = NULL;
-    LastHotItem = NULL;
-
-    TextW = newText;
-    UseWideText = TRUE;
-
-    std::string fallbackText = WideToAnsi(TextW);
+    std::string fallbackText = WideToAnsi(newText);
     int l = (int)fallbackText.size() + 1;
     if (Allocated < l)
     {
@@ -240,16 +244,27 @@ BOOL CStatusWindow::SetTextW(const wchar_t* txt, int pathLen)
         Text = newAnsiText;
         Allocated = l;
     }
-    memmove(Text, fallbackText.c_str(), l);
 
-    int requiredDx = max(1, (int)TextW.size() + 1);
-    int* newAlpDX = (int*)realloc(AlpDX, requiredDx * sizeof(int));
-    if (newAlpDX == NULL)
+    int requiredDx = max(1, (int)newText.size() + 1);
+    if (AlpDXAllocated < requiredDx)
     {
-        TRACE_E(LOW_MEMORY);
-        return FALSE;
+        int* newAlpDX = (int*)realloc(AlpDX, requiredDx * sizeof(int));
+        if (newAlpDX == NULL)
+        {
+            TRACE_E(LOW_MEMORY);
+            return FALSE;
+        }
+        AlpDX = newAlpDX;
+        AlpDXAllocated = requiredDx;
     }
-    AlpDX = newAlpDX;
+
+    HotTrackItemsMeasured = FALSE;
+    HotItem = NULL;
+    LastHotItem = NULL;
+
+    TextW = newText;
+    UseWideText = TRUE;
+    memmove(Text, fallbackText.c_str(), l);
 
     PathLen = pathLen;
     TextLen = (int)TextW.size();
