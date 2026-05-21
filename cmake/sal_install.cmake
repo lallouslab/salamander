@@ -87,21 +87,24 @@ endfunction()
 function(sal_generate_plugins_ver)
   sal_get_all_plugins(PLUGINS)
 
-  # Start with version 1
-  set(PLUGINS_VER_CONTENT "1\n")
+  # Start with version 2. Version 1 was generated into the install root with
+  # root-relative paths, while the loader reads plugins/plugins.ver and treats
+  # entries as relative to the plugins directory.
+  set(PLUGINS_VER_CONTENT "2\n")
 
   foreach(PLUGIN_TARGET ${PLUGINS})
     get_target_property(PLUGIN_DIR_NAME ${PLUGIN_TARGET} SAL_PLUGIN_NAME)
     get_target_property(PLUGIN_OUTPUT_NAME ${PLUGIN_TARGET} OUTPUT_NAME)
-    # Use forward slashes in the file, Salamander handles both
-    string(APPEND PLUGINS_VER_CONTENT "1:plugins/${PLUGIN_DIR_NAME}/${PLUGIN_OUTPUT_NAME}.dll\n")
+    # Use paths relative to the plugins directory, matching the DLL names saved
+    # by the directory scanner so existing plugins are not installed twice.
+    string(APPEND PLUGINS_VER_CONTENT "2:${PLUGIN_DIR_NAME}\\${PLUGIN_OUTPUT_NAME}.dll\n")
   endforeach()
 
   # Write to build directory
   file(WRITE "${CMAKE_BINARY_DIR}/plugins.ver" "${PLUGINS_VER_CONTENT}")
 
-  # Install to root
-  install(FILES "${CMAKE_BINARY_DIR}/plugins.ver" DESTINATION .)
+  # Install where the loader searches for it.
+  install(FILES "${CMAKE_BINARY_DIR}/plugins.ver" DESTINATION plugins)
 endfunction()
 
 # Install resource files (toolbars, convert tables, etc.)
