@@ -66,16 +66,46 @@ inline bool ShouldOverrideEditWithWide(const LookInSeed& seed)
     return backToWide != seed.wide;
 }
 
+inline std::string EscapeLookInPathSeparators(const std::string& text)
+{
+    std::string escaped;
+    escaped.reserve(text.length());
+    for (char ch : text)
+    {
+        if (ch == ';')
+            escaped.push_back(';');
+        escaped.push_back(ch);
+    }
+    return escaped;
+}
+
+inline bool HasInitialLookInSeed(const LookInSeed& seed)
+{
+    return !seed.ansi.empty() || !seed.wide.empty();
+}
+
+inline std::string BuildInitialLookInText(const LookInSeed& seed, const char* savedLookIn)
+{
+    if (HasInitialLookInSeed(seed))
+        return EscapeLookInPathSeparators(seed.ansi.empty() ? WideToAnsi(seed.wide) : seed.ansi);
+    return savedLookIn != nullptr ? savedLookIn : "";
+}
+
+inline int NormalizeFindFileTypeMode(int mode)
+{
+    return mode >= 0 && mode <= 2 ? mode : 0;
+}
+
 // Returns true when the constructor-time panel seed is still the active
 // "Look in" value and should be promoted to the Unicode combo.
 //
-// AutoLoad and saved Find presets can replace Data.LookInText before the
-// delayed override runs. In that case the preset is the user's explicit
-// search root, so the panel seed must stay out of the way.
+// The ANSI mirror may contain escaped semicolons because the Find dialog's
+// Look-in field uses ';' as a path separator.
 inline bool ShouldApplyInitialLookInWideOverride(const LookInSeed& seed, const char* currentAnsiLookIn)
 {
     const char* current = currentAnsiLookIn != nullptr ? currentAnsiLookIn : "";
-    return seed.ansi == current && ShouldOverrideEditWithWide(seed);
+    return (seed.ansi == current || EscapeLookInPathSeparators(seed.ansi) == current) &&
+           ShouldOverrideEditWithWide(seed);
 }
 
 inline void TrimLookInPathW(std::wstring& path)

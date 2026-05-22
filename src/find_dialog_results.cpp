@@ -35,12 +35,12 @@ static const UINT_PTR FIND_COMBO_SKIN_SUBCLASS_ID = 1;
 static const UINT_PTR FIND_COMBO_EDIT_SKIN_SUBCLASS_ID = 2;
 static const UINT_PTR FIND_ADVANCED_TEXT_SKIN_SUBCLASS_ID = 3;
 static const UINT_PTR FIND_STATUS_SKIN_SUBCLASS_ID = 1;
-static const UINT WM_USER_FIND_DELAYED_THEME = WM_APP + 413;
+static const UINT WM_USER_FIND_DELAYED_THEME = WM_APP + 500;
 // Replace the "Look in" combo with a Unicode combo after the framework's
 // TransferData(ttDataToWindow) runs. The legacy Transfer path is ANSI and may
 // already have populated the combo with lossy text such as "zz??"; by posting
 // this work we can copy that history and then make the wide seed visible.
-static const UINT WM_USER_FIND_LOOKIN_W_OVERRIDE = WM_APP + 414;
+static const UINT WM_USER_FIND_LOOKIN_W_OVERRIDE = WM_APP + 501;
 static const COLORREF FIND_DARK_LINE = RGB(55, 55, 58);
 static const COLORREF FIND_DARK_FRAME = RGB(62, 62, 66);
 static const COLORREF FIND_DARK_BUTTON = RGB(52, 52, 56);
@@ -1926,6 +1926,25 @@ BOOL GetNextItemFromFind(int index, char* path, char* name, void* param)
     return FALSE;
 }
 
+static void EnsureFindLookInText(HWND hCombo, const sally::find::LookInSeed& seed, CPathBuffer& textA)
+{
+    if (hCombo == NULL)
+        return;
+
+    std::string initialLookIn = sally::find::BuildInitialLookInText(seed, textA.Get());
+    if (initialLookIn.empty())
+        return;
+
+    CPathBuffer current;
+    current[0] = 0;
+    SendMessageA(hCombo, WM_GETTEXT, (WPARAM)current.Size(), (LPARAM)current.Get());
+    if (current[0] != 0)
+        return;
+
+    SendMessageA(hCombo, WM_SETTEXT, 0, (LPARAM)initialLookIn.c_str());
+    lstrcpyn(textA, initialLookIn.c_str(), textA.Size());
+}
+
 LRESULT
 CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -2441,19 +2460,21 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath, const wchar_
 
     // if any option has AutoLoad set, load it now
     int i;
-    BOOL autoLoaded = FALSE;
     for (i = 0; i < FindOptions.GetCount(); i++)
         if (FindOptions.At(i)->AutoLoad)
         {
             Data = *FindOptions.At(i);
             Data.AutoLoad = FALSE;
-            autoLoaded = TRUE;
             break;
         }
-    // No AutoLoad profile applied: restore last-used global Type filter so the
-    // user's Folders/Files choice persists across dialog reopens and Sally runs.
-    if (!autoLoaded)
-        Data.FileTypeMode = Configuration.FindFileTypeMode;
+    // The Type filter is a dialog-level preference in Sally. AutoLoad profiles
+    // may carry an older value, but new dialogs should reopen with the last
+    // live choice the user made.
+    Data.FileTypeMode = sally::find::NormalizeFindFileTypeMode(Configuration.FindFileTypeMode);
+    if (Configuration.FindFileTypeMode != Data.FileTypeMode)
+    {
+        Configuration.FindFileTypeMode = Data.FileTypeMode;
+    }
 
     // data for controls
     //
@@ -2466,23 +2487,9 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath, const wchar_
     InitialLookInSeed = sally::find::BuildLookInSeed(initPath, initPathW);
     if (Data.NamedText[0] == 0)
         lstrcpy(Data.NamedText, "*.*");
-    if (Data.LookInText[0] == 0)
-    {
-        const char* s = initPath;
-        char* d = Data.LookInText;
-        char* end = Data.LookInText + Data.LookInText.Size() - 1; // -1 leaves room for the null terminator at the end of the string
-        while (*s != 0 && d < end)
-        {
-            if (*s == ';')
-            {
-                *d++ = ';';
-                if (d >= end)
-                    break;
-            }
-            *d++ = *s++;
-        }
-        *d++ = 0;
-    }
+
+    std::string initialLookIn = sally::find::BuildInitialLookInText(InitialLookInSeed, Data.LookInText.Get());
+    lstrcpyn(Data.LookInText, initialLookIn.c_str(), Data.LookInText.Size());
 }
 
 CFindDialog::~CFindDialog()
@@ -2858,7 +2865,7 @@ void CFindDialog::Transfer(CTransferInfo& ti)
     else
     {
         int mode = (int)SendMessage(hFileType, CB_GETCURSEL, 0, 0);
-        Data.FileTypeMode = mode >= fftmAll && mode <= fftmFolders ? mode : fftmAll;
+        Data.FileTypeMode = sally::find::NormalizeFindFileTypeMode(mode);
         Configuration.FindFileTypeMode = Data.FileTypeMode;
     }
     HistoryComboBox(HWindow, ti, IDC_FIND_CONTAINING, Data.GrepText, GREP_TEXT_LEN,
@@ -4155,6 +4162,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 SearchingText.SetDirty(FALSE); // already being redrawn - Get will be called; better to refresh twice than not at all
                                                //          SearchingText.Get(buf, buf.Size());
                 SendMessage(HStatusBar, SB_SETTEXT, 1 | SBT_NOBORDERS | SBT_OWNERDRAW, 0);
+                RedrawWindow(HStatusBar, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             }
             if (SearchingText2.GetDirty())
             {
@@ -4164,6 +4172,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 SearchingText2.Get(buf, buf.Size());
                 int pos = buf[0]; // extract the value directly instead of the string
                 SendMessage(HProgressBar, PBM_SETPOS, pos, 0);
+                RedrawWindow(HStatusBar, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             }
             return 0;
         }
@@ -4199,15 +4208,14 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         // paths skip the replacement; the dialog renders exactly as before.
         //
         // Only fire when the current ANSI text still matches the seed we
-        // captured at construction. If AutoLoad or LoadControls swapped in a
-        // different preset, the user implicitly chose that preset's text and
-        // we must not override it with the panel's wide form. This mirrors
-        // the gating the constructor used to do before LookInTextW was made
-        // a strictly-IsEnabled-coupled cache.
+        // captured at construction. The constructor intentionally seeds new
+        // Find windows from the active panel, while explicit later preset
+        // loads can still replace the field through LoadControls.
         const sally::find::LookInSeed& seed = InitialLookInSeed;
+        HWND hLegacyCombo = GetDlgItem(HWindow, IDC_FIND_LOOKIN);
+        EnsureFindLookInText(hLegacyCombo, seed, Data.LookInText);
         if (sally::find::ShouldApplyInitialLookInWideOverride(seed, Data.LookInText.Get()))
         {
-            HWND hLegacyCombo = GetDlgItem(HWindow, IDC_FIND_LOOKIN);
             HWND hFocus = GetFocus();
             BOOL focusWasLookIn = IsFindLookInFocus(hFocus, hLegacyCombo);
             if (LookInUnicodeInput.EnableForCombo(HWindow, IDC_FIND_LOOKIN, seed.wide,
