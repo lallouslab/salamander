@@ -146,6 +146,21 @@ MENU_TEMPLATE_ITEM MouseDropMenu2[] =
 // DoCopyMove
 //
 
+static std::wstring BuildDropTargetPathW(CFilesWindow* panel, const char* targetDir)
+{
+    if (targetDir == NULL)
+        return std::wstring();
+
+    if (panel != NULL && panel->Is(ptDisk) && sally::unicode::HasWidePathW(panel->GetPathW()))
+    {
+        std::wstring mapped = sally::unicode::MapRelatedAnsiPathToWidePath(targetDir, panel->GetPath(), panel->GetPathW());
+        if (!mapped.empty())
+            return mapped;
+    }
+
+    return AnsiToWide(targetDir);
+}
+
 BOOL DoCopyMove(BOOL copy, char* targetDir, CCopyMoveData* data, void* param)
 {
     CFilesWindow* panel = (CFilesWindow*)param;
@@ -155,14 +170,7 @@ BOOL DoCopyMove(BOOL copy, char* targetDir, CCopyMoveData* data, void* param)
     {
         tmp->Copy = copy;
         strcpy(tmp->TargetPath, targetDir);
-        if (panel != NULL && panel->Is(ptDisk) && sally::unicode::HasWidePathW(panel->GetPathW()))
-        {
-            tmp->TargetPathW = sally::unicode::MapRelatedAnsiPathToWidePath(targetDir, panel->GetPath(), panel->GetPathW());
-            if (tmp->TargetPathW.empty())
-                tmp->TargetPathW = AnsiToWide(targetDir);
-        }
-        else
-            tmp->TargetPathW = AnsiToWide(targetDir);
+        tmp->TargetPathW = BuildDropTargetPathW(panel, targetDir);
         tmp->Data = data;
         PostMessage(panel->HWindow, WM_USER_DROPCOPYMOVE, (WPARAM)tmp, 0);
         return TRUE;

@@ -66,6 +66,133 @@ HWND LastDriveSelectErrDlgHWnd = NULL;            // "drive not ready" dialog wi
 
 DWORD WINAPI ThreadCheckPathF(void* param);
 
+struct CWideCheckPathData
+{
+    explicit CWideCheckPathData(const wchar_t* path)
+        : Path(path != NULL ? path : L"")
+    {
+    }
+
+    std::wstring Path;
+    BOOL Valid = FALSE;
+    DWORD LastError = ERROR_SUCCESS;
+    LONG RefCount = 2; // caller + worker thread
+};
+
+static void ReleaseWideCheckPathData(CWideCheckPathData* data)
+{
+    if (data != NULL && InterlockedDecrement(&data->RefCount) == 0)
+        delete data;
+}
+
+static void CheckWidePathAttributes(const std::wstring& path, BOOL& valid, DWORD& lastError)
+{
+    valid = (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES);
+    lastError = valid ? ERROR_SUCCESS : GetLastError();
+    if (!valid && lastError == ERROR_INVALID_PARAMETER)
+        lastError = ERROR_NOT_READY;
+
+    // Match the fixed-disk ACCESS_DENIED workaround from the ANSI check path.
+    if (!valid && lastError == ERROR_ACCESS_DENIED &&
+        path.length() >= 2 && path[1] == L':' &&
+        ((path[0] >= L'a' && path[0] <= L'z') || (path[0] >= L'A' && path[0] <= L'Z')))
+    {
+        wchar_t root[4] = {path[0], L':', L'\\', L'\0'};
+        if (GetDriveTypeW(root) == DRIVE_FIXED)
+        {
+            std::wstring probe = path;
+            if (!probe.empty() && probe.back() != L'\\' && probe.back() != L'/')
+                probe += L'\\';
+            probe += L"*";
+
+            WIN32_FIND_DATAW data;
+            HANDLE find = FindFirstFileW(probe.c_str(), &data);
+            if (find != INVALID_HANDLE_VALUE)
+            {
+                valid = TRUE;
+                lastError = ERROR_SUCCESS;
+                HANDLES(FindClose(find));
+            }
+        }
+    }
+}
+
+static DWORD WINAPI WideCheckPathThreadF(void* param)
+{
+    CWideCheckPathData* data = (CWideCheckPathData*)param;
+    SetThreadNameInVCAndTrace("CheckPathW");
+    CheckWidePathAttributes(data->Path, data->Valid, data->LastError);
+    ReleaseWideCheckPathData(data);
+    return 0;
+}
+
+static DWORD RunWideCheckPathWorker(const wchar_t* path)
+{
+    CWideCheckPathData* data = new CWideCheckPathData(path);
+    if (data == NULL)
+    {
+        BOOL valid;
+        DWORD lastError;
+        CheckWidePathAttributes(path != NULL ? std::wstring(path) : std::wstring(), valid, lastError);
+        return valid ? ERROR_SUCCESS : lastError;
+    }
+
+    DWORD threadID;
+    HANDLE thread = HANDLES(CreateThread(NULL, 0, WideCheckPathThreadF, data, 0, &threadID));
+    if (thread == NULL)
+    {
+        DWORD lastError = ERROR_SUCCESS;
+        BOOL valid = FALSE;
+        CheckWidePathAttributes(data->Path, valid, lastError);
+        ReleaseWideCheckPathData(data); // worker reference
+        ReleaseWideCheckPathData(data); // caller reference
+        return valid ? ERROR_SUCCESS : lastError;
+    }
+
+    DWORD exit = STILL_ACTIVE;
+    GetAsyncKeyState(VK_ESCAPE);
+    WaitForSingleObject(thread, 200);
+    if (!GetExitCodeThread(thread, &exit))
+        exit = STILL_ACTIVE;
+
+    if (exit == STILL_ACTIVE)
+    {
+        CPathBuffer waitText;
+        std::string displayPath = WideToAnsi(path != NULL ? path : L"");
+        sprintf(waitText, LoadStr(IDS_CHECKINGPATHESC), displayPath.c_str());
+        CreateSafeWaitWindow(waitText, NULL, 4800 + 200, TRUE, NULL);
+
+        while (exit == STILL_ACTIVE)
+        {
+            if (UserWantsToCancelSafeWaitWindow())
+            {
+                DestroySafeWaitWindow();
+                HANDLES(CloseHandle(thread));
+                ReleaseWideCheckPathData(data);
+
+                MSG msg;
+                while (PeekMessage(&msg, NULL, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE))
+                    ;
+
+                std::wstring infoMsg = FormatStrW(LoadStrW(IDS_TERMINATEDBYUSER), path != NULL ? path : L"");
+                gPrompter->ShowInfo(LoadStrW(IDS_INFOTITLE), infoMsg.c_str());
+                return ERROR_USER_TERMINATED;
+            }
+
+            WaitForSingleObject(thread, 200);
+            if (!GetExitCodeThread(thread, &exit))
+                exit = STILL_ACTIVE;
+        }
+
+        DestroySafeWaitWindow();
+    }
+
+    DWORD result = data->Valid ? ERROR_SUCCESS : data->LastError;
+    HANDLES(CloseHandle(thread));
+    ReleaseWideCheckPathData(data);
+    return result;
+}
+
 CRITICAL_SECTION OpenHtmlHelpCS; // critical section for OpenHtmlHelp()
 
 // non-blocking reading of volume-name from CD drive:
@@ -599,14 +726,8 @@ DWORD SalCheckPathW(BOOL echo, const wchar_t* path, DWORD err, BOOL postRefresh,
         }
         else
         {
-            DWORD attrs = GetFileAttributesW(path);
-            valid = attrs != INVALID_FILE_ATTRIBUTES;
-            if (!valid)
-            {
-                lastError = GetLastError();
-                if (lastError == ERROR_INVALID_PARAMETER)
-                    lastError = ERROR_NOT_READY;
-            }
+            lastError = RunWideCheckPathWorker(path);
+            valid = lastError == ERROR_SUCCESS;
         }
     }
     else

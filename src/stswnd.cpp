@@ -1977,9 +1977,27 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 {
                     CPathBuffer buffer; // Heap-allocated for long path support
                     int hotChars = HotTrackItems[index].Chars;
-                    if (hotChars + 1 > buffer.Size())
-                        hotChars = buffer.Size() - 1;
-                    lstrcpyn(buffer, Text + HotTrackItems[index].Offset, hotChars + 1);
+                    BOOL useWideDragText = UseWideText && FilesWindow->Is(ptDisk);
+                    std::wstring bufferW;
+                    if (useWideDragText)
+                    {
+                        int hotOffset = HotTrackItems[index].Offset;
+                        if (hotOffset >= 0 && hotOffset < (int)TextW.length())
+                        {
+                            if (hotOffset + hotChars > (int)TextW.length())
+                                hotChars = (int)TextW.length() - hotOffset;
+                            bufferW = TextW.substr(hotOffset, hotChars);
+                        }
+                        std::string bufferA = WideToAnsi(bufferW);
+                        lstrcpyn(buffer, bufferA.c_str(), buffer.Size());
+                        hotChars = (int)strlen(buffer);
+                    }
+                    else
+                    {
+                        if (hotChars + 1 > buffer.Size())
+                            hotChars = buffer.Size() - 1;
+                        lstrcpyn(buffer, Text + HotTrackItems[index].Offset, hotChars + 1);
+                    }
                     // for Directory Line with plugin FS, allow plugin to make final path adjustments (adding ']' for VMS paths in FTP)
                     if ((Border & blTop) && FilesWindow->Is(ptPluginFS) && FilesWindow->GetPluginFS()->NotEmpty())
                     {
@@ -1995,18 +2013,22 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     LButtonDown = FALSE;
                     RButtonDown = FALSE;
 
-                    HGLOBAL h = NOHANDLES(GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, hotChars + 1));
+                    SIZE_T dataSize = useWideDragText ? (bufferW.length() + 1) * sizeof(wchar_t) : (SIZE_T)hotChars + 1;
+                    HGLOBAL h = NOHANDLES(GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, dataSize));
                     if (h != NULL)
                     {
-                        char* s = (char*)HANDLES(GlobalLock(h));
+                        void* s = HANDLES(GlobalLock(h));
                         if (s != NULL)
                         {
-                            memcpy(s, buffer, hotChars + 1);
+                            if (useWideDragText)
+                                memcpy(s, bufferW.c_str(), dataSize);
+                            else
+                                memcpy(s, buffer, dataSize);
                             HANDLES(GlobalUnlock(h));
                         }
 
                         CImpIDropSource* dropSource = new CImpIDropSource(FALSE);
-                        IDataObject* dataObject = new CTextDataObject(h);
+                        IDataObject* dataObject = new CTextDataObject(h, useWideDragText);
                         if (IDropTargetPtr != NULL)
                             ((CTextDropTarget*)IDropTargetPtr)->SetForbiddenDataObject(dataObject);
                         if (dataObject != NULL && dropSource != NULL)
@@ -2260,7 +2282,7 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                             if (UseWideText && FilesWindow->Is(ptDisk))
                             {
                                 std::wstring pathW = TextW.substr(0, HotItem->Chars);
-                                if (FilesWindow->ChangePathToDiskW(FilesWindow->HWindow, pathW.c_str(), -1, NULL, NULL, FALSE))
+                                if (FilesWindow->ChangePathToDiskW(FilesWindow->HWindow, pathW.c_str(), -1, NULL, NULL, TRUE))
                                 {
                                     FilesWindow->DirectoryLine->InvalidateAndUpdate(TRUE);
                                     UpdateWindow(MainWindow->HWindow);

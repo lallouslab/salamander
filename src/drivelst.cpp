@@ -863,18 +863,19 @@ BOOL CheckAndConnectUNCNetworkPath(HWND parent, const char* UNCPath, BOOL& pathI
 
     CPathBuffer root;
     char* s = root + GetRootPath(root, UNCPath);
-    strcpy(s, "*.*");
+    *(s - 1) = 0; // trim the trailing backslash at the end of the root path
 
-    WIN32_FIND_DATAW data;
-    HANDLE h;
-    if ((h = SalFindFirstFileHW(root, &data)) != INVALID_HANDLE_VALUE)
+    DWORD err = SalCheckPath(FALSE, root, ERROR_SUCCESS, TRUE, parent);
+    if (err == ERROR_SUCCESS)
     { // UNC root path is accessible, we will not do anything
-        HANDLES(FindClose(h));
     }
     else // UNC root of the path is not listable
     {
-        *(s - 1) = 0; // we will trim the backslash at the end of the root path
-        DWORD err = GetLastError();
+        if (err == ERROR_USER_TERMINATED)
+        {
+            pathInvalid = TRUE;
+            return FALSE;
+        }
         BOOL trySharepoint = err == ERROR_BAD_NET_NAME; // try to call shell when error 67 occurs, so that it can make the path accessible
         if (!donotReconnect &&
             (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)) // on XP, this error is returned if the user does not have access to the server or the share does not exist on the server, to distinguish these two errors, we call WNetAddConnection3
@@ -884,7 +885,12 @@ BOOL CheckAndConnectUNCNetworkPath(HWND parent, const char* UNCPath, BOOL& pathI
             ns.lpLocalName = NULL;
             ns.lpRemoteName = root;
             ns.lpProvider = NULL;
-            if (!NonBlockingWNetAddConnection3(err, &ns, NULL, NULL, 0, NULL, NULL, NULL))
+            HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
+            CreateSafeWaitWindow(LoadStr(IDS_TRYINGRECONNECTESC), NULL, 3000, TRUE, NULL);
+            BOOL connected = NonBlockingWNetAddConnection3(err, &ns, NULL, NULL, 0, NULL, NULL, NULL);
+            DestroySafeWaitWindow();
+            SetCursor(oldCur);
+            if (!connected)
                 err = ERROR_PATH_NOT_FOUND; // ESC
         }
 

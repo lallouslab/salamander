@@ -679,7 +679,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     SalPathAddBackslash(targetPath, targetPath.Size());
     std::wstring targetPathWide = (targetDirW != NULL && targetDirW[0] != L'\0')
                                       ? std::wstring(targetDirW)
-                                      : (Is(ptDisk) ? std::wstring(GetPathW()) : AnsiToWide(targetPath));
+                                      : AnsiToWide(targetPath);
     if (!targetPathWide.empty() && targetPathWide[targetPathWide.length() - 1] != L'\\')
         targetPathWide += L'\\';
     BOOL targetIsFAT32 /*, targetSupEFS*/;
