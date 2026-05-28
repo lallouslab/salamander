@@ -1,7 +1,7 @@
 ﻿[EXPORTINFO]
 PROJECTNAME,"translator\sally 4.0\projects\french\sally.atp"
 TEXTVERSION,"1.0 (x64)"
-VERSION,"1,0,0,183"
+VERSION,"1,0,0,188"
 
 [TRANSLATION]
 LANGID,1036
@@ -715,6 +715,9 @@ SLGINCOMPLETE,""
 1154,8,168,19,8,1,"Taille:"
 620,29,166,33,12,1,""
 1155,66,168,22,8,1,"éléments d'images (pixels)"
+1156,1,192,295,30,0," &Theme "
+1157,8,206,21,8,0,"Mode:"
+626,57,203,105,45,1,""
 
 [DIALOG 630]
 299,231,1,"Visionneur interne"
@@ -1197,6 +1200,8 @@ SLGINCOMPLETE,""
 2502,231,37,50,14,1,"&Ajouter"
 2503,61,55,87,12,1,"Examiner les sous-ré&pertoires"
 2522,150,55,87,12,1,"Examiner les archives"
+2525,150,58,22,8,0,"T&ype:"
+2524,176,55,112,48,1,""
 2508,6,69,75,12,1,"Recherc&he de contenu d'un fichier"
 2519,83,75,199,1,1,""
 2520,6,87,41,8,1,"&Contenant:"
@@ -2575,6 +2580,8 @@ SLGINCOMPLETE,""
 12026,1,"Le module (%s) n'est pas pris en charge par cette version d'Sally. Utiliser une version à jour de ce module."
 12027,1,"Le plugin %s (%s) cible la version SDK commerciale héritée 4.0 (version requise 102).\nIl peut être incompatible ABI avec cette version de Sally et être instable.\n\nVoulez-vous quand même charger ce plugin ?\nChoisir OUI approuve définitivement ce chemin de plugin."
 12028,1,"Le plugin (%s) cible la version SDK commerciale héritée 4.0 (version requise 102).\nIl peut être incompatible ABI avec cette version de Sally et être instable.\n\nVoulez-vous quand même charger ce plugin ?\nChoisir OUI approuve définitivement ce chemin de plugin."
+12029,0,"%s plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
+12030,0,"The plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
 
 [STRINGTABLE 75]
 12033,1,"Échec de l'empaquetage dans l'archive de fichier(s) modifié(s). Nouvel essai ? En cas de choix négatif, vous serez renvoyé vers le dialogue Mise à jour d'archives ; il sera alors possible de copier le ou les fichier(s) modifié(s) dans le disque afin de paquetage ultérieur dans l'archive."
@@ -3445,8 +3452,9 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Fermeture de la fenêtre Rechercher, veuillez patienter..."
-
-[STRINGTABLE 162]
-14205,1,"Tous"
-14206,1,"Fichiers"
-14207,1,"Dossiers"
+14200,0,"Light"
+14201,0,"Dark"
+14202,0,"System"
+14205,0,"All files and folders"
+14206,0,"Files"
+14207,0,"Folders"

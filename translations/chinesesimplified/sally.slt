@@ -1,7 +1,7 @@
 ﻿[EXPORTINFO]
 PROJECTNAME,"translator\sally 4.0\projects\chinesesimplified\sally.atp"
 TEXTVERSION,"1.0 (x64)"
-VERSION,"1,0,0,183"
+VERSION,"1,0,0,188"
 
 [TRANSLATION]
 LANGID,2052
@@ -715,6 +715,9 @@ SLGINCOMPLETE,""
 1154,8,168,19,8,1,"大小:"
 620,29,166,33,12,1,""
 1155,66,168,22,8,1,"像素"
+1156,1,192,295,30,0," &Theme "
+1157,8,206,21,8,0,"Mode:"
+626,57,203,105,45,1,""
 
 [DIALOG 630]
 299,231,1,"内部查看器"
@@ -1197,6 +1200,8 @@ SLGINCOMPLETE,""
 2502,231,37,50,14,1,"添加(&A)"
 2503,61,55,87,12,1,"搜索子目录(&s)"
 2522,150,55,87,12,1,"搜索压缩包"
+2525,150,58,22,8,0,"T&ype:"
+2524,176,55,112,48,1,""
 2508,6,69,75,12,1,"搜索文件内容(&r)"
 2519,83,75,199,1,1,""
 2520,6,87,41,8,1,"包含(&C):"
@@ -2575,6 +2580,8 @@ SLGINCOMPLETE,""
 12026,1,"这个插件 (%s) 不被 Sally 的这个版本所支持。请获取这个插件的更新版本。"
 12027,1,"%s 插件（%s）面向旧版商业 SDK 4.0 版（所需版本 102）。\n它可能与当前 Sally 版本存在 ABI 不兼容性，可能不稳定。\n\n是否仍要加载此插件？\n选择「是」将永久信任此插件路径。"
 12028,1,"插件（%s）面向旧版商业 SDK 4.0 版（所需版本 102）。\n它可能与当前 Sally 版本存在 ABI 不兼容性，可能不稳定。\n\n是否仍要加载此插件？\n选择「是」将永久信任此插件路径。"
+12029,0,"%s plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
+12030,0,"The plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
 
 [STRINGTABLE 75]
 12033,1,"打包更新的文件进压缩包失败。你想再试一次吗？如果你选择"否"，你将会返回到"压缩包更新"对话框，如此你将可以复制已更新的文件到选择的磁盘文件夹 (用于以后打包进压缩包)。"
@@ -3445,8 +3452,9 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"正在关闭查找窗口，请等待..."
-
-[STRINGTABLE 162]
-14205,1,"全部"
-14206,1,"文件"
-14207,1,"文件夹"
+14200,0,"Light"
+14201,0,"Dark"
+14202,0,"System"
+14205,0,"All files and folders"
+14206,0,"Files"
+14207,0,"Folders"

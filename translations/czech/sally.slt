@@ -1,7 +1,7 @@
 ﻿[EXPORTINFO]
 PROJECTNAME,"translator\sally 4.0\projects\czech\sally.atp"
-TEXTVERSION,"1.0 (x86)"
-VERSION,"1,0,0,183"
+TEXTVERSION,"1.0 (x64)"
+VERSION,"1,0,0,188"
 
 [TRANSLATION]
 LANGID,1029
@@ -715,6 +715,9 @@ SLGINCOMPLETE,""
 1154,8,168,19,8,1,"Velikost:"
 620,29,166,33,12,1,""
 1155,66,168,22,8,1,"bodů"
+1156,1,192,295,30,0," &Theme "
+1157,8,206,21,8,0,"Mode:"
+626,57,203,105,45,1,""
 
 [DIALOG 630]
 299,231,1,"Interní prohlížeč"
@@ -1197,6 +1200,8 @@ SLGINCOMPLETE,""
 2502,231,37,50,14,1,"Při&dat"
 2503,61,55,87,12,1,"Včetně &podadresářů"
 2522,150,55,87,12,1,"Hledat v archivech"
+2525,150,58,22,8,0,"T&ype:"
+2524,176,55,112,48,1,""
 2508,6,69,75,12,1,"H&ledat v souboru"
 2519,83,75,199,1,1,""
 2520,6,87,41,8,1,"&Obsahující:"
@@ -2575,6 +2580,8 @@ SLGINCOMPLETE,""
 12026,1,"Tento plugin (%s) není podporovaný v této verzi Sally. Prosím získejte aktualizovanou verzi tohoto pluginu."
 12027,1,"%s plugin (%s) cílí na starší komerční verzi SDK 4.0 (požadovaná verze 102).\nMůže být ABI-nekompatibilní s touto sestavou Sally a může být nestabilní.\n\nChcete tento plugin přesto načíst?\nVýběrem ANO natrvalo důvěřujete cestě tohoto pluginu."
 12028,1,"Plugin (%s) cílí na starší komerční verzi SDK 4.0 (požadovaná verze 102).\nMůže být ABI-nekompatibilní s touto sestavou Sally a může být nestabilní.\n\nChcete tento plugin přesto načíst?\nVýběrem ANO natrvalo důvěřujete cestě tohoto pluginu."
+12029,0,"%s plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
+12030,0,"The plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
 
 [STRINGTABLE 75]
 12033,1,"Chyba při komprimaci aktualizovaných souborů do archivu. Chcete operaci opakovat? Pokud zvolíte Ne, vrátíte se do dialogu Aktualizace archivu, takže můžete nakopírovat změněné soubory do vybrané složky na disku (a aktualizovat je v archivu později)."
@@ -3445,8 +3452,9 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Zavírání oken Vyhledat, čekejte prosím..."
-
-[STRINGTABLE 162]
-14205,1,"Vše"
-14206,1,"Soubory"
-14207,1,"Adresáře"
+14200,0,"Light"
+14201,0,"Dark"
+14202,0,"System"
+14205,0,"All files and folders"
+14206,0,"Files"
+14207,0,"Folders"

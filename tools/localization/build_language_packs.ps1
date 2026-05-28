@@ -148,6 +148,7 @@ $workspaceRuntimeRoot = Join-Path $WorkspaceDir "runtime"
 $copied = 0
 $copyFailures = New-Object System.Collections.Generic.List[string]
 $seedRejections = New-Object System.Collections.Generic.List[string]
+$coreSeedRejections = New-Object System.Collections.Generic.List[string]
 $validated = 0
 $validationWarnings = New-Object System.Collections.Generic.List[string]
 
@@ -183,7 +184,12 @@ foreach ($language in $requestedLanguages)
         if ((Test-Path -LiteralPath $englishSlgPath) -and
             (Get-FileHash -LiteralPath $slgFile).Hash -eq (Get-FileHash -LiteralPath $englishSlgPath).Hash)
         {
-            $seedRejections.Add("${language}/${moduleName}: rejected (identical to English seed)")
+            $rejection = "${language}/${moduleName}: rejected (identical to English seed)"
+            $seedRejections.Add($rejection)
+            if ($moduleName -eq "sally")
+            {
+                $coreSeedRejections.Add($rejection)
+            }
             continue
         }
 
@@ -252,6 +258,7 @@ Write-Host "========================================"
 Write-Host "  Languages:           $($requestedLanguages.Count)"
 Write-Host "  .slg files copied:   $copied"
 Write-Host "  Seed rejections:     $($seedRejections.Count)"
+Write-Host "  Core rejections:     $($coreSeedRejections.Count)"
 
 if (-not $SkipValidation)
 {
@@ -306,9 +313,11 @@ else
     Write-Host "  Workspace preserved at: $WorkspaceDir"
 }
 
-# Fail the build if any imports produced untranslated seeds or outright failed
-$fatalFailures = $copyFailures.Count + $(if ($AllowSeedRejections) { 0 } else { $seedRejections.Count })
+# Fail the build if core Sally imports produced untranslated seeds. Plugin seed
+# rejections may be tolerated for local builds and optional/incomplete plugins,
+# but dropping the main application language packs makes the release incomplete.
+$fatalFailures = $copyFailures.Count + $coreSeedRejections.Count + $(if ($AllowSeedRejections) { 0 } else { $seedRejections.Count })
 if ($fatalFailures -gt 0)
 {
-    throw "Language pack build completed with $fatalFailures failure(s): $($seedRejections.Count) seed rejection(s), $($copyFailures.Count) copy failure(s). The release zip has incomplete localization."
+    throw "Language pack build completed with $fatalFailures failure(s): $($seedRejections.Count) seed rejection(s), $($coreSeedRejections.Count) core seed rejection(s), $($copyFailures.Count) copy failure(s). The release zip has incomplete localization."
 }

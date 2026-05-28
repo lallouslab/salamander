@@ -1,7 +1,7 @@
 ﻿[EXPORTINFO]
 PROJECTNAME,"translator\sally 4.0\projects\spanish\sally.atp"
 TEXTVERSION,"1.0 (x64)"
-VERSION,"1,0,0,183"
+VERSION,"1,0,0,188"
 
 [TRANSLATION]
 LANGID,3082
@@ -715,6 +715,9 @@ SLGINCOMPLETE,""
 1154,8,168,19,8,1,"Tamaño:"
 620,29,166,33,12,1,""
 1155,66,168,22,8,1,"pixels"
+1156,1,192,295,30,0," &Theme "
+1157,8,206,21,8,0,"Mode:"
+626,57,203,105,45,1,""
 
 [DIALOG 630]
 299,231,1,"Visor interno"
@@ -1197,6 +1200,8 @@ SLGINCOMPLETE,""
 2502,231,37,50,14,1,"Añadi&r"
 2503,61,55,87,12,1,"Buscar &subdirectorios"
 2522,150,55,87,12,1,"Buscar archivos"
+2525,150,58,22,8,0,"T&ype:"
+2524,176,55,112,48,1,""
 2508,6,69,75,12,1,"Buscar por &contenido"
 2519,83,75,199,1,1,""
 2520,6,87,41,8,1,"Incl&uyendo:"
@@ -2575,6 +2580,8 @@ SLGINCOMPLETE,""
 12026,1,"El plugin (%s) no está soportado en esta versión de Sally. Consiga una versión más actual de este plugin."
 12027,1,"El plugin %s (%s) apunta a la versión SDK comercial heredada 4.0 (versión requerida 102).\nPuede ser incompatible en ABI con esta compilación de Sally y puede ser inestable.\n\n¿Desea cargar este plugin de todas formas?\nElegir SÍ establece confianza permanente en esta ruta de plugin."
 12028,1,"El plugin (%s) apunta a la versión SDK comercial heredada 4.0 (versión requerida 102).\nPuede ser incompatible en ABI con esta compilación de Sally y puede ser inestable.\n\n¿Desea cargar este plugin de todas formas?\nElegir SÍ establece confianza permanente en esta ruta de plugin."
+12029,0,"%s plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
+12030,0,"The plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
 
 [STRINGTABLE 75]
 12033,1,"La compresión de ficheros actualizados al archivo ha fallado. ¿Quiere probar de nuevo? Si elige NO, volverá al diálogo Actualización de archivo, y podrá copiar ficheros actualizados al directorio escogido (para después comprimirlos al archivo)."
@@ -3445,8 +3452,9 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Cerrando ventanas de Búsqueda; por favor, espere..."
-
-[STRINGTABLE 162]
-14205,1,"Todo"
-14206,1,"Archivos"
-14207,1,"Carpetas"
+14200,0,"Light"
+14201,0,"Dark"
+14202,0,"System"
+14205,0,"All files and folders"
+14206,0,"Files"
+14207,0,"Folders"

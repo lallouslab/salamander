@@ -1,7 +1,7 @@
 ﻿[EXPORTINFO]
 PROJECTNAME,"translator\sally 4.0\projects\dutch\sally.atp"
 TEXTVERSION,"1.0 (x64)"
-VERSION,"1,0,0,183"
+VERSION,"1,0,0,188"
 
 [TRANSLATION]
 LANGID,1043
@@ -715,6 +715,9 @@ SLGINCOMPLETE,""
 1154,8,168,19,8,1,"Grootte:"
 620,29,166,33,12,1,""
 1155,66,168,22,8,1,"pixels"
+1156,1,192,295,30,0," &Theme "
+1157,8,206,21,8,0,"Mode:"
+626,57,203,105,45,1,""
 
 [DIALOG 630]
 299,231,1,"Interne Viewer"
@@ -1197,6 +1200,8 @@ SLGINCOMPLETE,""
 2502,231,37,50,14,1,"&Toevoegen"
 2503,61,55,87,12,1,"Inclusief &submappen"
 2522,150,55,87,12,1,"Inclusief archieven"
+2525,150,58,22,8,0,"T&ype:"
+2524,176,55,112,48,1,""
 2508,6,69,75,12,1,"Inc&lusief inhoud"
 2519,83,75,199,1,1,""
 2520,6,87,41,8,1,"&Inhoud:"
@@ -2575,6 +2580,8 @@ SLGINCOMPLETE,""
 12026,1,"De plugin (%s) wordt niet door deze versie van Sally ondersteund. Graag een actuele versie van deze plugin gebruiken."
 12027,1,"%s-plugin (%s) is gericht op de verouderde commerciële SDK-versie 4.0 (vereiste versie 102).\nDeze plugin is mogelijk ABI-incompatibel met deze Sally-build en kan onstabiel zijn.\n\nWilt u deze plugin toch laden?\nAls u JA kiest, wordt dit pluginpad permanent vertrouwd."
 12028,1,"De plugin (%s) is gericht op de verouderde commerciële SDK-versie 4.0 (vereiste versie 102).\nDeze plugin is mogelijk ABI-incompatibel met deze Sally-build en kan onstabiel zijn.\n\nWilt u deze plugin toch laden?\nAls u JA kiest, wordt dit pluginpad permanent vertrouwd."
+12029,0,"%s plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
+12030,0,"The plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
 
 [STRINGTABLE 75]
 12033,1,"Fout bij inpakken van geactualiseerde bestanden in het archief. Wilt u opnieuw proberen? Als u NEE kiest, wordt u terug gestuurd naar de Archief Actualiserings dialoog, zodat u de geactualiseerde bestanden naar de gekozen map kunt kopiëren (om ze later aan het archief toe te voegen)."
@@ -3445,8 +3452,9 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Zoeken vensters sluiten, moment geduld a.u.b..."
-
-[STRINGTABLE 162]
-14205,1,"Alles"
-14206,1,"Bestanden"
-14207,1,"Mappen"
+14200,0,"Light"
+14201,0,"Dark"
+14202,0,"System"
+14205,0,"All files and folders"
+14206,0,"Files"
+14207,0,"Folders"

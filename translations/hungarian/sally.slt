@@ -1,7 +1,7 @@
 ﻿[EXPORTINFO]
 PROJECTNAME,"translator\sally 4.0\projects\hungarian\sally.atp"
 TEXTVERSION,"1.0 (x64)"
-VERSION,"1,0,0,183"
+VERSION,"1,0,0,188"
 
 [TRANSLATION]
 LANGID,1038
@@ -715,6 +715,9 @@ SLGINCOMPLETE,""
 1154,8,168,19,8,1,"Méret:"
 620,29,166,33,12,1,""
 1155,66,168,22,8,1,"pixel"
+1156,1,192,295,30,0," &Theme "
+1157,8,206,21,8,0,"Mode:"
+626,57,203,105,45,1,""
 
 [DIALOG 630]
 299,231,1,"Belső néző"
@@ -1197,6 +1200,8 @@ SLGINCOMPLETE,""
 2502,231,37,50,14,1,"Hozzá&ad"
 2503,61,55,87,12,1,"Almappákban kere&s"
 2522,150,55,87,12,1,"Archívumokban keres"
+2525,150,58,22,8,0,"T&ype:"
+2524,176,55,112,48,1,""
 2508,6,69,75,12,1,"Fájl ta&rtalomban keres"
 2519,83,75,199,1,1,""
 2520,6,87,41,8,1,"Tartalma&zza:"
@@ -2575,6 +2580,8 @@ SLGINCOMPLETE,""
 12026,1,"A plugint (%s) nem támogatja az Sally ezen verziója. Szerezze be a plugin frissebb verzióját."
 12027,1,"%s bővítmény (%s) a régi kereskedelmi SDK 4.0-s verzióját célozza (szükséges verzió: 102).\nLehet, hogy ABI-inkompatibilis ezzel a Sally-builddel, és instabil lehet.\n\nMégis be szeretné tölteni ezt a bővítményt?\nAz IGEN választása véglegesen megbízhatónak jelöli ezt a bővítmény elérési útját."
 12028,1,"A bővítmény (%s) a régi kereskedelmi SDK 4.0-s verzióját célozza (szükséges verzió: 102).\nLehet, hogy ABI-inkompatibilis ezzel a Sally-builddel, és instabil lehet.\n\nMégis be szeretné tölteni ezt a bővítményt?\nAz IGEN választása véglegesen megbízhatónak jelöli ezt a bővítmény elérési útját."
+12029,0,"%s plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
+12030,0,"The plugin (%s) targets broken Sally SDK version 104 for file-system plugins.\nThis transitional FS ABI is unsafe and is no longer supported.\n\nPlease rebuild or reinstall an updated version of this plugin."
 
 [STRINGTABLE 75]
 12033,1,"Frissített fájl(ok) archívumba tömörítése sikertelen. Megpróbálja újra? Ha NEM, visszatér az Archívum frissítése ablakhoz, és átmásolhatja a frissített fájl(oka)t egy kiválasztott mappába (későbbi archívumba helyezéshez)."
@@ -3445,8 +3452,9 @@ SLGINCOMPLETE,""
 
 [STRINGTABLE 161]
 14195,1,"Keres ablak bezárása, kérem várjon..."
-
-[STRINGTABLE 162]
-14205,1,"Mind"
-14206,1,"Fájlok"
-14207,1,"Mappák"
+14200,0,"Light"
+14201,0,"Dark"
+14202,0,"System"
+14205,0,"All files and folders"
+14206,0,"Files"
+14207,0,"Folders"
