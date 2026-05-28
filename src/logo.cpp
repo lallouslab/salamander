@@ -8,6 +8,7 @@
 #include "fileswnd.h"
 #include "cfgdlg.h"
 #include "dialogs.h"
+#include "darkmode.h"
 #include "gui.h"
 #include "md5.h"
 
@@ -411,6 +412,8 @@ CAboutDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         CHyperLink* hl;
 
+        DarkMode_SetLightSurface(HWindow, TRUE);
+
         SetDlgItemText(HWindow, IDS_ABOUT_SALAMANDER, SALAMANDER_TEXT_VERSION);
         new CStaticText(HWindow, IDS_ABOUT_SALAMANDER, STF_BOLD);
         //      new CStaticText(HWindow, IDS_ABOUT_FIRM, STF_BOLD);
@@ -427,6 +430,12 @@ CAboutDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
 
         BackgroundBitmap = AboutAndEvalDlgCreateBkgnd(HWindow);
+        break;
+    }
+
+    case WM_DESTROY:
+    {
+        DarkMode_SetLightSurface(HWindow, FALSE);
         break;
     }
 

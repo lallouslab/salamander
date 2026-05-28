@@ -825,7 +825,7 @@ BOOL CDuplicateCandidates::GetMD5Digest(CGrepData* data, CFoundFilesData* file,
         fullPathW.push_back(L'\\');
     fullPathW += !file->NameW.empty() ? file->NameW : AnsiToWide(file->Name.c_str());
 
-    data->SearchingText->Set(fullPath); // set the current file
+    data->SearchingText->Set(fullPathW.c_str()); // set the current file
 
     // open the file for reading with sequential access
     HANDLE hFile = SalCreateFileWideH(fullPathW.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -1374,7 +1374,7 @@ BOOL TestFileContentW(DWORD sizeLow, DWORD sizeHigh, const wchar_t* pathW,
     if (totalSize > CQuadWord(0, 0) || isLink)
     {
         DWORD err = ERROR_SUCCESS;
-        data->SearchingText->Set(pathA); // set the current file
+        data->SearchingText->Set(pathW); // set the current file
         HANDLE hFile = SalCreateFileWideH(pathW, GENERIC_READ,
                                           FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
                                           OPEN_EXISTING,
@@ -1623,6 +1623,9 @@ void SearchDirectory(CPathBuffer& path, char* end, int startPathLen,
                 if (cFileNameA[0] != 0 && !ignoreDir)
                 {
                     // add all files and directories except "." and ".."
+                    strcpy_s(end, path.Size() - (end - path), cFileNameA);
+                    data->SearchingText->Set(path); // set the current item
+                    strcpy_s(end, path.Size() - (end - path), "*");
 
                     // test the criteria attributes, size, date and time
                     CQuadWord size(file.nFileSizeLow, file.nFileSizeHigh);
@@ -1885,7 +1888,7 @@ void SearchDirectoryW(std::wstring& pathW, size_t endIndex, int startPathLen,
     {
         std::wstring displayDirW = GetDirectoryWithoutSearchBackslashW(pathW, endIndex);
         std::string displayDirA = WideToAnsi(displayDirW);
-        data->SearchingText->Set(displayDirA.c_str()); // set the current path
+        data->SearchingText->Set(displayDirW.c_str()); // set the current path
 
         int dirStackEnterCount = 0; // number of items before starting the search at this level
         if (dirStack != NULL)
@@ -1912,6 +1915,9 @@ void SearchDirectoryW(std::wstring& pathW, size_t endIndex, int startPathLen,
                 if (cFileNameA[0] != 0 && !ignoreDir)
                 {
                     // add all files and directories except "." and ".."
+                    std::wstring currentItemW = pathWithSlashW;
+                    currentItemW.append(file.cFileName);
+                    data->SearchingText->Set(currentItemW.c_str()); // set the current item
 
                     // test the criteria attributes, size, date and time
                     CQuadWord size(file.nFileSizeLow, file.nFileSizeHigh);
@@ -2339,7 +2345,6 @@ DWORD WINAPI GrepThreadF(void* param)
 CSearchingString::CSearchingString()
 {
     HANDLES(InitializeCriticalSection(&Section));
-    Buffer[0] = 0;
     BaseLen = 0;
     Dirty = FALSE;
 }
@@ -2351,16 +2356,28 @@ CSearchingString::~CSearchingString()
 
 void CSearchingString::SetBase(const char* buf)
 {
+    SetBase(AnsiToWide(buf != NULL ? buf : "").c_str());
+}
+
+void CSearchingString::SetBase(const wchar_t* buf)
+{
     HANDLES(EnterCriticalSection(&Section));
-    lstrcpyn(Buffer, buf, Buffer.Size());
-    BaseLen = (int)strlen(Buffer);
+    Buffer = buf != NULL ? buf : L"";
+    BaseLen = Buffer.length();
     HANDLES(LeaveCriticalSection(&Section));
 }
 
 void CSearchingString::Set(const char* buf)
 {
+    Set(AnsiToWide(buf != NULL ? buf : "").c_str());
+}
+
+void CSearchingString::Set(const wchar_t* buf)
+{
     HANDLES(EnterCriticalSection(&Section));
-    lstrcpyn(Buffer + BaseLen, buf, Buffer.Size() - BaseLen);
+    if (Buffer.length() > BaseLen)
+        Buffer.resize(BaseLen);
+    Buffer.append(buf != NULL ? buf : L"");
     Dirty = TRUE;
     HANDLES(LeaveCriticalSection(&Section));
 }
@@ -2368,8 +2385,24 @@ void CSearchingString::Set(const char* buf)
 void CSearchingString::Get(char* buf, int bufSize)
 {
     HANDLES(EnterCriticalSection(&Section));
-    lstrcpyn(buf, Buffer, bufSize);
+    std::string text = WideToAnsi(Buffer);
+    lstrcpyn(buf, text.c_str(), bufSize);
     HANDLES(LeaveCriticalSection(&Section));
+}
+
+void CSearchingString::GetW(wchar_t* buf, int bufSize)
+{
+    HANDLES(EnterCriticalSection(&Section));
+    lstrcpynW(buf, Buffer.c_str(), bufSize);
+    HANDLES(LeaveCriticalSection(&Section));
+}
+
+std::wstring CSearchingString::GetWString()
+{
+    HANDLES(EnterCriticalSection(&Section));
+    std::wstring text = Buffer;
+    HANDLES(LeaveCriticalSection(&Section));
+    return text;
 }
 
 void CSearchingString::SetDirty(BOOL dirty)

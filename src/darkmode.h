@@ -47,6 +47,8 @@ BOOL DarkMode_ShouldUseDark();
 BOOL DarkMode_GetColors(DarkModeColors* colors);
 BOOL DarkMode_GetMainFramePalette(DarkModeMainFramePalette* palette);
 HBRUSH DarkMode_GetDialogCtlColorBrush(UINT msg, HDC hdc, HWND hCtrl);
+void DarkMode_SetLightSurface(HWND hwnd, BOOL enable);
+BOOL DarkMode_IsLightSurface(HWND hwnd);
 BOOL DarkMode_OnSettingChange(LPARAM lParam);
 void DarkMode_ApplyTitleBar(HWND hwnd);
 void DarkMode_ApplyToThreadTopLevelWindows(DWORD threadId);

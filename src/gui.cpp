@@ -1311,7 +1311,9 @@ CStaticText::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             // under XPTheme we have to let Windows erase the background
             BOOL bkErased = FALSE;
             DarkModeColors colors;
-            BOOL useDark = DarkMode_GetColors(&colors);
+            HWND hParent = GetParent(HWindow);
+            BOOL lightSurface = DarkMode_IsLightSurface(hParent);
+            BOOL useDark = DarkMode_GetColors(&colors) && !lightSurface;
             if (useDark)
             {
                 HBRUSH hBrush = HANDLES(CreateSolidBrush(colors.DialogBackground));
@@ -1331,7 +1333,6 @@ CStaticText::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             // set the DC parameters and store their original values
             int oldBkMode = SetBkMode(hDC, TRANSPARENT);
 
-            HWND hParent = GetParent(HWindow);
             if (hParent != NULL)
                 SendMessage(hParent, WM_CTLCOLORSTATIC, (WPARAM)hDC, (LPARAM)HWindow);
             if (Flags & STF_HYPERLINK_COLOR)

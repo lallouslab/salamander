@@ -46,6 +46,7 @@ const COLORREF DIALOG_DARK_FRAME = RGB(62, 62, 66);
 const COLORREF DIALOG_DARK_SUBTLE_LINE = RGB(55, 55, 58);
 const TCHAR* IMMERSIVE_COLOR_SET_PARAM = TEXT("ImmersiveColorSet");
 const TCHAR* WINDOWS_THEME_ELEMENT_PARAM = TEXT("WindowsThemeElement");
+const TCHAR* LIGHT_SURFACE_PROP = TEXT("SallyLightSurface");
 const TCHAR* BUTTON_CLASS_NAME = TEXT("Button");
 const TCHAR* COMBOBOX_CLASS_NAME = TEXT("ComboBox");
 const TCHAR* EDIT_CLASS_NAME = TEXT("Edit");
@@ -714,6 +715,8 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
 {
     if (hwnd == NULL || !IsWindow(hwnd))
         return;
+    if (DarkMode_IsLightSurface(hwnd))
+        return;
 
     TCHAR className[64] = {0};
     if (GetClassName(hwnd, className, _countof(className)) == 0)
@@ -946,9 +949,32 @@ BOOL DarkMode_GetMainFramePalette(DarkModeMainFramePalette* palette)
     return useDark;
 }
 
+void DarkMode_SetLightSurface(HWND hwnd, BOOL enable)
+{
+    if (hwnd == NULL)
+        return;
+
+    if (enable)
+        SetProp(hwnd, LIGHT_SURFACE_PROP, (HANDLE)1);
+    else
+        RemoveProp(hwnd, LIGHT_SURFACE_PROP);
+}
+
+BOOL DarkMode_IsLightSurface(HWND hwnd)
+{
+    for (HWND current = hwnd; current != NULL; current = GetParent(current))
+    {
+        if (GetProp(current, LIGHT_SURFACE_PROP) != NULL)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 HBRUSH DarkMode_GetDialogCtlColorBrush(UINT msg, HDC hdc, HWND hCtrl)
 {
     if (hdc == NULL || !DarkMode_ShouldUseDark())
+        return NULL;
+    if (DarkMode_IsLightSurface(hCtrl))
         return NULL;
 
     EnsureDialogBrushes();
@@ -1123,6 +1149,8 @@ void DarkMode_ApplyToThreadTopLevelWindows(DWORD threadId)
 void DarkMode_ApplyListTreeThemeRecursive(HWND root)
 {
     if (root == NULL || !IsWindow(root))
+        return;
+    if (DarkMode_IsLightSurface(root))
         return;
 
     // SetWindowTheme() sends WM_THEMECHANGED synchronously. Guard the theme walk so

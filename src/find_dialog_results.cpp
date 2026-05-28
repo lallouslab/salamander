@@ -846,9 +846,19 @@ static BOOL PaintFindDarkStatusBar(HWND hwnd, HDC paintDC)
         if (part.right <= part.left)
             continue;
 
-        char text[1024] = {0};
-        DWORD textInfo = (DWORD)SendMessage(hwnd, SB_GETTEXT, i, (LPARAM)text);
-        if ((HIWORD(textInfo) & SBT_OWNERDRAW) != 0)
+        DWORD textInfo = (DWORD)SendMessageW(hwnd, SB_GETTEXTLENGTHW, i, 0);
+        WORD textType = HIWORD(textInfo);
+        int textLen = LOWORD(textInfo);
+        std::wstring text;
+        if (textLen > 0)
+        {
+            text.resize(textLen + 1);
+            textInfo = (DWORD)SendMessageW(hwnd, SB_GETTEXTW, i, (LPARAM)&text[0]);
+            textType = HIWORD(textInfo);
+            text.resize(wcslen(text.c_str()));
+        }
+
+        if ((textType & SBT_OWNERDRAW) != 0)
         {
             DRAWITEMSTRUCT di = {0};
             di.CtlType = ODT_STATIC;
@@ -860,9 +870,9 @@ static BOOL PaintFindDarkStatusBar(HWND hwnd, HDC paintDC)
             di.rcItem = part;
             SendMessage(GetParent(hwnd), WM_DRAWITEM, IDC_FIND_STATUS, (LPARAM)&di);
         }
-        else if (text[0] != 0)
+        else if (!text.empty())
         {
-            DrawText(hdc, text, -1, &part, DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_PATH_ELLIPSIS);
+            DrawTextW(hdc, text.c_str(), -1, &part, DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_PATH_ELLIPSIS);
         }
     }
 
@@ -1926,19 +1936,13 @@ BOOL GetNextItemFromFind(int index, char* path, char* name, void* param)
     return FALSE;
 }
 
-static void EnsureFindLookInText(HWND hCombo, const sally::find::LookInSeed& seed, CPathBuffer& textA)
+static void ApplyInitialFindLookInSeed(HWND hCombo, const sally::find::LookInSeed& seed, CPathBuffer& textA)
 {
-    if (hCombo == NULL)
+    if (hCombo == NULL || !sally::find::HasInitialLookInSeed(seed))
         return;
 
     std::string initialLookIn = sally::find::BuildInitialLookInText(seed, textA.Get());
     if (initialLookIn.empty())
-        return;
-
-    CPathBuffer current;
-    current[0] = 0;
-    SendMessageA(hCombo, WM_GETTEXT, (WPARAM)current.Size(), (LPARAM)current.Get());
-    if (current[0] != 0)
         return;
 
     SendMessageA(hCombo, WM_SETTEXT, 0, (LPARAM)initialLookIn.c_str());
@@ -4160,8 +4164,13 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (SearchingText.GetDirty())
             {
                 SearchingText.SetDirty(FALSE); // already being redrawn - Get will be called; better to refresh twice than not at all
-                                               //          SearchingText.Get(buf, buf.Size());
-                SendMessage(HStatusBar, SB_SETTEXT, 1 | SBT_NOBORDERS | SBT_OWNERDRAW, 0);
+                if (DarkMode_ShouldUseDark())
+                {
+                    std::wstring text = SearchingText.GetWString();
+                    SendMessageW(HStatusBar, SB_SETTEXTW, 1 | SBT_NOBORDERS, (LPARAM)text.c_str());
+                }
+                else
+                    SendMessage(HStatusBar, SB_SETTEXT, 1 | SBT_NOBORDERS | SBT_OWNERDRAW, 0);
                 RedrawWindow(HStatusBar, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             }
             if (SearchingText2.GetDirty())
@@ -4203,17 +4212,14 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_USER_FIND_LOOKIN_W_OVERRIDE:
     {
-        // Replace the ANSI-rendered "Look in" combo when the round-trip
-        // predicate says the Transfer-populated text is lossy. ASCII-only
-        // paths skip the replacement; the dialog renders exactly as before.
-        //
-        // Only fire when the current ANSI text still matches the seed we
-        // captured at construction. The constructor intentionally seeds new
-        // Find windows from the active panel, while explicit later preset
-        // loads can still replace the field through LoadControls.
+        // Re-apply the construction-time active-panel path after the framework's
+        // ANSI Transfer has finished touching controls. This keeps new Find
+        // windows anchored to the active panel even when saved/autoloaded data
+        // or combo history left a stale value in the edit control. Explicit
+        // later preset loads can still replace the field through LoadControls.
         const sally::find::LookInSeed& seed = InitialLookInSeed;
         HWND hLegacyCombo = GetDlgItem(HWindow, IDC_FIND_LOOKIN);
-        EnsureFindLookInText(hLegacyCombo, seed, Data.LookInText);
+        ApplyInitialFindLookInSeed(hLegacyCombo, seed, Data.LookInText);
         if (sally::find::ShouldApplyInitialLookInWideOverride(seed, Data.LookInText.Get()))
         {
             HWND hFocus = GetFocus();
@@ -5059,9 +5065,8 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                 SetTextColor(di->hDC, colors.DialogText);
             }
             int prevBkMode = SetBkMode(di->hDC, TRANSPARENT);
-            CPathBuffer buff;
-            SearchingText.Get(buff, buff.Size());
-            DrawText(di->hDC, buff, (int)strlen(buff), &di->rcItem, DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_PATH_ELLIPSIS);
+            std::wstring text = SearchingText.GetWString();
+            DrawTextW(di->hDC, text.c_str(), -1, &di->rcItem, DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_PATH_ELLIPSIS);
             SetBkMode(di->hDC, prevBkMode);
             return TRUE;
         }

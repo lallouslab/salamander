@@ -115,8 +115,8 @@ struct CSearchForData
 class CSearchingString
 {
 protected:
-    CPathBuffer Buffer;
-    int BaseLen;
+    std::wstring Buffer;
+    size_t BaseLen;
     BOOL Dirty;
     CRITICAL_SECTION Section;
 
@@ -126,10 +126,14 @@ public:
 
     // sets the base to which additional text is appended via Set, and sets dirty to FALSE
     void SetBase(const char* buf);
+    void SetBase(const wchar_t* buf);
     // appending to the base value set via SetBase
     void Set(const char* buf);
+    void Set(const wchar_t* buf);
     // returns the complete string
     void Get(char* buf, int bufSize);
+    void GetW(wchar_t* buf, int bufSize);
+    std::wstring GetWString();
 
     // sets the dirty flag (is a redraw already pending?)
     void SetDirty(BOOL dirty);
