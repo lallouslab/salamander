@@ -212,6 +212,7 @@ CM_HELP_CONTEXT=hh\sally\othertask_help.htm
 CM_FORUM=hh\sally\introduction_techsup.htm
 CM_TASKLIST=hh\sally\othertask_tasklist.htm
 CM_PLUGINABOUT_MIN=hh\sally\othertask_about.htm
+CM_HELP_CHECKNEWVERSION=hh\sally\othertask_about.htm
 CM_HELP_ABOUT=hh\sally\othertask_about.htm
 ;
 ; ****************** TOOLBARS ******************

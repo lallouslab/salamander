@@ -381,6 +381,7 @@
 #define CM_HELP_CONTEXT        2214
 //#define CM_HELP_TIP            2215
 #define CM_HELP_ABOUT          2216
+#define CM_HELP_CHECKNEWVERSION 2217
 
 // commands pro find dialog
 #define CM_FIND_EXIT             2220

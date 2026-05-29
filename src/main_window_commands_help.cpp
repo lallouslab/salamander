@@ -48,6 +48,10 @@ extern "C"
 #include "viewer.h"
 #include "common/widepath.h"
 
+static const char* CHECKVER_PLUGIN_DLL_SUFFIX = "checkver\\checkver.dll";
+// Keep this in sync with CM_CHECK_VERSION in src/plugins/checkver/checkver.rh2.
+static const int CHECKVER_CMD_CHECK_VERSION = 90;
+
 // critical shutdown: the maximum time we can spend in WM_QUERYENDSESSION (after that,
 // KILL comes from Windows). It is 5s (5s with an open message box, 10s without pumping
 // messages). I left a 500ms reserve. Tested on Vista, Win7, Win8, Win10.
@@ -2868,6 +2872,32 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             return 0;
         }
 
+        case CM_HELP_CHECKNEWVERSION:
+        {
+            CPluginData* checkVer = Plugins.GetPluginDataFromSuffix(CHECKVER_PLUGIN_DLL_SUFFIX);
+            if (checkVer == NULL)
+            {
+                TRACE_E("Check Version plugin is not available.");
+                return 0;
+            }
+
+            int checkVerIndex = Plugins.GetIndexJustForConnect(checkVer);
+            if (checkVerIndex < 0)
+            {
+                TRACE_E("Unable to locate Check Version plugin index.");
+                return 0;
+            }
+
+            if (!checkVer->GetLoaded() && !checkVer->InitDLL(HWindow))
+                return 0;
+
+            BOOL unselect = FALSE;
+            checkVer->ExecuteMenuItem2(activePanel, HWindow, checkVerIndex, CHECKVER_CMD_CHECK_VERSION, unselect);
+            if (unselect)
+                activePanel->StoreSelection(); // save selection for Restore Selection command
+            return 0;
+        }
+
         case CM_HELP_CONTENTS:
         case CM_HELP_SEARCH:
         case CM_HELP_INDEX:
@@ -4993,6 +5023,26 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
 
         switch (popupID)
         {
+        case CML_HELP:
+        {
+            int checkVerPos = popup->FindItemPosition(CM_HELP_CHECKNEWVERSION);
+            if (checkVerPos != -1)
+                popup->RemoveItemsRange(checkVerPos, checkVerPos);
+
+            if (Plugins.GetPluginDataFromSuffix(CHECKVER_PLUGIN_DLL_SUFFIX) != NULL)
+            {
+                MENU_ITEM_INFO mii;
+                mii.Mask = MENU_MASK_TYPE | MENU_MASK_STRING | MENU_MASK_ID;
+                mii.Type = MENU_TYPE_STRING;
+                mii.String = LoadStr(IDS_MENU_HELP_CHECKNEWVERSION);
+                mii.ID = CM_HELP_CHECKNEWVERSION;
+
+                int aboutPos = popup->FindItemPosition(CM_HELP_ABOUT);
+                popup->InsertItem(aboutPos != -1 ? aboutPos : 0xFFFFFFFF, TRUE, &mii);
+            }
+            break;
+        }
+
         case CML_LEFT:
         case CML_RIGHT:
         {
