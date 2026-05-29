@@ -6,9 +6,8 @@
 
 Sally is a fast, actively maintained dual-panel file manager for Windows. It preserves the classic [Open Salamander](https://github.com/OpenSalamander/salamander) workflow and extends it for modern Windows: Unicode-first file operations, long path support, dark mode, native ARM64 builds, WebView2 viewing, release automation, and maintained language packs.
 
-<!-- Screenshot: this is the classic annotated UI image from the help docs. Replace with a fresh Windows 11 screenshot when available. -->
 <p align="center">
-  <img src="help/src/hh/salamand/images/main.png" alt="Sally screenshot" width="800">
+  <img src="doc/images/sally-dark-unicode-long-path.png" alt="Sally in dark mode showing Unicode filenames and a long path" width="900">
 </p>
 
 ## Why Sally
