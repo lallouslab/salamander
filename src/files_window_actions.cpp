@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -1195,10 +1195,21 @@ void CFilesWindow::ItemFocused(int index)
             }
         }
 
-        if (done ||
-            ExpandInfoLineItems(HWindow, Configuration.InfoLineContent, &PluginData, f,
-                                index < Dirs->Count, buff, 1000,
-                                varPlacements, &varPlacementsCount, ValidFileData, Is(ptDisk)))
+        if (!done && Is(ptDisk))
+        {
+            std::wstring buffW;
+            if (ExpandInfoLineItemsW(HWindow, Configuration.InfoLineContent, &PluginData, f,
+                                     index < Dirs->Count, buffW,
+                                     varPlacements, &varPlacementsCount, ValidFileData, TRUE))
+            {
+                if (StatusLine->SetTextW(buffW.c_str()))
+                    StatusLine->SetSubTexts(varPlacements, varPlacementsCount);
+            }
+        }
+        else if (done ||
+                 ExpandInfoLineItems(HWindow, Configuration.InfoLineContent, &PluginData, f,
+                                     index < Dirs->Count, buff, 1000,
+                                     varPlacements, &varPlacementsCount, ValidFileData, Is(ptDisk)))
         {
             if (StatusLine->SetText(buff))
                 StatusLine->SetSubTexts(varPlacements, varPlacementsCount);

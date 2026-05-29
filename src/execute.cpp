@@ -12,6 +12,7 @@
 #include "shellib.h"
 #include "ui/IPrompter.h"
 #include "common/unicode/helpers.h"
+#include "common/unicode/WideVariableExpansion.h"
 #include "common/IEnvironment.h"
 #include "common/fsutil.h"
 
@@ -1272,6 +1273,124 @@ const char* WINAPI FileDataExpTAB(HWND msgParent, void* param)
     return data->Buffer;
 }
 
+std::wstring FileDataEffectiveNameW(const CFileData* file)
+{
+    if (file == NULL)
+        return std::wstring();
+    if (file->NameW != NULL && file->NameW[0] != 0)
+        return std::wstring(file->NameW);
+    return AnsiToWide(file->Name);
+}
+
+size_t FileDataExtensionOffsetW(const CFileData* file, const std::wstring& nameW, BOOL isDir)
+{
+    if (file == NULL || isDir || nameW.empty())
+        return std::wstring::npos;
+    if (file->NameW == NULL && file->Ext != NULL && file->Name != NULL)
+        return (size_t)(file->Ext - file->Name);
+    return sally::unicode::ExtensionOffsetAfterDotW(nameW, isDir != 0);
+}
+
+std::wstring FileDataExpFileNameW(void* param)
+{
+    CFileDataExpData* data = (CFileDataExpData*)param;
+    std::wstring nameW = FileDataEffectiveNameW(data->FileData);
+    return AlterFileNameW(nameW.c_str(), Configuration.FileNameFormat, 0, data->IsDir);
+}
+
+std::wstring FileDataExpFileNamePartW(void* param)
+{
+    CFileDataExpData* data = (CFileDataExpData*)param;
+    std::wstring nameW = FileDataEffectiveNameW(data->FileData);
+    std::wstring formatted = AlterFileNameW(nameW.c_str(), Configuration.FileNameFormat, 0, data->IsDir);
+    size_t extOffset = FileDataExtensionOffsetW(data->FileData, nameW, data->IsDir);
+    return sally::unicode::FileNamePartFromExtensionOffsetW(formatted, extOffset);
+}
+
+std::wstring FileDataExpFileExtensionW(void* param)
+{
+    CFileDataExpData* data = (CFileDataExpData*)param;
+    std::wstring nameW = FileDataEffectiveNameW(data->FileData);
+    std::wstring formatted = AlterFileNameW(nameW.c_str(), Configuration.FileNameFormat, 0, data->IsDir);
+    size_t extOffset = FileDataExtensionOffsetW(data->FileData, nameW, data->IsDir);
+    return sally::unicode::FileExtensionFromExtensionOffsetW(formatted, extOffset);
+}
+
+std::wstring FileDataExpFileSizeW(void* param)
+{
+    return AnsiToWide(FileDataExpFileSize(NULL, param));
+}
+
+std::wstring FileDataExpFileSizeNoSpacesW(void* param)
+{
+    return AnsiToWide(FileDataExpFileSizeNoSpaces(NULL, param));
+}
+
+std::wstring FileDataExpFileDateW(void* param)
+{
+    return AnsiToWide(FileDataExpFileDate(NULL, param));
+}
+
+std::wstring FileDataExpFileDateOnlyForDiskW(void* param)
+{
+    return AnsiToWide(FileDataExpFileDateOnlyForDisk(NULL, param));
+}
+
+std::wstring FileDataExpFileTimeW(void* param)
+{
+    return AnsiToWide(FileDataExpFileTime(NULL, param));
+}
+
+std::wstring FileDataExpFileTimeOnlyForDiskW(void* param)
+{
+    return AnsiToWide(FileDataExpFileTimeOnlyForDisk(NULL, param));
+}
+
+std::wstring FileDataExpFileAttrW(void* param)
+{
+    return AnsiToWide(FileDataExpFileAttr(NULL, param));
+}
+
+std::wstring FileDataExpFileDOSNameW(void* param)
+{
+    return AnsiToWide(FileDataExpFileDOSName(NULL, param));
+}
+
+std::wstring MFLFileDataExpDriveW(void* param)
+{
+    return AnsiToWide(MFLFileDataExpDrive(NULL, param));
+}
+
+std::wstring MFLFileDataExpPathW(void* param)
+{
+    return AnsiToWide(MFLFileDataExpPath(NULL, param));
+}
+
+std::wstring MFLFileDataExpDOSPathW(void* param)
+{
+    return AnsiToWide(MFLFileDataExpDOSPath(NULL, param));
+}
+
+std::wstring FileDataExpLFW(void* param)
+{
+    return L"\n";
+}
+
+std::wstring FileDataExpCRW(void* param)
+{
+    return L"\r";
+}
+
+std::wstring FileDataExpCRLFW(void* param)
+{
+    return L"\r\n";
+}
+
+std::wstring FileDataExpTABW(void* param)
+{
+    return L"\t";
+}
+
 const char* WINAPI ExecuteValDummy(HWND msgParent, void* param)
 {
     return "";
@@ -1693,6 +1812,31 @@ CSalamanderVarStrEntry* GetInfoLineExpArray(BOOL isDisk)
     return InfoLineExpArray;
 }
 
+sally::unicode::WideVarEntry InfoLineExpArrayW[] =
+    {
+        {FILEDATA_FILENAME, FileDataExpFileNameW},
+        {FILEDATA_FILESIZE, FileDataExpFileSizeW},
+        {FILEDATA_FILEDATE, NULL /* see below */},
+        {FILEDATA_FILETIME, NULL /* see below */},
+        {FILEDATA_FILEATTR, FileDataExpFileAttrW},
+        {FILEDATA_FILEDOSNAME, FileDataExpFileDOSNameW},
+        {NULL, NULL}};
+
+sally::unicode::WideVarEntry* GetInfoLineExpArrayW(BOOL isDisk)
+{
+    if (isDisk)
+    {
+        InfoLineExpArrayW[2].Execute = FileDataExpFileDateOnlyForDiskW;
+        InfoLineExpArrayW[3].Execute = FileDataExpFileTimeOnlyForDiskW;
+    }
+    else
+    {
+        InfoLineExpArrayW[2].Execute = FileDataExpFileDateW;
+        InfoLineExpArrayW[3].Execute = FileDataExpFileTimeW;
+    }
+    return InfoLineExpArrayW;
+}
+
 CSalamanderVarStrEntry MakeFileListExpArray[] =
     {
         {FILEDATA_FILENAME, FileDataExpFileName},
@@ -1710,6 +1854,25 @@ CSalamanderVarStrEntry MakeFileListExpArray[] =
         {EXECUTE_DRIVE, MFLFileDataExpDrive},
         {EXECUTE_PATH, MFLFileDataExpPath},
         {EXECUTE_DOSPATH, MFLFileDataExpDOSPath},
+        {NULL, NULL}};
+
+sally::unicode::WideVarEntry MakeFileListExpArrayW[] =
+    {
+        {FILEDATA_FILENAME, FileDataExpFileNameW},
+        {FILEDATA_FILENAMEPART, FileDataExpFileNamePartW},
+        {FILEDATA_FILEEXTENSION, FileDataExpFileExtensionW},
+        {FILEDATA_FILESIZE, FileDataExpFileSizeNoSpacesW},
+        {FILEDATA_FILEDATE, FileDataExpFileDateW},
+        {FILEDATA_FILETIME, FileDataExpFileTimeW},
+        {FILEDATA_FILEATTR, FileDataExpFileAttrW},
+        {FILEDATA_FILEDOSNAME, FileDataExpFileDOSNameW},
+        {FILEDATA_LF, FileDataExpLFW},
+        {FILEDATA_CR, FileDataExpCRW},
+        {FILEDATA_CRLF, FileDataExpCRLFW},
+        {FILEDATA_TAB, FileDataExpTABW},
+        {EXECUTE_DRIVE, MFLFileDataExpDriveW},
+        {EXECUTE_PATH, MFLFileDataExpPathW},
+        {EXECUTE_DOSPATH, MFLFileDataExpDOSPathW},
         {NULL, NULL}};
 
 BOOL BrowseDirCommand(HWND hParent, int editlineResID, int filterResID)
@@ -1874,6 +2037,21 @@ BOOL ExpandInfoLineItems(HWND msgParent, const char* varText, CPluginDataInterfa
                            &data, TRUE, varPlacements, varPlacementsCount);
 }
 
+BOOL ExpandInfoLineItemsW(HWND msgParent, const char* varText, CPluginDataInterfaceEncapsulation* pluginData,
+                          CFileData* fData, BOOL isDir, std::wstring& buffer, DWORD* varPlacements,
+                          int* varPlacementsCount, DWORD validFileData, BOOL isDisk)
+{
+    CALL_STACK_MESSAGE1("ExpandInfoLineItemsW()");
+    CFileDataExpData data;
+    data.PluginData = pluginData;
+    data.FileData = fData;
+    data.IsDir = isDir;
+    data.ValidFileData = validFileData;
+    data.Path[0] = 0;
+    return sally::unicode::ExpandWideVarString(varText, GetInfoLineExpArrayW(isDisk), &data,
+                                               &buffer, varPlacements, varPlacementsCount);
+}
+
 BOOL ValidateMakeFileList(HWND msgParent, const char* varText, int& errorPos1, int& errorPos2)
 {
     CALL_STACK_MESSAGE2("ValidateMakeFileList(, %s, ,)", varText);
@@ -1895,6 +2073,23 @@ BOOL ExpandMakeFileList(HWND msgParent, const char* varText, CPluginDataInterfac
     return ExpandVarString(msgParent, varText, buffer, bufferLen, MakeFileListExpArray, &data,
                            ignoreEnvVarNotFoundOrTooLong, NULL, NULL, detectMaxVarSizes,
                            maxVarSizes, maxVarSizesCount);
+}
+
+BOOL ExpandMakeFileListW(HWND msgParent, const char* varText, CPluginDataInterfaceEncapsulation* pluginData,
+                         CFileData* fData, BOOL isDir, std::wstring* buffer, BOOL detectMaxVarSizes,
+                         int* maxVarSizes, int maxVarSizesCount, DWORD validFileData, const char* path,
+                         BOOL ignoreEnvVarNotFoundOrTooLong)
+{
+    CALL_STACK_MESSAGE1("ExpandMakeFileListW()");
+    CFileDataExpData data;
+    data.PluginData = pluginData;
+    data.FileData = fData;
+    data.IsDir = isDir;
+    data.ValidFileData = validFileData;
+    strcpy(data.Path, path);
+    return sally::unicode::ExpandWideVarString(varText, MakeFileListExpArrayW, &data,
+                                               buffer, NULL, NULL, detectMaxVarSizes,
+                                               maxVarSizes, maxVarSizesCount);
 }
 
 BOOL RemoveDoubleBackslahesFromPath(char* text)

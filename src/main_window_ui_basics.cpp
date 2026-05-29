@@ -1193,17 +1193,23 @@ void CMainWindow::EditWindowSetDirectory()
          panel->Is(ptPluginFS) && panel->GetPluginFS()->NotEmpty() &&
              panel->GetPluginFS()->IsServiceSupported(FS_SERVICE_COMMANDLINE)))
     {
-        CPathBuffer dir; // Heap-allocated for long path support
-        panel->GetGeneralPath(dir, dir.Size());
+        std::wstring dirW;
         EditWindow->Enable(TRUE); // cached in EditWindow
-        EditWindow->SetDirectory(dir);
+        if (panel->GetGeneralPathW(dirW))
+            EditWindow->SetDirectoryW(dirW.c_str());
+        else
+        {
+            CPathBuffer dir; // Heap-allocated for long path support
+            panel->GetGeneralPath(dir, dir.Size());
+            EditWindow->SetDirectory(dir);
+        }
     }
     else // disable/hide edit-line
     {
         if (EditMode && panel != NULL) // release focus from command line before disabling it
             FocusPanel(panel, TRUE);
         EditWindow->Enable(FALSE); // cached in EditWindow
-        EditWindow->SetDirectory("");
+        EditWindow->SetDirectoryW(L"");
     }
 }
 

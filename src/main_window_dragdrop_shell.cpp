@@ -317,7 +317,19 @@ void CMainWindow::MakeFileList()
                             DWORD read;
                             if (ReadFile(hFile, buff, fileSize, &read, NULL))
                             {
-                                CopyTextToClipboard(buff, fileSize, FALSE, NULL);
+                                if (read >= 3 &&
+                                    (BYTE)buff[0] == 0xEF && (BYTE)buff[1] == 0xBB && (BYTE)buff[2] == 0xBF)
+                                {
+                                    int wideLen = MultiByteToWideChar(CP_UTF8, 0, buff + 3, read - 3, NULL, 0);
+                                    if (wideLen > 0)
+                                    {
+                                        std::wstring wideText(wideLen, L'\0');
+                                        MultiByteToWideChar(CP_UTF8, 0, buff + 3, read - 3, wideText.data(), wideLen);
+                                        CopyTextToClipboardW(wideText.c_str(), (int)wideText.length(), FALSE, NULL);
+                                    }
+                                }
+                                else
+                                    CopyTextToClipboard(buff, read, FALSE, NULL);
                             }
                             else
                             {

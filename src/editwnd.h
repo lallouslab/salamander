@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -40,7 +40,7 @@ protected:
 class CInnerText : public CWindow
 {
 protected:
-    std::string Message;
+    std::wstring Message;
     int Height, Width;
     CEditWindow* EditWindow;
 
@@ -49,6 +49,7 @@ public:
     ~CInnerText();
 
     BOOL SetText(const char* txt); // sets only Message, returns when a redraw is needed
+    BOOL SetTextW(const wchar_t* txt); // sets only Message, returns when a redraw is needed
     void UpdateControl();
     int GetNeededWidth();
 
@@ -78,6 +79,7 @@ public:
 
     BOOL Create(HWND hParent, int childID);
     void SetDirectory(const char* dir);
+    void SetDirectoryW(const wchar_t* dir);
     void ResizeChilds(int cx, int cy, BOOL repaint);
     int GetNeededHeight();
     void SetFont();

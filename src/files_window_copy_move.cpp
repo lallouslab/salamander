@@ -20,6 +20,7 @@
 #include "common/unicode/helpers.h"
 #include "common/unicode/CopyNamePolicy.h"
 #include "common/unicode/PanelPathPolicy.h"
+#include "common/unicode/WideVariableExpansion.h"
 #include "common/IEnvironment.h"
 #include "common/widepath.h"
 
@@ -219,6 +220,34 @@ void CFilesWindow::Activate(BOOL shares)
     }
 }
 
+namespace
+{
+
+bool FileStartsWithUtf8Bom(HANDLE hFile)
+{
+    LARGE_INTEGER zero = {};
+    LARGE_INTEGER original = {};
+    if (!SetFilePointerEx(hFile, zero, &original, FILE_CURRENT))
+        return false;
+    SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
+    BYTE bom[3] = {};
+    DWORD read = 0;
+    bool hasBom = ReadFile(hFile, bom, sizeof(bom), &read, NULL) &&
+                  read == sizeof(bom) && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF;
+    SetFilePointerEx(hFile, original, NULL, FILE_BEGIN);
+    return hasBom;
+}
+
+bool WriteAll(HANDLE hFile, const void* data, DWORD len)
+{
+    if (len == 0)
+        return true;
+    DWORD written = 0;
+    return WriteFile(hFile, data, len, &written, NULL) && written == len;
+}
+
+} // namespace
+
 BOOL CFilesWindow::MakeFileList(HANDLE hFile)
 {
     CALL_STACK_MESSAGE_NONE
@@ -261,15 +290,19 @@ BOOL CFilesWindow::MakeFileList(HANDLE hFile)
             {
                 f = (indexes[i] < Dirs->Count) ? &Dirs->At(indexes[i]) : &Files->At(indexes[i] - Dirs->Count);
 
-                if (!ExpandMakeFileList(HWindow, Configuration.FileListHistory[0], &PluginData, f,
-                                        indexes[i] < Dirs->Count, NULL, 0, TRUE, maxSizes, maxSizesCount,
-                                        ValidFileData, GetPath(), i != 0))
+                if (!ExpandMakeFileListW(HWindow, Configuration.FileListHistory[0], &PluginData, f,
+                                         indexes[i] < Dirs->Count, NULL, TRUE, maxSizes, maxSizesCount,
+                                         ValidFileData, GetPath(), i != 0))
                 {
                     FilesActionInProgress = FALSE;
                     return FALSE;
                 }
             }
         }
+        std::wstring output;
+        bool outputIsExactAnsi = TRUE;
+        std::string ansiOutput;
+
         // in the second phase, apply these widths
         for (i = 0; i < alloc; i++)
         {
@@ -277,29 +310,49 @@ BOOL CFilesWindow::MakeFileList(HANDLE hFile)
             {
                 f = (indexes[i] < Dirs->Count) ? &Dirs->At(indexes[i]) : &Files->At(indexes[i] - Dirs->Count);
 
-                char buff[1000];
-                buff[0] = 0;
-                if (ExpandMakeFileList(HWindow, Configuration.FileListHistory[0], &PluginData, f,
-                                       indexes[i] < Dirs->Count, buff, 1000, FALSE, maxSizes, maxSizesCount,
-                                       ValidFileData, GetPath(), TRUE))
+                std::wstring buff;
+                if (ExpandMakeFileListW(HWindow, Configuration.FileListHistory[0], &PluginData, f,
+                                        indexes[i] < Dirs->Count, &buff, FALSE, maxSizes, maxSizesCount,
+                                        ValidFileData, GetPath(), TRUE))
                 {
-                    DWORD len = (DWORD)strlen(buff);
-                    if (len > 0)
-                    {
-                        DWORD written;
-                        if (!WriteFile(hFile, buff, len, &written, NULL) || written != len)
-                        {
-                            gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), GetErrorTextW(GetLastError()));
-                            FilesActionInProgress = FALSE;
-                            return FALSE;
-                        }
-                    }
+                    output += buff;
                 }
                 else
                 {
                     FilesActionInProgress = FALSE;
                     return FALSE;
                 }
+            }
+        }
+        outputIsExactAnsi = sally::unicode::TryWideToAnsiExact(output, ansiOutput);
+        LARGE_INTEGER pos = {};
+        SetFilePointerEx(hFile, pos, &pos, FILE_CURRENT);
+        if (outputIsExactAnsi)
+        {
+            if (!WriteAll(hFile, ansiOutput.data(), (DWORD)ansiOutput.length()))
+            {
+                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), GetErrorTextW(GetLastError()));
+                FilesActionInProgress = FALSE;
+                return FALSE;
+            }
+        }
+        else
+        {
+            bool hasUtf8Bom = pos.QuadPart > 0 && FileStartsWithUtf8Bom(hFile);
+            if (pos.QuadPart > 0 && !hasUtf8Bom)
+            {
+                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), L"Cannot append Unicode file-list output to a non-Unicode file.");
+                FilesActionInProgress = FALSE;
+                return FALSE;
+            }
+            const BYTE bom[] = {0xEF, 0xBB, 0xBF};
+            std::string utf8 = sally::unicode::WideToUtf8(output);
+            if ((pos.QuadPart == 0 && !WriteAll(hFile, bom, sizeof(bom))) ||
+                !WriteAll(hFile, utf8.data(), (DWORD)utf8.length()))
+            {
+                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), GetErrorTextW(GetLastError()));
+                FilesActionInProgress = FALSE;
+                return FALSE;
             }
         }
     // RAII: indexes auto-deleted when scope exits

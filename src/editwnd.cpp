@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -12,6 +12,8 @@
 #include "editwnd.h"
 #include "stswnd.h"
 #include "darkmode.h"
+#include "common/unicode/helpers.h"
+#include "common/unicode/WideVariableExpansion.h"
 #include <uxtheme.h>
 
 #include <shlwapi.h>
@@ -1577,12 +1579,12 @@ CInnerText::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             r.right -= TXEL_SPACE - 1; // bold fonts make the text overflow - hence this correction
 
             // PathCompactPath() works better than combining DT_PATH_ELLIPSIS with DT_END_ELLIPSIS (because the last character misbehaves)
-            CPathBuffer buff;
-            strncpy_s(buff, buff.Size(), Message.c_str(), _TRUNCATE);
-            PathCompactPath(dc, buff, r.right - r.left);
+            CWidePathBuffer buff;
+            wcsncpy_s(buff, buff.Size(), Message.c_str(), _TRUNCATE);
+            PathCompactPathW(dc, buff, r.right - r.left);
 
-            DrawText(dc, buff, -1, &r,
-                     /*DT_END_ELLIPSIS | DT_PATH_ELLIPSIS | */ DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            DrawTextW(dc, buff, -1, &r,
+                      /*DT_END_ELLIPSIS | DT_PATH_ELLIPSIS | */ DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
             SetBkMode(dc, oldBkMode);
             SetTextColor(dc, oldColor);
             SelectObject(dc, oldFont);
@@ -1606,14 +1608,16 @@ void CInnerText::UpdateControl()
 BOOL CInnerText::SetText(const char* txt)
 {
     CALL_STACK_MESSAGE2("CInnerText::SetText(%s)", txt);
-    if (txt == NULL)
-        txt = ">";
-    int l = (int)strlen(txt);
-    int lm = Message.empty() ? 0 : ((int)Message.size() - 1);
-    if (lm == l && Message.compare(0, l, txt) == 0)
+    return SetTextW(AnsiToWide(txt != NULL ? txt : "").c_str());
+}
+
+BOOL CInnerText::SetTextW(const wchar_t* txt)
+{
+    std::wstring newMessage = sally::unicode::BuildCommandLineDirectoryPrefixW(txt != NULL ? txt : L"");
+    CALL_STACK_MESSAGE2("CInnerText::SetTextW(%s)", WideToAnsi(newMessage).c_str());
+    if (Message == newMessage)
         return FALSE;
-    Message = txt;
-    Message += '>';
+    Message = newMessage;
     return TRUE;
 }
 
@@ -1627,7 +1631,7 @@ int CInnerText::GetNeededWidth()
     {
         HFONT old = (HFONT)SelectObject(dc, EnvFont);
         SIZE s;
-        GetTextExtentPoint32(dc, Message.c_str(), (int)Message.size(), &s);
+        GetTextExtentPoint32W(dc, Message.c_str(), (int)Message.size(), &s);
         SelectObject(dc, old);
         HANDLES(ReleaseDC(NULL, dc));
         return s.cx + TXEL_SPACE;
@@ -1736,6 +1740,21 @@ void CEditWindow::SetFont()
 void CEditWindow::SetDirectory(const char* dir)
 {
     if (Text != NULL && !Text->SetText(dir))
+        return;
+    if (HWindow != NULL)
+    {
+        RECT r;
+        GetClientRect(HWindow, &r);
+        ResizeChilds(r.right - r.left, r.bottom - r.top, FALSE);
+        if (Text != NULL)
+            Text->UpdateControl();
+        UpdateWindow(HWindow);
+    }
+}
+
+void CEditWindow::SetDirectoryW(const wchar_t* dir)
+{
+    if (Text != NULL && !Text->SetTextW(dir))
         return;
     if (HWindow != NULL)
     {

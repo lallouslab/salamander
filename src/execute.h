@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -201,6 +201,10 @@ BOOL ExpandInfoLineItems(HWND msgParent, const char* varText, CPluginDataInterfa
                          CFileData* fData, BOOL isDir, char* buffer, int bufferLen, DWORD* varPlacements,
                          int* varPlacementsCount, DWORD validFileData, BOOL isDisk);
 
+BOOL ExpandInfoLineItemsW(HWND msgParent, const char* varText, CPluginDataInterfaceEncapsulation* pluginData,
+                          CFileData* fData, BOOL isDir, std::wstring& buffer, DWORD* varPlacements,
+                          int* varPlacementsCount, DWORD validFileData, BOOL isDisk);
+
 // validates varText containing variables from the MakeFileListItems array
 // msgParent - parent of themessage box for errors; if NULL, errors are not shown
 BOOL ValidateMakeFileList(HWND msgParent, const char* varText, int& errorPos1, int& errorPos2);
@@ -215,6 +219,11 @@ BOOL ExpandMakeFileList(HWND msgParent, const char* varText, CPluginDataInterfac
                         CFileData* fData, BOOL isDir, char* buffer, int bufferLen, BOOL detectMaxVarSizes,
                         int* maxVarSizes, int maxVarSizesCount, DWORD validFileData, const char* path,
                         BOOL ignoreEnvVarNotFoundOrTooLong);
+
+BOOL ExpandMakeFileListW(HWND msgParent, const char* varText, CPluginDataInterfaceEncapsulation* pluginData,
+                         CFileData* fData, BOOL isDir, std::wstring* buffer, BOOL detectMaxVarSizes,
+                         int* maxVarSizes, int maxVarSizesCount, DWORD validFileData, const char* path,
+                         BOOL ignoreEnvVarNotFoundOrTooLong);
 
 // validates varText containing variables from the InitDirExecutes array
 // msgParent - parent message box for errors; if NULL, errors are not shown
