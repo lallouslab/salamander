@@ -15,6 +15,7 @@ set(SALLY_SOURCES
   "${SAL_SRC}/color.cpp"
   "${SAL_SRC}/common/allochan.cpp"
   "${SAL_SRC}/common/array.cpp"
+  "${SAL_SRC}/common/BuildScript.cpp"
   "${SAL_SRC}/common/handles.cpp"
   "${SAL_SRC}/common/heap.cpp"
   "${SAL_SRC}/common/messages.cpp"

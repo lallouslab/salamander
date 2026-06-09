@@ -1062,7 +1062,7 @@ BOOL CPluginFSInterface::ListCurrentPath(CSalamanderDirectoryAbstract* dir,
     }
 
     CPathBuffer logBuf;
-    _snprintf_s(logBuf, _TRUNCATE, LoadStr(PathListing != NULL ? IDS_LOGMSGLISTINGCACHEDPATH : IDS_LOGMSGLISTINGPATH), Path);
+    _snprintf_s(logBuf, _TRUNCATE, LoadStr(PathListing != NULL ? IDS_LOGMSGLISTINGCACHEDPATH : IDS_LOGMSGLISTINGPATH), Path.Get());
     ControlConnection->LogMessage(logBuf, -1, TRUE);
 
     //  if (PathListing != NULL && forceRefresh && !NextRefreshCanUseOldListing)  // may happen when the user requests a hard refresh and refuses to reconnect - then the cached listing is used (if available)

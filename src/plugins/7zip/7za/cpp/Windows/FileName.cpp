@@ -274,7 +274,7 @@ static unsigned GetRootPrefixSize_Of_SuperPath(CFSTR s)
   return kSuperPathPrefixSize + pos + 1;
 }
 
-unsigned GetRootPrefixSize(CFSTR s)
+unsigned GetRootPrefixSize(CFSTR s) throw()
 {
   if (IS_DEVICE_PATH(s))
     return kDevicePathPrefixSize;

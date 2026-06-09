@@ -707,7 +707,7 @@ BOOL CPluginFSInterface::CopyOrMoveFromDiskToFS(BOOL copy, int mode, const char*
             PathListingMayBeOutdated = TRUE;
 
         // add the *.* or * mask to the target path (we will process operation masks)
-        FTPAddOperationMask(pathType, targetPath, path2.Size(), sourceFiles == 0);
+        FTPAddOperationMask(pathType, targetPath, FTP_MAX_PATH, sourceFiles == 0);
         return TRUE;
     }
 
@@ -987,7 +987,7 @@ BOOL CPluginFSInterface::CopyOrMoveFromDiskToFS(BOOL copy, int mode, const char*
                                                 {
                                                     CPathBuffer errBuf;
                                                     _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_CHANGEWORKPATHERROR),
-                                                                (cutTgtPathIBMz_VM[0] != 0 ? cutTgtPathIBMz_VM : cutTgtPath), replyBuf);
+                                                                (cutTgtPathIBMz_VM[0] != 0 ? cutTgtPathIBMz_VM.Get() : cutTgtPath.Get()), replyBuf);
                                                     SalamanderGeneral->ShowMessageBox(errBuf, LoadStr(IDS_FTPERRORTITLE), MSGBOX_ERROR);
                                                     return FALSE; // invalid path
                                                 }

@@ -9,7 +9,7 @@
 // CFTPWorker
 //
 
-void CFTPWorker::OpenActDataCon(CFTPWorkerSubState waitForListen, char* errBuf, BOOL& conClosedRetryItem, BOOL& lookForNewWork)
+void CFTPWorker::OpenActDataCon(CFTPWorkerSubState waitForListen, CPathBuffer& errBuf, BOOL& conClosedRetryItem, BOOL& lookForNewWork)
 {
     DWORD localIP;
     unsigned short localPort = 0; // listen on any port
@@ -74,7 +74,7 @@ void CFTPWorker::OpenActDataCon(CFTPWorkerSubState waitForListen, char* errBuf, 
                 while (s > errBuf && (*(s - 1) == '\n' || *(s - 1) == '\r'))
                     s--;
                 *s = 0; // trim newline characters from the error text
-                _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(IDS_PROXYERRUNABLETOCON2), errBuf);
+                _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(IDS_PROXYERRUNABLETOCON2), errBuf.Get());
             }
             else
                 _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(IDS_PROXYERRUNABLETOCON));
@@ -97,8 +97,8 @@ void CFTPWorker::OpenActDataCon(CFTPWorkerSubState waitForListen, char* errBuf, 
     }
 }
 
-void CFTPWorker::WaitForListen(CFTPWorkerEvent event, BOOL& handleShouldStop, char* errBuf,
-                               char* buf, int& cmdLen, BOOL& sendCmd, BOOL& conClosedRetryItem,
+void CFTPWorker::WaitForListen(CFTPWorkerEvent event, BOOL& handleShouldStop, CPathBuffer& errBuf,
+                               CPathBuffer& buf, int& cmdLen, BOOL& sendCmd, BOOL& conClosedRetryItem,
                                CFTPWorkerSubState waitForPORTRes)
 {
     if (ShouldStop)
@@ -176,7 +176,7 @@ void CFTPWorker::WaitForListen(CFTPWorkerEvent event, BOOL& handleShouldStop, ch
                     if (errBuf[0] == 0)
                         lstrcpyn(ErrorDescr, LoadStr(IDS_PROXYERROPENACTDATA), FTPWORKER_ERRDESCR_BUFSIZE);
                     else
-                        _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), errBuf);
+                        _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), errBuf.Get());
                     needRetry = TRUE;
                 }
             }
@@ -207,7 +207,7 @@ void CFTPWorker::WaitForListen(CFTPWorkerEvent event, BOOL& handleShouldStop, ch
             if (errBuf[0] == 0)
                 lstrcpyn(ErrorDescr, LoadStr(IDS_PREPACTDATACONTIMEOUT), FTPWORKER_ERRDESCR_BUFSIZE);
             else
-                _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), errBuf);
+                _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), errBuf.Get());
             needRetry = TRUE;
             break;
         }
@@ -365,7 +365,7 @@ void CFTPWorker::WaitForPORTRes(CFTPWorkerEvent event, BOOL& nextLoop, BOOL& con
     }
 }
 
-void CFTPWorker::SetTypeA(BOOL& handleShouldStop, char* errBuf, char* buf, int& cmdLen,
+void CFTPWorker::SetTypeA(BOOL& handleShouldStop, CPathBuffer& errBuf, CPathBuffer& buf, int& cmdLen,
                           BOOL& sendCmd, BOOL& nextLoop, CCurrentTransferMode trMode,
                           BOOL asciiTrMode, CFTPWorkerSubState waitForTYPERes,
                           CFTPWorkerSubState trModeAlreadySet)
@@ -446,9 +446,9 @@ void CFTPWorker::WaitForTYPERes(CFTPWorkerEvent event, int replyCode, BOOL& next
 }
 
 void CFTPWorker::HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                            BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                            BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                             int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
-                                            int replyCode, char* ftpPath, char* errText,
+                                            int replyCode, CPathBuffer& ftpPath, CPathBuffer& errText,
                                             BOOL& conClosedRetryItem, BOOL& lookForNewWork,
                                             BOOL& handleShouldStop, BOOL* listingNotAccessible)
 {
@@ -493,11 +493,11 @@ void CFTPWorker::HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQui
             CFTPServerPathType type = Oper->GetFTPServerPathType(ftpPath);
             if (UploadDirGetTgtPathListing || FTPPathAppend(type, ftpPath, ftpPath.Size(), CurItem->Name, TRUE))
             { // we have the path; send CWD to the server to enter the inspected directory
-                _snprintf_s(errText, errText.Size(), _TRUNCATE, LoadStr(IDS_LOGMSGLISTINGPATH), ftpPath);
+                _snprintf_s(errText, errText.Size(), _TRUNCATE, LoadStr(IDS_LOGMSGLISTINGPATH), ftpPath.Get());
                 Logs.LogMessage(LogUID, errText, -1, TRUE);
 
                 PrepareFTPCommand(buf, buf.Size(), errBuf, errBuf.Size(),
-                                  ftpcmdChangeWorkingPath, &cmdLen, ftpPath); // cannot report an error
+                                  ftpcmdChangeWorkingPath, &cmdLen, ftpPath.Get()); // cannot report an error
                 sendCmd = TRUE;
                 SubState = fwssWorkExplWaitForCWDRes;
 

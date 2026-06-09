@@ -104,7 +104,7 @@ EditWindowProcW(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         int iStart, iEnd;
         SendMessage(hWnd, EM_GETSEL, (WPARAM)&iStart, (LPARAM)&iEnd);
         int count = GetWindowTextLength(hWnd);
-        int lineCount = SendMessage(hWnd, EM_GETLINECOUNT, 0, 0);
+        int lineCount = (int)SendMessage(hWnd, EM_GETLINECOUNT, 0, 0);
         BOOL wholeSelected = iStart == 0 && iEnd == count && iEnd > iStart;
         if (!wholeSelected && !controlPressed && lineCount > 1)
             break;

@@ -23,7 +23,9 @@
 #include "DBFLib.h"
 
 #define strend(x) (x + strlen(x))
+#ifndef min
 #define min(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 /*****************************************************************************
  * cDBF::cDBF - open DBF file, parses header and opens memo file, if it exists

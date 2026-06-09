@@ -1967,11 +1967,13 @@ CExitingOpenSal::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 //
 
 CConfirmADSLossDlg::CConfirmADSLossDlg(HWND parent, BOOL isFile, const char* name,
-                                       const char* streams, BOOL isMove) : CCommonDialog(HLanguage, IDD_CONFIRMADSLOSS, parent)
+                                       const char* streams, BOOL isMove,
+                                       const wchar_t* nameW) : CCommonDialog(HLanguage, IDD_CONFIRMADSLOSS, parent)
 {
     IsFile = isFile;
     IsMove = isMove;
     Name = name;
+    NameW = nameW;
     Streams = streams;
 }
 
@@ -1985,7 +1987,12 @@ CConfirmADSLossDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         CStaticText* name;
         if ((name = new CStaticText(HWindow, IDS_FILENAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(Name);
+        {
+            if (NameW != NULL)
+                name->SetTextToDblQuotesIfNeededW(NameW);
+            else
+                name->SetTextToDblQuotesIfNeeded(Name);
+        }
         else
             TRACE_E(LOW_MEMORY);
 
@@ -2126,11 +2133,13 @@ CConfirmEncryptionLossDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 // CErrorReadingADSDlg
 //
 
-CErrorReadingADSDlg::CErrorReadingADSDlg(HWND parent, const char* file, const char* error, const char* title) : CCommonDialog(HLanguage, IDD_CANNOTGETADSINFO, parent)
+CErrorReadingADSDlg::CErrorReadingADSDlg(HWND parent, const char* file, const char* error,
+                                         const char* title, const wchar_t* fileW) : CCommonDialog(HLanguage, IDD_CANNOTGETADSINFO, parent)
 {
     File = file;
     Error = error;
     Title = title;
+    FileW = fileW;
 }
 
 INT_PTR
@@ -2149,7 +2158,12 @@ CErrorReadingADSDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         CStaticText* name;
         if ((name = new CStaticText(HWindow, IDS_FILENAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(File);
+        {
+            if (FileW != NULL)
+                name->SetTextToDblQuotesIfNeededW(FileW);
+            else
+                name->SetTextToDblQuotesIfNeeded(File);
+        }
         else
             TRACE_E(LOW_MEMORY);
 

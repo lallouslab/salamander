@@ -102,7 +102,7 @@ BOOL SetValue(HKEY hKey, const char* name, DWORD type,
               const void* data, DWORD dataSize)
 {
     if (dataSize == -1)
-        dataSize = strlen((char*)data) + 1;
+        dataSize = (DWORD)(strlen((char*)data) + 1);
     LONG res = RegSetValueEx(hKey, name, 0, type, (CONST BYTE*)data, dataSize);
     if (res == ERROR_SUCCESS)
         return TRUE;
@@ -118,7 +118,7 @@ BOOL SetValueW(HKEY hKey, const char* name, DWORD type,
                const void* data, DWORD dataSize)
 {
     if (dataSize == -1)
-        dataSize = strlen((char*)data) + 1;
+        dataSize = (DWORD)(strlen((char*)data) + 1);
 
     wchar_t tmp[1000];
     MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, name, -1, tmp, 1000);
@@ -438,7 +438,7 @@ BOOL SaveHistoryW(HKEY hKey, const char* name, wchar_t* history[], int maxCount)
             if (history[i] != NULL)
             {
                 _itoa_s(i + 1, buf, 10);
-                SetValueW(historyKey, buf, REG_SZ, history[i], (wcslen(history[i]) + 1) * sizeof(wchar_t));
+                SetValueW(historyKey, buf, REG_SZ, history[i], (DWORD)((wcslen(history[i]) + 1) * sizeof(wchar_t)));
             }
             else
                 break;
@@ -615,7 +615,7 @@ BOOL CConfiguration::Save()
                 if (RecentProjects[i][0] != 0)
                 {
                     _itoa_s(i + 1, buf, 10);
-                    SetValue(actKey, buf, REG_SZ, RecentProjects[i], strlen(RecentProjects[i]) + 1);
+                    SetValue(actKey, buf, REG_SZ, RecentProjects[i], (DWORD)(strlen(RecentProjects[i]) + 1));
                 }
                 else
                     break;

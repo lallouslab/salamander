@@ -185,7 +185,7 @@ int GetRootLen(const char* path)
             s++; // '\\'
         while (*s != 0 && *s != '\\')
             s++;
-        return (s - path) + 1;
+        return (int)(s - path + 1);
     }
     else
         return 3;
@@ -401,7 +401,7 @@ BOOL CData::ProcessProjectLine(CProjectSectionEnum* section, const char* line, i
     const char* p = line;
     while (*p != '=' && *p != 0)
         p++;
-    int len = p - line;
+    int len = (int)(p - line);
     if (*p != '=' || len == 0 || len > 99 || *(p + 1) == 0)
     {
         char errbuf[MAX_PATH + 100];
@@ -664,7 +664,7 @@ BOOL CData::LoadProject(const char* fileName)
             count++;
         }
         line++;
-        int lineLen = lineEnd - lineStart;
+        int lineLen = (int)(lineEnd - lineStart);
 
         if (count + 1 < size &&
             ((*lineEnd == '\r' && *(lineEnd + 1) == '\n') ||
@@ -777,7 +777,7 @@ CData::VerifyBOM(WORD bom)
 */
 BOOL CData::WriteUnicodeTextLine(HANDLE hFile, const wchar_t* line)
 {
-    DWORD len = wcslen(line);
+    DWORD len = (DWORD)wcslen(line);
     DWORD written;
     if (!WriteFile(hFile, line, len * 2, &written, NULL) || written != len * 2)
     {
@@ -806,7 +806,7 @@ BOOL CData::WriteUTF8TextLine(HANDLE hFile, const wchar_t* line, DWORD* fileCRC3
 {
     char utf8Line[10000];
     ConvertU2A(line, -1, utf8Line, 10000, FALSE, CP_UTF8);
-    DWORD len = strlen(utf8Line);
+    DWORD len = (DWORD)strlen(utf8Line);
 
     DWORD written;
     if (!WriteFile(hFile, utf8Line, len, &written, NULL) || written != len)

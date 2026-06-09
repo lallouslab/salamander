@@ -568,7 +568,7 @@ void CFTPWorker::HandleEventInPreparingState(CFTPWorkerEvent event, BOOL& sendQu
 }
 
 void CFTPWorker::HandleEventInConnectingState(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                              BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                              BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                               int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
                                               int replyCode, BOOL& operStatusMaybeChanged)
 {
@@ -1060,7 +1060,7 @@ void CFTPWorker::HandleEventInConnectingState(CFTPWorkerEvent event, BOOL& sendQ
                                     if (errBuf[0] == 0)
                                         lstrcpyn(ErrorDescr, LoadStr(errID), FTPWORKER_ERRDESCR_BUFSIZE);
                                     else
-                                        _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(errID), errBuf);
+                                        _snprintf_s(ErrorDescr, _TRUNCATE, LoadStr(errID), errBuf.Get());
                                     failed = TRUE;
                                     retryLoginWithoutAsking = err == SSLCONERR_CANRETRY;
                                 }

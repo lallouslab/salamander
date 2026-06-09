@@ -354,6 +354,19 @@ inline BOOL ButtonsContainsYes(DWORD btn)
 #define SALCOL_THUMBNAIL_FOCUSED 36
 #define SALCOL_THUMBNAIL_FOCSEL 37
 
+// Sally theme modes returned by CSalamanderGeneralAbstract::GetThemeInfo.
+#define SALTHEME_MODE_UNKNOWN -1
+#define SALTHEME_MODE_LIGHT 0
+#define SALTHEME_MODE_DARK 1
+#define SALTHEME_MODE_SYSTEM 2
+
+struct CSalamanderThemeInfo
+{
+    DWORD Size;         // must be set to sizeof(CSalamanderThemeInfo)
+    int ThemeMode;      // SALTHEME_MODE_XXX configured mode
+    BOOL UseDarkColors; // resolved effective mode at call time
+};
+
 // constants for reasons why CSalamanderGeneralAbstract::ChangePanelPathToXXX methods returned failure:
 #define CHPPFR_SUCCESS 0 // new path is in panel, success (return value is TRUE)
 // new path (or archive name) cannot be converted from relative to absolute or
@@ -3446,6 +3459,11 @@ public:
     // used during critical shutdown to unblock window/dialog over which modal dialogs are open,
     // if multiple layers are possible, must be called repeatedly
     virtual void WINAPI CloseAllOwnedEnabledDialogs(HWND parent, DWORD tid = 0) = 0;
+
+    // returns Sally's configured and effective theme mode; call with
+    // CSalamanderThemeInfo::Size set to sizeof(CSalamanderThemeInfo).
+    // limitation: main thread
+    virtual BOOL WINAPI GetThemeInfo(CSalamanderThemeInfo* info) = 0;
 };
 
 #ifdef _MSC_VER

@@ -2,3 +2,15 @@ LIBRARY salunrar.dll
 
 EXPORTS SalamanderPluginEntry
 EXPORTS SalamanderPluginGetReqVer
+EXPORTS RAROpenArchive
+EXPORTS RAROpenArchiveEx
+EXPORTS RARCloseArchive
+EXPORTS RARReadHeader
+EXPORTS RARReadHeaderEx
+EXPORTS RARProcessFile
+EXPORTS RARProcessFileW
+EXPORTS RARSetCallback
+EXPORTS RARSetChangeVolProc
+EXPORTS RARSetProcessDataProc
+EXPORTS RARSetPassword
+EXPORTS RARGetDllVersion

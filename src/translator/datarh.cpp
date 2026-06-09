@@ -382,7 +382,7 @@ BOOL CDataRH::GetID(const char* param, int row, WORD* id, BOOL* isIncomplete, CD
 
         if (!GetIDForIdentifier(symbolicName, &foundID))
         {
-            int len = strlen(symbolicName) + 1;
+            int len = (int)strlen(symbolicName) + 1;
             incomplItem->SymbVal = (char*)malloc(len);
             if (incomplItem->SymbVal == NULL)
             {
@@ -473,7 +473,7 @@ BOOL CDataRH::ProcessLine(const char* line, const char* lineEnd, int row)
 
                     if (p < lineEnd)
                     {
-                        int filePathLen = lineEnd - p;
+                        int filePathLen = (int)(lineEnd - p);
                         CDataRHItem mark;
                         mark.ID = 0; //dummy
                         mark.Row = row;
@@ -543,7 +543,7 @@ BOOL CDataRH::ProcessLine(const char* line, const char* lineEnd, int row)
                     int nameLen = 0;
                     while (iter < lineEnd && *iter != ' ' && *iter != '\t' && *iter != '/')
                         iter++;
-                    nameLen = iter - name;
+                    nameLen = (int)(iter - name);
 
                     if (*iter == '/')
                         return TRUE;
@@ -557,7 +557,7 @@ BOOL CDataRH::ProcessLine(const char* line, const char* lineEnd, int row)
                         int idLen = 0;
                         while (iter < lineEnd && *iter != '/')
                             iter++;
-                        idLen = iter - id;
+                        idLen = (int)(iter - id);
 
                         if (nameLen > 999 || idLen > 999)
                         {
@@ -791,7 +791,7 @@ BOOL CompileRule(const char*& rh, const char* rhEnd, int* line, int* errorResID)
     char ident1[100];
     char ident2[100];
 
-    lstrcpyn(ident1, beg, min(100, rh - beg + 1));
+    lstrcpyn(ident1, beg, min(100, (int)(rh - beg + 1)));
     if (!SkipWSAndEOLAndCmnt(rh, rhEnd, line) || (*rh != '=' && *rh != '('))
     {
         *errorResID = IDS_ERR_MISSINGFUNCPARS;
@@ -815,7 +815,7 @@ BOOL CompileRule(const char*& rh, const char* rhEnd, int* line, int* errorResID)
         beg = rh;
         if (!SkipIdentifier(rh, rhEnd, errorResID, IDS_ERR_MISSINGFUNCORVAR))
             return FALSE;
-        lstrcpyn(ident2, beg, min(100, rh - beg + 1));
+        lstrcpyn(ident2, beg, min(100, (int)(rh - beg + 1)));
 
         result = ident1;
         function = ident2;
@@ -874,7 +874,7 @@ BOOL CompileRule(const char*& rh, const char* rhEnd, int* line, int* errorResID)
                 beg = rh;
                 if (!SkipIdentifier(rh, rhEnd, errorResID, IDS_ERR_MISSINGFUNCPAR))
                     return FALSE;
-                lstrcpyn(par1, beg, min(100, rh - beg + 1));
+                lstrcpyn(par1, beg, min(100, (int)(rh - beg + 1)));
                 lastItem = 1;
             }
         }
@@ -943,7 +943,7 @@ BOOL CompileLayout(const char*& rh, const char* rhEnd, int* line, int* errorResI
                 if (SkipIdentifier(rh, rhEnd, errorResID, IDS_ERR_MISSINGFUNCPARS))
                 {
                     char dlgName[100];
-                    lstrcpyn(dlgName, beg, min(100, rh - beg + 1));
+                    lstrcpyn(dlgName, beg, min(100, (int)(rh - beg + 1)));
 
                     // ensure the identifier is defined
                     if (!DataRH.GetIDForIdentifier(dlgName, NULL))
@@ -989,7 +989,7 @@ BOOL CompileSlash(const char*& rh, const char* rhEnd, int* line, int* errorResID
                         if (SkipIdentifier(rh, rhEnd, errorResID, IDS_ERR_LAYOUTEXPECTED))
                         {
                             char functionName[100];
-                            lstrcpyn(functionName, beg, min(100, rh - beg + 1));
+                            lstrcpyn(functionName, beg, min(100, (int)(rh - beg + 1)));
                             if (strcmp(functionName, "Layout") == 0)
                                 return CompileLayout(rh, rhEnd, line, errorResID);
                             else
@@ -1250,7 +1250,7 @@ void CDataRH::FillListBox()
         while (*lineEnd != '\r' && *lineEnd != '\n' && lineEnd < Data + DataSize)
             lineEnd++;
 
-        lstrcpyn(buff, lineStart, min(lineEnd - lineStart + 1, 2000));
+        lstrcpyn(buff, lineStart, min((int)(lineEnd - lineStart + 1), 2000));
 
         int count = ListView_GetItemCount(hListBox);
         LVITEM lvi;

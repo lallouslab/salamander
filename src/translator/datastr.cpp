@@ -151,7 +151,7 @@ BOOL CData::SaveStrings(HANDLE hUpdateRes)
         {
             result = UpdateResource(hUpdateRes, RT_STRING, MAKEINTRESOURCE(strData->ID),
                                     MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-                                    buff, (iter - buff) * sizeof(wchar_t));
+                                    buff, (DWORD)((iter - buff) * sizeof(wchar_t)));
         }
         if (!result)
             return FALSE;

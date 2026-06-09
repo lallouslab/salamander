@@ -1577,44 +1577,44 @@ protected:
 
     // helper method solely to make HandleEvent() easier to follow
     void HandleEventInConnectingState(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                      BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                      BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                       int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
                                       int replyCode, BOOL& operStatusMaybeChanged);
 
     // helper method solely to make HandleEvent() easier to follow
     void HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                   BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                   BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                    int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
                                    int replyCode);
 
     // helper method solely to make HandleEventInWorkingState and HandleEvent() easier to follow
     void HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                    BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                    BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                     int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
-                                    int replyCode, char* ftpPath, char* errText,
+                                    int replyCode, CPathBuffer& ftpPath, CPathBuffer& errText,
                                     BOOL& conClosedRetryItem, BOOL& lookForNewWork,
                                     BOOL& handleShouldStop, BOOL* listingNotAccessible);
 
     // helper method solely to make HandleEventInWorkingState and HandleEvent() easier to follow
     void HandleEventInWorkingState3(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                    char* buf, char* errBuf, int& cmdLen, BOOL& sendCmd,
-                                    char* reply, int replySize, int replyCode, char* errText,
+                                    CPathBuffer& buf, CPathBuffer& errBuf, int& cmdLen, BOOL& sendCmd,
+                                    char* reply, int replySize, int replyCode, CPathBuffer& errText,
                                     BOOL& conClosedRetryItem, BOOL& lookForNewWork,
                                     BOOL& handleShouldStop);
 
     // helper method solely to make HandleEventInWorkingState and HandleEvent() easier to follow
     void HandleEventInWorkingState4(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                    BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                    BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                     int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
-                                    int replyCode, char* ftpPath, char* errText,
+                                    int replyCode, CPathBuffer& ftpPath, CPathBuffer& errText,
                                     BOOL& conClosedRetryItem, BOOL& lookForNewWork,
                                     BOOL& handleShouldStop, BOOL& quitCmdWasSent);
 
     // helper method solely to make HandleEventInWorkingState and HandleEvent() easier to follow
     void HandleEventInWorkingState5(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                    BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                    BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                     int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
-                                    int replyCode, char* ftpPath, char* errText,
+                                    int replyCode, CPathBuffer& ftpPath, CPathBuffer& errText,
                                     BOOL& conClosedRetryItem, BOOL& lookForNewWork,
                                     BOOL& handleShouldStop, BOOL& quitCmdWasSent);
 
@@ -1629,12 +1629,12 @@ protected:
                                 int operationsHiddenFileDel, int operationsHiddenDirDel);
 
     // helper method solely to make HandleEventInWorkingState2() easier to follow
-    void OpenActDataCon(CFTPWorkerSubState waitForListen, char* errBuf,
+    void OpenActDataCon(CFTPWorkerSubState waitForListen, CPathBuffer& errBuf,
                         BOOL& conClosedRetryItem, BOOL& lookForNewWork);
 
     // helper method solely to make HandleEventInWorkingState2() easier to follow
-    void WaitForListen(CFTPWorkerEvent event, BOOL& handleShouldStop, char* errBuf,
-                       char* buf, int& cmdLen, BOOL& sendCmd, BOOL& conClosedRetryItem,
+    void WaitForListen(CFTPWorkerEvent event, BOOL& handleShouldStop, CPathBuffer& errBuf,
+                       CPathBuffer& buf, int& cmdLen, BOOL& sendCmd, BOOL& conClosedRetryItem,
                        CFTPWorkerSubState waitForPORTRes);
 
     // helper method solely to make HandleEventInWorkingState2() easier to follow
@@ -1647,7 +1647,7 @@ protected:
                         CFTPWorkerSubState setType);
 
     // helper method solely to make HandleEventInWorkingState2() easier to follow
-    void SetTypeA(BOOL& handleShouldStop, char* errBuf, char* buf, int& cmdLen,
+    void SetTypeA(BOOL& handleShouldStop, CPathBuffer& errBuf, CPathBuffer& buf, int& cmdLen,
                   BOOL& sendCmd, BOOL& nextLoop, CCurrentTransferMode trMode,
                   BOOL asciiTrMode, CFTPWorkerSubState waitForTYPERes,
                   CFTPWorkerSubState trModeAlreadySet);

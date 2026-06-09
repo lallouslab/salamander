@@ -44,6 +44,7 @@
 struct CFileHeader
 {
     char FileName[260];
+    WCHAR FileNameW[1024];
     CQuadWord Size;
     CQuadWord CompSize;
     FILETIME Time;
@@ -58,16 +59,19 @@ extern CSalamanderGeneralAbstract* SalamanderGeneral;
 class CRARFileData
 {
 public:
-    CRARFileData(QWORD qwPackedSize, int nItem) : PackedSize(qwPackedSize), ItemNumber(nItem) {}
+    CRARFileData(QWORD qwPackedSize, int nItem, const WCHAR* fileNameW = NULL);
+    ~CRARFileData();
 
     QWORD PackedSize;
     int ItemNumber; // # of item in the archive, not offset
+    WCHAR* FileNameW;
 };
 
 struct CRARExtractInfo
 {
     int ItemNumber; // # of item in the archive, not offset
-    TCHAR FileName[1];
+    WCHAR FileNameW[1024];
+    TCHAR FileName[1024];
 };
 
 // ****************************************************************************
@@ -141,7 +145,10 @@ protected:
     CQuadWord ProgressTotal;
     const char* ArcRoot;
     DWORD RootLen;
+    DWORD RootLenW;
     CPathBuffer TargetName;
+    WCHAR TargetNameW[4096];
+    BOOL TargetNameIsWide;
     HANDLE TargetFile;
     BOOL Success;
     //char Password[MAX_PASSWORD];
@@ -193,6 +200,11 @@ public:
     BOOL SwitchToFirstVol(LPCTSTR arcName, BOOL* saveFirstVolume = NULL);
     BOOL MakeFilesList(TIndirectArray2<CRARExtractInfo>& files, SalEnumSelection next, void* nextParam, const char* targetDir);
     BOOL DoThisFile(CFileHeader* header, LPCTSTR arcName, LPCTSTR targetDir);
+    BOOL BuildTargetName(CFileHeader* header, const char* targetDir, const char* relativeNameA, const WCHAR* relativeNameW);
+    HANDLE CreateTargetFile(DWORD desiredAccess, DWORD shareMode, DWORD flagsAndAttributes, BOOL isDir,
+                            const char* sourceName, const char* sourceInfo, BOOL* skipped, CQuadWord* allocateWholeFile);
+    void DeleteTargetFile();
+    void SetTargetAttributes(DWORD attributes);
     BOOL ConstructMaskArray(TIndirectArray2<char>& maskArray, const char* masks);
     BOOL UnpackWholeArchiveCalculateProgress(TIndirectArray2<char>& masks);
 };
@@ -255,17 +267,6 @@ extern struct CConfiguration Config;
 
 LPCTSTR LoadStr(int resID);
 void GetInfo(char* buffer, FILETIME* lastWrite, CQuadWord& size);
-
-typedef int(PASCAL* FRARGetDllVersion)();
-typedef HANDLE(PASCAL* FRAROpenArchiveEx)(struct RAROpenArchiveDataEx* ArchiveData);
-typedef int(PASCAL* FRARCloseArchive)(HANDLE hArcData);
-//typedef int (PASCAL *FRARReadHeader)(HANDLE hArcData,struct RARHeaderData *HeaderData);
-typedef int(PASCAL* FRARReadHeaderEx)(HANDLE hArcData, struct RARHeaderDataEx* HeaderData);
-typedef int(PASCAL* FRARProcessFile)(HANDLE hArcData, int Operation, const char* DestPath, char* DestName);
-//typedef void (PASCAL *FRARSetChangeVolProc)(HANDLE hArcData,int (PASCAL *ChangeVolProc)(char *ArcName,int Mode));
-//typedef void (PASCAL *FRARSetProcessDataProc)(HANDLE hArcData,int (PASCAL *ProcessDataProc)(unsigned char *Addr,int Size));
-typedef void(PASCAL* FRARSetPassword)(HANDLE hArcData, char* Password);
-typedef void(PASCAL* FRARSetCallback)(HANDLE hArcData, UNRARCALLBACK Callback, LPARAM UserData);
 
 //***********************************************************************************
 //

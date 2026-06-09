@@ -180,7 +180,7 @@ BOOL DecodeString(const wchar_t* iter, int len, wchar_t** string)
 
     while (len > 0)
     {
-        int len2 = __GetCharacterString(tmpBuff, _countof(TempBuff) - (tmpBuff - TempBuff), *s++);
+        int len2 = __GetCharacterString(tmpBuff, (int)(_countof(TempBuff) - (tmpBuff - TempBuff)), *s++);
         tmpBuff += len2;
         tmpLen += len2;
         len--;
@@ -1143,7 +1143,7 @@ BOOL CData::Import(const char* project, BOOL trlPropOnly, BOOL onlyDlgLayouts)
                                         if (wcscmp(newOriginal, oldOriginal) == 0)
                                         {
                                             // Copy the translated string from the imported data.
-                                            int len = wcslen(oldData.DlgData[index]->Controls[ctrlIndex]->TWindowName) + 1;
+                                            int len = (int)wcslen(oldData.DlgData[index]->Controls[ctrlIndex]->TWindowName) + 1;
                                             wchar_t* s = (wchar_t*)malloc(len * sizeof(wchar_t));
                                             wcscpy_s(s, len, oldData.DlgData[index]->Controls[ctrlIndex]->TWindowName);
                                             free(DlgData[i]->Controls[j]->TWindowName);
@@ -1205,7 +1205,7 @@ BOOL CData::Import(const char* project, BOOL trlPropOnly, BOOL onlyDlgLayouts)
                                     if (wcscmp(MenuData[i]->Items[j].OString, oldData.MenuData[index]->Items[itemIndex].OString) == 0)
                                     {
                                         // Copy the translated string from the imported data.
-                                        int len = wcslen(oldData.MenuData[index]->Items[itemIndex].TString) + 1;
+                                        int len = (int)wcslen(oldData.MenuData[index]->Items[itemIndex].TString) + 1;
                                         wchar_t* s = (wchar_t*)malloc(len * sizeof(wchar_t));
                                         wcscpy_s(s, len, oldData.MenuData[index]->Items[itemIndex].TString);
                                         free(MenuData[i]->Items[j].TString);
@@ -1238,7 +1238,7 @@ BOOL CData::Import(const char* project, BOOL trlPropOnly, BOOL onlyDlgLayouts)
                                 if (wcscmp(StrData[i]->OStrings[j], oldData.StrData[index]->OStrings[j]) == 0)
                                 {
                                     // Copy the translated string from the imported data.
-                                    int len = wcslen(oldData.StrData[index]->TStrings[j]) + 1;
+                                    int len = (int)wcslen(oldData.StrData[index]->TStrings[j]) + 1;
                                     wchar_t* s = (wchar_t*)malloc(len * sizeof(wchar_t));
                                     wcscpy_s(s, len, oldData.StrData[index]->TStrings[j]);
                                     free(StrData[i]->TStrings[j]);
@@ -1971,7 +1971,7 @@ BOOL GetUnicodeItemText(BOOL testOnly, const wchar_t* buff, int lineNumber, wcha
         return FALSE;
 
     if (!testOnly)
-        SetNewText(itemText, text, p - text);
+        SetNewText(itemText, text, (int)(p - text));
 
     return TRUE;
 }
@@ -2302,7 +2302,7 @@ BOOL GetUTF8TextLine(const char** lineStart, const char* fileEnd, wchar_t* buff,
     }
     if ((p - *lineStart) < buffSize)
     {
-        ConvertA2U(*lineStart, (p - *lineStart), buff, buffSize, CP_UTF8);
+        ConvertA2U(*lineStart, (int)(p - *lineStart), buff, buffSize, CP_UTF8);
 
         // Trim trailing whitespace; the import does not need to be overly strict.
         wchar_t* term = buff + wcslen(buff) - 1;

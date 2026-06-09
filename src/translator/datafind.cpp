@@ -24,8 +24,8 @@ BOOL CData::CompareStrings(const wchar_t* _string, const wchar_t* _pattern)
     static wchar_t string[10000];
     static wchar_t pattern[10000];
 
-    int stringLen = wcslen(_string);
-    int patternLen = wcslen(_pattern);
+    int stringLen = (int)wcslen(_string);
+    int patternLen = (int)wcslen(_pattern);
     if (stringLen > 9999 || patternLen > 9999)
     {
         TRACE_E("String is too long.");

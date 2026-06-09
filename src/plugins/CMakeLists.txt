@@ -9,6 +9,7 @@ add_subdirectory(7zip)
 # Core plugins
 add_subdirectory(checksum)
 add_subdirectory(diskmap)
+add_subdirectory(ftp)
 add_subdirectory(nethood)
 add_subdirectory(folders)
 add_subdirectory(splitcbn)

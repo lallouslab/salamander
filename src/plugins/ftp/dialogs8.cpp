@@ -585,7 +585,11 @@ void CConnectAdvancedDlg::Transfer(CTransferInfo& ti)
     }
     ti.EditLine(IDC_CONNECTTOPORT, Server->Port);
     if (ti.Type == ttDataToWindow)
-        ti.EditLine(IDE_INITFTPCOMMANDS, Server->InitFTPCommands.c_str(), FTP_MAX_PATH);
+    {
+        CPathBuffer initFTPCommands;
+        lstrcpyn(initFTPCommands, Server->InitFTPCommands.c_str());
+        ti.EditLine(IDE_INITFTPCOMMANDS, initFTPCommands, initFTPCommands.Size());
+    }
     else
     {
         CPathBuffer initFTPCommands;

@@ -6,8 +6,8 @@
 // BuildScript — standalone script builder from CSelectionSnapshot.
 //
 // Builds a COperations script without depending on CFilesWindow,
-// Configuration globals, gEnvironment, or any UI. Handles the three
-// core operation types: Delete, Copy, Move.
+// Configuration globals, gEnvironment, or any UI. The current hardened
+// surface handles file-only Delete, Copy, and Move snapshots.
 //
 // Designed for headless / integration test use.
 

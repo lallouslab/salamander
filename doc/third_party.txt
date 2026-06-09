@@ -34,7 +34,13 @@ Copyright (C) Microsoft Corporation 1993-1997
 
 === Alexander Roshal ===
 Portions of UnRAR plugin utilizes decompression library written by Alexander Roshal.
-Copyright (C) 1993-2019 Alexander Roshal
+Copyright (C) 1993-2024 Alexander Roshal
+The vendored UnRAR source is statically linked into salunrar.dll and is
+distributed under the upstream UnRAR freeware/source-available terms in
+src/plugins/unrar/unrarsrc/license.txt.
+It may be used to handle RAR archives, but may not be used to develop a
+RAR/WinRAR-compatible archiver or recreate the proprietary RAR compression
+algorithm.
 
 === Martin Prikryl ===
 Portions of WinSCP plugin licensed from Martin Prikryl.

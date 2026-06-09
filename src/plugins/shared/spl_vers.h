@@ -204,10 +204,12 @@
 //   103 - 5.0
 //   104 - 5.0 + broken transitional wide plugin FS ABI (must not be used for FS plugins)
 //   105 - 5.0 + fixed optional wide plugin FS path ABI
+//   106 - 5.0 + plugin theme info API
 
-#define LAST_VERSION_OF_SALAMANDER 105
+#define LAST_VERSION_OF_SALAMANDER 106
 #define SALLY_PLUGIN_BROKEN_WIDE_FS_VERSION 104
 #define SALLY_PLUGIN_WIDE_FS_VERSION 105
+#define SALLY_PLUGIN_THEME_INFO_VERSION 106
 #define REQUIRE_LAST_VERSION_OF_SALAMANDER "This plugin requires Sally 1.0 (" SAL_VER_PLATFORM ") or later."
 
 #endif // __SPL_VERS_H

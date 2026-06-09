@@ -94,7 +94,7 @@ BOOL CData::ProcessSalMenuLine(const char* line, const char* lineEnd, int row, C
             // No template is open; expect a line that starts one.
             if (*(lineEnd - 1) != '=')
                 return FALSE;
-            lstrcpyn(parserState->TemplateName, p, min(500 - 1, (lineEnd - p)));
+            lstrcpyn(parserState->TemplateName, p, min(500 - 1, (int)(lineEnd - p)));
             parserState->State = esmpsTemplateName;
         }
         break;
@@ -146,7 +146,7 @@ BOOL CData::ProcessSalMenuLine(const char* line, const char* lineEnd, int row, C
                     else
                     {
                         parserState->State = esmpsSectionDialog;
-                        lstrcpyn(buff, p + 7, (lineEnd - (p + 7) + 1));
+                        lstrcpyn(buff, p + 7, (int)(lineEnd - (p + 7) + 1));
                         WORD dlgID;
                         if (!DataRH.GetIDForIdentifier(StripWS(buff), &dlgID))
                         {
@@ -171,7 +171,7 @@ BOOL CData::ProcessSalMenuLine(const char* line, const char* lineEnd, int row, C
                         else
                         {
                             parserState->State = esmpsSectionControl;
-                            lstrcpyn(buff, p + 8, (lineEnd - (p + 8) + 1));
+                            lstrcpyn(buff, p + 8, (int)(lineEnd - (p + 8) + 1));
                             StripWS(buff);
                             char* controlID = strchr(buff, ' ');
                             if (controlID == NULL)
@@ -201,7 +201,7 @@ BOOL CData::ProcessSalMenuLine(const char* line, const char* lineEnd, int row, C
                     }
                     else
                     {
-                        lstrcpyn(buff, p, min(500 - 1, (lineEnd - p + 1)));
+                        lstrcpyn(buff, p, min(500 - 1, (int)(lineEnd - p + 1)));
                         WORD strID;
                         if (!DataRH.GetIDForIdentifier(buff, &strID))
                         {

@@ -7,11 +7,21 @@
 // Keep registry-related string literals here instead of repeating them in call sites.
 
 #define SAL_REG_ROOT_SALLY_1_0_A "Software\\Sally\\1.0"
+#define SAL_REG_ROOT_SALLY_1_0_DEBUG_A "Software\\Sally\\1.0 Debug"
 #define SAL_REG_ROOT_OPENSAL_5_0_A "Software\\Open Salamander\\5.0"
 #define SAL_REG_VERSION_SALLY_1_0_A "1.0"
+#define SAL_REG_VERSION_SALLY_1_0_DEBUG_A "1.0 Debug"
+
+#ifdef _DEBUG
+#define SAL_REG_ROOT_SALLY_CURRENT_A SAL_REG_ROOT_SALLY_1_0_DEBUG_A
+#define SAL_REG_VERSION_SALLY_CURRENT_A SAL_REG_VERSION_SALLY_1_0_DEBUG_A
+#else
+#define SAL_REG_ROOT_SALLY_CURRENT_A SAL_REG_ROOT_SALLY_1_0_A
+#define SAL_REG_VERSION_SALLY_CURRENT_A SAL_REG_VERSION_SALLY_1_0_A
+#endif
 
 #define SAL_REG_CONFIGURATION_ROOTS \
-    SAL_REG_ROOT_SALLY_1_0_A, \
+    SAL_REG_ROOT_SALLY_CURRENT_A, \
     SAL_REG_ROOT_OPENSAL_5_0_A, \
     "Software\\Altap\\Altap Salamander 4.0", \
     "Software\\Altap\\Altap Salamander 4.0 beta 1 (DB177)", \
@@ -97,7 +107,7 @@
     "Software\\Salamander"
 
 #define SAL_REG_CONFIGURATION_VERSIONS \
-    SAL_REG_VERSION_SALLY_1_0_A, \
+    SAL_REG_VERSION_SALLY_CURRENT_A, \
     "5.0", \
     "4.0", \
     "4.0 beta 1 (DB177)", \

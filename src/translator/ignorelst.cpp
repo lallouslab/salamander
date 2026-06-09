@@ -56,7 +56,7 @@ BOOL ProcessIgnoreLstLineAux(const char* overlapHeader, BOOL readCtrlID1, BOOL r
                              const char* lineEnd, int& dlgID, int& ctrID1, int& ctrID2,
                              BOOL& ret)
 {
-    int overlapHeaderLen = strlen(overlapHeader);
+    int overlapHeaderLen = (int)strlen(overlapHeader);
     if (lineEnd - p > overlapHeaderLen && _strnicmp(p, overlapHeader, overlapHeaderLen) == 0)
     {
         p += overlapHeaderLen;

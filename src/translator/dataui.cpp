@@ -477,7 +477,7 @@ void CData::UpdateTexts()
     tvi.mask = TVIF_HANDLE | TVIF_PARAM;
     tvi.hItem = TreeView_GetSelection(TreeWindow.GetTreeView());
     TreeView_GetItem(TreeWindow.GetTreeView(), &tvi);
-    Data.FillTexts(tvi.lParam);
+    Data.FillTexts((DWORD)tvi.lParam);
 }
 
 void CData::UpdateAllNodes()

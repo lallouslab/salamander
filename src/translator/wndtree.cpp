@@ -102,7 +102,7 @@ CTreeWindow::GetCurrentItem()
     tvi.mask = TVIF_HANDLE | TVIF_PARAM;
     tvi.hItem = hItem;
     TreeView_GetItem(GetTreeView(), &tvi);
-    DWORD lParam = tvi.lParam;
+    DWORD lParam = (DWORD)tvi.lParam;
     return lParam;
 }
 
@@ -328,7 +328,7 @@ CTreeWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             case TVN_SELCHANGED:
             {
                 TVITEM* item = &nmtv->itemNew;
-                Data.FillTexts(item->lParam);
+                Data.FillTexts((DWORD)item->lParam);
                 if (EnableTreeNotifications)
                     Data.SelectedTreeItem = GetCurrentItem();
                 break;

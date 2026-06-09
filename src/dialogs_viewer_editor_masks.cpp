@@ -9,6 +9,7 @@
 #include "common/unicode/helpers.h"
 #include "common/widepath.h"
 #include "cfgdlg.h"
+#include "darkmode.h"
 #include "dialogs.h"
 #include "usermenu.h"
 #include "execute.h"
@@ -17,6 +18,505 @@
 #include "mainwnd.h"
 #include "gui.h"
 #include "shellib.h"
+
+#include <uxtheme.h>
+
+static const UINT_PTR SIZE_RESULTS_COMBO_SKIN_SUBCLASS_ID = 1;
+static const UINT_PTR SIZE_RESULTS_COMBO_EDIT_SKIN_SUBCLASS_ID = 1;
+static const COLORREF SIZE_RESULTS_DARK_LINE = RGB(55, 55, 58);
+static const COLORREF SIZE_RESULTS_DARK_FRAME = RGB(62, 62, 66);
+static const COLORREF SIZE_RESULTS_DARK_SECTION_LINE = RGB(70, 70, 74);
+
+struct CSizeResultsComboSkinState
+{
+    LONG_PTR ComboStyle;
+    LONG_PTR ComboExStyle;
+    LONG_PTR EditStyle;
+    LONG_PTR EditExStyle;
+    HWND HEdit;
+    BOOL EditStyleKnown;
+    BOOL EditExStyleKnown;
+    BOOL ApplyingTheme;
+    BOOL ThemeKnown;
+    BOOL LastUseDark;
+};
+
+static LRESULT CALLBACK SizeResultsComboSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+static LRESULT CALLBACK SizeResultsComboEditSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
+static void SizeResultsFillRectSolid(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldColor = SetDCBrushColor(hdc, color);
+    FillRect(hdc, rect, (HBRUSH)GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+}
+
+static void SizeResultsDrawRectOutline(HDC hdc, const RECT* rect, COLORREF color)
+{
+    if (rect == NULL || rect->right <= rect->left || rect->bottom <= rect->top)
+        return;
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    COLORREF oldColor = SetDCPenColor(hdc, color);
+    Rectangle(hdc, rect->left, rect->top, rect->right, rect->bottom);
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static void SizeResultsDrawDownArrow(HDC hdc, const RECT* rect, COLORREF color)
+{
+    int centerX = (rect->left + rect->right) / 2;
+    int centerY = (rect->top + rect->bottom) / 2;
+    POINT arrow[3] = {
+        {centerX - 3, centerY - 1},
+        {centerX + 4, centerY - 1},
+        {centerX, centerY + 3},
+    };
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldPenColor = SetDCPenColor(hdc, color);
+    COLORREF oldBrushColor = SetDCBrushColor(hdc, color);
+    Polygon(hdc, arrow, 3);
+    SetDCBrushColor(hdc, oldBrushColor);
+    SetDCPenColor(hdc, oldPenColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+static BOOL GetSizeResultsChildRectInParent(HWND hParent, HWND hChild, RECT* rect)
+{
+    if (hParent == NULL || hChild == NULL || rect == NULL || !IsWindow(hParent) || !IsWindow(hChild))
+        return FALSE;
+
+    if (!GetWindowRect(hChild, rect))
+        return FALSE;
+    MapWindowPoints(NULL, hParent, (POINT*)rect, 2);
+    return TRUE;
+}
+
+static BOOL GetSizeResultsChildRectInDialog(HWND hDialog, int ctrlID, RECT* rect)
+{
+    if (hDialog == NULL || rect == NULL || !IsWindow(hDialog))
+        return FALSE;
+
+    HWND hChild = GetDlgItem(hDialog, ctrlID);
+    if (hChild == NULL || !IsWindow(hChild))
+        return FALSE;
+
+    if (!GetWindowRect(hChild, rect))
+        return FALSE;
+    MapWindowPoints(NULL, hDialog, (POINT*)rect, 2);
+    return TRUE;
+}
+
+static void SetSizeResultsWindowStyle(HWND hwnd, LONG_PTR style)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    if (GetWindowLongPtr(hwnd, GWL_STYLE) == style)
+        return;
+
+    SetWindowLongPtr(hwnd, GWL_STYLE, style);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static void SetSizeResultsWindowExStyle(HWND hwnd, LONG_PTR exStyle)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) == exStyle)
+        return;
+
+    SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static BOOL PaintSizeResultsDarkCombo(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    if (client.right <= client.left || client.bottom <= client.top)
+        return TRUE;
+
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    GetComboBoxInfo(hwnd, &cbi);
+
+    RECT editRect;
+    BOOL haveEditRect = GetSizeResultsChildRectInParent(hwnd, cbi.hwndItem, &editRect);
+
+    int savedDC = SaveDC(paintDC);
+    if (haveEditRect)
+        ExcludeClipRect(paintDC, editRect.left, editRect.top, editRect.right, editRect.bottom);
+
+    SizeResultsFillRectSolid(paintDC, &client, colors.InputBackground);
+
+    int buttonWidth = max(GetSystemMetrics(SM_CXVSCROLL), client.bottom - client.top);
+    RECT button = client;
+    button.left = max(client.left + 1, client.right - buttonWidth - 1);
+    button.top = client.top + 1;
+    button.right = client.right - 1;
+    button.bottom = client.bottom - 1;
+    if (button.right > button.left && button.bottom > button.top)
+    {
+        SizeResultsFillRectSolid(paintDC, &button, colors.InputBackground);
+        HGDIOBJ oldPen = SelectObject(paintDC, GetStockObject(DC_PEN));
+        COLORREF oldPenColor = SetDCPenColor(paintDC, SIZE_RESULTS_DARK_LINE);
+        MoveToEx(paintDC, button.left, button.top, NULL);
+        LineTo(paintDC, button.left, button.bottom);
+        SetDCPenColor(paintDC, oldPenColor);
+        SelectObject(paintDC, oldPen);
+        SizeResultsDrawDownArrow(paintDC, &button, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+    }
+
+    RestoreDC(paintDC, savedDC);
+    SizeResultsDrawRectOutline(paintDC, &client, SIZE_RESULTS_DARK_FRAME);
+    return TRUE;
+}
+
+static void PaintSizeResultsDarkComboFrame(HWND hwnd)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return;
+
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+
+    RECT rect;
+    GetWindowRect(hwnd, &rect);
+    OffsetRect(&rect, -rect.left, -rect.top);
+    SizeResultsDrawRectOutline(hdc, &rect, SIZE_RESULTS_DARK_FRAME);
+    ReleaseDC(hwnd, hdc);
+}
+
+static void PaintSizeResultsDarkComboEditFrame(HWND hwnd)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return;
+
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+
+    RECT window;
+    GetWindowRect(hwnd, &window);
+    OffsetRect(&window, -window.left, -window.top);
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    MapWindowPoints(hwnd, NULL, (POINT*)&client, 2);
+    RECT screenWindow;
+    GetWindowRect(hwnd, &screenWindow);
+    OffsetRect(&client, -screenWindow.left, -screenWindow.top);
+
+    int savedDC = SaveDC(hdc);
+    ExcludeClipRect(hdc, client.left, client.top, client.right, client.bottom);
+    SizeResultsFillRectSolid(hdc, &window, colors.InputBackground);
+    RestoreDC(hdc, savedDC);
+
+    ReleaseDC(hwnd, hdc);
+}
+
+static void ApplySizeResultsComboEditSkin(HWND hEdit, BOOL useDark)
+{
+    if (hEdit == NULL || !IsWindow(hEdit))
+        return;
+
+    SetWindowSubclass(hEdit, SizeResultsComboEditSkinSubclassProc, SIZE_RESULTS_COMBO_EDIT_SKIN_SUBCLASS_ID, 0);
+    SetWindowTheme(hEdit, useDark ? L"" : NULL, NULL);
+    RedrawWindow(hEdit, NULL, NULL, RDW_INVALIDATE | RDW_FRAME);
+}
+
+static void UpdateSizeResultsComboSkin(HWND hCombo, CSizeResultsComboSkinState* state)
+{
+    if (hCombo == NULL || state == NULL || !IsWindow(hCombo))
+        return;
+
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    GetComboBoxInfo(hCombo, &cbi);
+
+    BOOL editChanged = cbi.hwndItem != NULL && cbi.hwndItem != state->HEdit;
+    if (editChanged)
+    {
+        state->HEdit = cbi.hwndItem;
+        state->EditStyle = GetWindowLongPtr(cbi.hwndItem, GWL_STYLE);
+        state->EditExStyle = GetWindowLongPtr(cbi.hwndItem, GWL_EXSTYLE);
+        state->EditStyleKnown = TRUE;
+        state->EditExStyleKnown = TRUE;
+    }
+
+    BOOL useDark = DarkMode_ShouldUseDark();
+    LONG_PTR darkStyleMask = WS_BORDER;
+    LONG_PTR darkEdgeMask = WS_EX_CLIENTEDGE | WS_EX_STATICEDGE;
+    SetSizeResultsWindowStyle(hCombo, useDark ? (state->ComboStyle & ~darkStyleMask) : state->ComboStyle);
+    SetSizeResultsWindowExStyle(hCombo, useDark ? (state->ComboExStyle & ~darkEdgeMask) : state->ComboExStyle);
+
+    if (state->HEdit != NULL && state->EditStyleKnown && IsWindow(state->HEdit))
+        SetSizeResultsWindowStyle(state->HEdit, useDark ? (state->EditStyle & ~darkStyleMask) : state->EditStyle);
+    if (state->HEdit != NULL && state->EditExStyleKnown && IsWindow(state->HEdit))
+        SetSizeResultsWindowExStyle(state->HEdit, useDark ? (state->EditExStyle & ~darkEdgeMask) : state->EditExStyle);
+
+    if (!state->ApplyingTheme &&
+        (!state->ThemeKnown || state->LastUseDark != useDark || editChanged))
+    {
+        state->ApplyingTheme = TRUE;
+        SetWindowTheme(hCombo, useDark ? L"" : NULL, NULL);
+        ApplySizeResultsComboEditSkin(state->HEdit, useDark);
+        if (cbi.hwndList != NULL && IsWindow(cbi.hwndList))
+            SetWindowTheme(cbi.hwndList, useDark ? L"DarkMode_Explorer" : NULL, NULL);
+        state->ThemeKnown = TRUE;
+        state->LastUseDark = useDark;
+        state->ApplyingTheme = FALSE;
+    }
+
+    RedrawWindow(hCombo, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+static void ApplySizeResultsComboSkin(HWND hCombo)
+{
+    if (hCombo == NULL || !IsWindow(hCombo))
+        return;
+
+    DWORD_PTR data = 0;
+    CSizeResultsComboSkinState* state = NULL;
+    if (GetWindowSubclass(hCombo, SizeResultsComboSkinSubclassProc, SIZE_RESULTS_COMBO_SKIN_SUBCLASS_ID, &data))
+        state = (CSizeResultsComboSkinState*)data;
+    else
+    {
+        state = new CSizeResultsComboSkinState;
+        if (state == NULL)
+            return;
+        state->ComboStyle = GetWindowLongPtr(hCombo, GWL_STYLE);
+        state->ComboExStyle = GetWindowLongPtr(hCombo, GWL_EXSTYLE);
+        state->EditStyle = 0;
+        state->EditExStyle = 0;
+        state->HEdit = NULL;
+        state->EditStyleKnown = FALSE;
+        state->EditExStyleKnown = FALSE;
+        state->ApplyingTheme = FALSE;
+        state->ThemeKnown = FALSE;
+        state->LastUseDark = FALSE;
+        if (!SetWindowSubclass(hCombo, SizeResultsComboSkinSubclassProc, SIZE_RESULTS_COMBO_SKIN_SUBCLASS_ID, (DWORD_PTR)state))
+        {
+            delete state;
+            return;
+        }
+    }
+
+    UpdateSizeResultsComboSkin(hCombo, state);
+}
+
+static void ApplySizeResultsDialogTheme(HWND hDialog)
+{
+    if (hDialog == NULL || !IsWindow(hDialog))
+        return;
+
+    ApplySizeResultsComboSkin(GetDlgItem(hDialog, IDC_EST_CLUSTER));
+
+    int lineIDs[] = {IDC_STATIC_16, IDC_STATIC_10, IDC_STATIC_15};
+    BOOL useDark = DarkMode_ShouldUseDark();
+    for (int i = 0; i < _countof(lineIDs); i++)
+    {
+        HWND hLine = GetDlgItem(hDialog, lineIDs[i]);
+        if (hLine != NULL && IsWindow(hLine))
+            ShowWindow(hLine, useDark ? SW_HIDE : SW_SHOWNA);
+    }
+
+    InvalidateRect(hDialog, NULL, TRUE);
+}
+
+static BOOL PaintSizeResultsDialogSectionLines(HWND hDialog, HDC paintDC)
+{
+    if (!DarkMode_ShouldUseDark())
+        return FALSE;
+
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = GetDC(hDialog);
+    if (hdc == NULL)
+        return FALSE;
+
+    int lineIDs[] = {IDC_STATIC_16, IDC_STATIC_10, IDC_STATIC_15};
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    COLORREF oldColor = SetDCPenColor(hdc, SIZE_RESULTS_DARK_SECTION_LINE);
+    for (int i = 0; i < _countof(lineIDs); i++)
+    {
+        RECT rect;
+        if (!GetSizeResultsChildRectInDialog(hDialog, lineIDs[i], &rect))
+            continue;
+
+        int y = max(rect.top, min(rect.bottom - 1, (rect.top + rect.bottom) / 2));
+        MoveToEx(hdc, rect.left, y, NULL);
+        LineTo(hdc, rect.right, y);
+    }
+    SetDCPenColor(hdc, oldColor);
+    SelectObject(hdc, oldPen);
+
+    if (paintDC == NULL)
+        ReleaseDC(hDialog, hdc);
+    return TRUE;
+}
+
+static LRESULT CALLBACK SizeResultsComboEditSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PaintSizeResultsDarkComboEditFrame(hwnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (DarkMode_ShouldUseDark())
+            PaintSizeResultsDarkComboEditFrame(hwnd);
+        return ret;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        DarkModeColors colors;
+        if (DarkMode_GetColors(&colors))
+        {
+            RECT client;
+            GetClientRect(hwnd, &client);
+            SizeResultsFillRectSolid((HDC)wParam, &client, colors.InputBackground);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    case WM_ENABLE:
+    case WM_SIZE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, SizeResultsComboEditSkinSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+static LRESULT CALLBACK SizeResultsComboSkinSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    CSizeResultsComboSkinState* state = (CSizeResultsComboSkinState*)dwRefData;
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PaintSizeResultsDarkComboFrame(hwnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            PAINTSTRUCT ps;
+            HDC hdc = HANDLES(BeginPaint(hwnd, &ps));
+            if (hdc != NULL)
+                PaintSizeResultsDarkCombo(hwnd, hdc);
+            HANDLES(EndPaint(hwnd, &ps));
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintSizeResultsDarkCombo(hwnd, (HDC)wParam))
+            return 0;
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (DarkMode_ShouldUseDark())
+            return TRUE;
+        break;
+    }
+
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    {
+        HBRUSH hBrush = DarkMode_GetDialogCtlColorBrush(uMsg, (HDC)wParam, (HWND)lParam);
+        if (hBrush != NULL)
+            return (LRESULT)hBrush;
+        break;
+    }
+
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    case WM_ENABLE:
+    case WM_SIZE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    case CB_SETCURSEL:
+    case CB_ADDSTRING:
+    case CB_DELETESTRING:
+    case CB_RESETCONTENT:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (state != NULL && !state->ApplyingTheme)
+            UpdateSizeResultsComboSkin(hwnd, state);
+        else
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, SizeResultsComboSkinSubclassProc, uIdSubclass);
+        delete state;
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
 
 static BOOL BuildModuleRelativePathW(HINSTANCE module, const wchar_t* relativePath, std::wstring& path)
 {
@@ -387,6 +887,20 @@ CSizeResultsDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     CALL_STACK_MESSAGE4("CSizeResultsDlg::DialogProc(0x%X, 0x%IX, 0x%IX)", uMsg, wParam, lParam);
     switch (uMsg)
     {
+    case WM_PAINT:
+    {
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+        PaintSizeResultsDialogSectionLines(HWindow, NULL);
+        return ret;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+        PaintSizeResultsDialogSectionLines(HWindow, (HDC)wParam);
+        return ret;
+    }
+
     case WM_INITDIALOG:
     {
         GetDlgItemText(HWindow, IDS_OCCUPIED, UnknownText, 100); // obtain the "unknown" string for later use
@@ -484,6 +998,7 @@ CSizeResultsDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             EnableWindow(hCombo, FALSE);
 
         UpdateEstimate();
+        ApplySizeResultsDialogTheme(HWindow);
 
         break;
     }
@@ -499,6 +1014,15 @@ CSizeResultsDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             UpdateEstimate();
         }
         break;
+    }
+
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+    case WM_SYSCOLORCHANGE:
+    {
+        INT_PTR ret = CCommonDialog::DialogProc(uMsg, wParam, lParam);
+        ApplySizeResultsDialogTheme(HWindow);
+        return ret;
     }
     }
 

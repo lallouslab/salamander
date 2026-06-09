@@ -37,7 +37,10 @@ struct CSnapshotItem
 {
     std::string Name;       // filename (ANSI)
     std::wstring NameW;     // filename (Unicode, empty if same as ANSI)
+    std::string TargetName; // explicit target filename for rename/copy-of mapping
+    std::wstring TargetNameW; // explicit target filename (Unicode)
     std::string DosName;    // DOS 8.3 name (empty if none)
+    bool HasTargetName;     // true when TargetName/TargetNameW are authoritative
     bool IsDir;             // true for directories
     unsigned __int64 Size;  // file size in bytes (0 for dirs unless counted)
     DWORD Attr;             // FILE_ATTRIBUTE_* flags
