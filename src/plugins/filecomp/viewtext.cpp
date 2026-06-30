@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "paint_helpers.h"
 
 #undef min
 #undef max
@@ -627,7 +628,7 @@ void TTextFileViewWindow<CChar>::Paint()
 
             // draw only the background behind the line number
             SetBkColor(dc, LineColors[colorScheme].LineNumBkColor);
-            ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r1, NULL, 0, NULL);
+            FileCompFillRect(dc, &r1);
 
             // draw an empty line
             if (line >= SelectionLineBegin && line < SelectionLineEnd)
@@ -644,7 +645,7 @@ void TTextFileViewWindow<CChar>::Paint()
                     SetBkColor(dc, LineColors[colorScheme].BkColor);
                 }
             }
-            ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r2, NULL, 0, NULL);
+            FileCompFillRect(dc, &r2);
 
             break;
         }
@@ -1028,11 +1029,11 @@ void TTextFileViewWindow<CChar>::Paint()
 
         // paint only the background in the line-number column
         SetBkColor(dc, LineColors[LC_NORMAL].LineNumBkColor);
-        ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r1, NULL, 0, NULL);
+        FileCompFillRect(dc, &r1);
 
         // paint an empty line
         SetBkColor(dc, LineColors[LC_NORMAL].BkColor);
-        ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r2, NULL, 0, NULL);
+        FileCompFillRect(dc, &r2);
     }
 
     SelectObject(dc, oldFont);

@@ -7,25 +7,25 @@
 #include "translator.h"
 #include "wndlayt.h"
 #include "trlipc.h"
-
-const char* SHARED_MEMORY_NAME = "Local\\AltapTranslatorSharedMemory";
+#include "trlipc_names.h"
 
 #define SHARED_MEMORY_VERSION 1
 
 BOOL CreateSharedMemory(HANDLE* sharedFileHandle, CSharedMemory** sharedMemory, DWORD sharedMemorySize)
 {
     HANDLE hMapFile;
-    LPCTSTR pBuf;
+    LPVOID pBuf;
 
     sharedMemorySize += sizeof(CSharedMemory);
+    std::string sharedMemoryName = sally::translator_ipc::BuildTranslatorSharedMemoryNameForCurrentProcess();
 
-    hMapFile = CreateFileMapping(
+    hMapFile = CreateFileMappingA(
         INVALID_HANDLE_VALUE, // use paging file
         NULL,                 // default security
         PAGE_READWRITE,       // read/write access
         0,                    // maximum object size (high-order DWORD)
         sharedMemorySize,     // maximum object size (low-order DWORD)
-        SHARED_MEMORY_NAME);  // name of mapping object
+        sharedMemoryName.c_str()); // name of mapping object
 
     if (hMapFile == NULL)
     {
@@ -33,11 +33,11 @@ BOOL CreateSharedMemory(HANDLE* sharedFileHandle, CSharedMemory** sharedMemory, 
         TRACE_E("Could not create file mapping object. err=" << err);
         return FALSE;
     }
-    pBuf = (LPTSTR)MapViewOfFile(hMapFile,            // handle to map object
-                                 FILE_MAP_ALL_ACCESS, // read/write permission
-                                 0,
-                                 0,
-                                 sharedMemorySize);
+    pBuf = MapViewOfFile(hMapFile,            // handle to map object
+                         FILE_MAP_ALL_ACCESS, // read/write permission
+                         0,
+                         0,
+                         sharedMemorySize);
 
     if (pBuf == NULL)
     {
@@ -56,12 +56,13 @@ BOOL CreateSharedMemory(HANDLE* sharedFileHandle, CSharedMemory** sharedMemory, 
 BOOL ReadSharedMemory()
 {
     HANDLE hMapFile;
-    LPCTSTR pBuf;
+    LPVOID pBuf;
+    std::string sharedMemoryName = sally::translator_ipc::BuildTranslatorSharedMemoryNameForCurrentProcess();
 
-    hMapFile = OpenFileMapping(
+    hMapFile = OpenFileMappingA(
         FILE_MAP_ALL_ACCESS, // read/write access
         FALSE,               // do not inherit the name
-        SHARED_MEMORY_NAME); // name of mapping object
+        sharedMemoryName.c_str()); // name of mapping object
 
     if (hMapFile == NULL)
     {
@@ -70,11 +71,11 @@ BOOL ReadSharedMemory()
         return FALSE;
     }
 
-    pBuf = (LPTSTR)MapViewOfFile(hMapFile,            // handle to map object
-                                 FILE_MAP_ALL_ACCESS, // read/write permission
-                                 0,
-                                 0,
-                                 0);
+    pBuf = MapViewOfFile(hMapFile,            // handle to map object
+                         FILE_MAP_ALL_ACCESS, // read/write permission
+                         0,
+                         0,
+                         0);
 
     if (pBuf == NULL)
     {

@@ -33,7 +33,7 @@ A few Altap Salamander 4.0 plugins are either not included or cannot be compiled
 
 - **PictView**: The engine `pvw32cnv.dll` is not open-sourced. Consider switching to [WIC](https://learn.microsoft.com/en-us/windows/win32/wic/-wic-about-windows-imaging-codec) or another library.
 - **Encrypt**: Incompatible with modern SSD disks and has been deprecated.
-- **UnRAR**: Missing [unrar.dll](https://www.rarlab.com/rar_add.htm) (solvable, open source).
+- **UnRAR**: RAR handling is statically linked into `salunrar.dll` from vendored [RARLAB UnRAR source](https://www.rarlab.com/rar_add.htm), which is source-available/freeware for handling RAR archives and is not GPL/OSI-free.
 - **FTP**: Missing [OpenSSL](https://www.openssl.org/) libraries (solvable, open source).
 - **WinSCP**: Requires Embarcadero C++ Builder to build.
 

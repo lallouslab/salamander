@@ -26,6 +26,15 @@ struct ProcessStartInfo
     bool createNewConsole;           // CREATE_NEW_CONSOLE flag
     bool hideWindow;                 // SW_HIDE in STARTUPINFO
     DWORD creationFlags;             // Additional creation flags (0 for default)
+    const wchar_t* windowTitle;       // Optional console/window title
+    bool useShowWindow;               // Whether showWindow should be applied
+    WORD showWindow;                  // STARTUPINFO wShowWindow
+    bool usePosition;                 // Whether x/y should be applied
+    DWORD x;                          // STARTUPINFO dwX
+    DWORD y;                          // STARTUPINFO dwY
+    bool useSize;                     // Whether width/height should be applied
+    DWORD width;                      // STARTUPINFO dwXSize
+    DWORD height;                     // STARTUPINFO dwYSize
 
     // Standard handles for redirection (optional)
     HANDLE hStdInput;
@@ -40,6 +49,15 @@ struct ProcessStartInfo
         , createNewConsole(false)
         , hideWindow(false)
         , creationFlags(0)
+        , windowTitle(nullptr)
+        , useShowWindow(false)
+        , showWindow(SW_SHOWNORMAL)
+        , usePosition(false)
+        , x(0)
+        , y(0)
+        , useSize(false)
+        , width(0)
+        , height(0)
         , hStdInput(nullptr)
         , hStdOutput(nullptr)
         , hStdError(nullptr)
@@ -85,6 +103,10 @@ public:
 
     // Close process handle (must be called when done)
     virtual void CloseProcess(HPROCESS process) = 0;
+
+    // Transfer ownership of the native process HANDLE to a caller that must
+    // pass it to legacy APIs. The HPROCESS wrapper is invalid after success.
+    virtual HANDLE DetachProcessHandle(HPROCESS process) = 0;
 
     // Get process ID from handle
     virtual DWORD GetProcessId(HPROCESS process) = 0;

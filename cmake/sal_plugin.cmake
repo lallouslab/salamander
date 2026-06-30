@@ -8,17 +8,23 @@ if(NOT DEFINED SAL_ROOT)
   include("${CMAKE_CURRENT_LIST_DIR}/sal_common.cmake")
 endif()
 
-# sal_add_plugin_lang(NAME <plugin_name>)
+# sal_add_plugin_lang(NAME <plugin_name>
+#   [SOURCE_DIR <plugin_root>]
+# )
 #   Adds the English language file (.slg) for a plugin
 #   Looks for lang/lang.rc in the plugin directory
 function(sal_add_plugin_lang)
-  cmake_parse_arguments(PARSE_ARGV 0 LANG "" "NAME" "")
+  cmake_parse_arguments(PARSE_ARGV 0 LANG "" "NAME;SOURCE_DIR" "")
 
   if(NOT LANG_NAME)
     message(FATAL_ERROR "sal_add_plugin_lang: NAME is required")
   endif()
 
-  set(PLUGIN_DIR "${SAL_PLUGINS}/${LANG_NAME}")
+  if(LANG_SOURCE_DIR)
+    get_filename_component(PLUGIN_DIR "${LANG_SOURCE_DIR}" ABSOLUTE)
+  else()
+    set(PLUGIN_DIR "${SAL_PLUGINS}/${LANG_NAME}")
+  endif()
   set(LANG_RC "${PLUGIN_DIR}/lang/lang.rc")
 
   if(NOT EXISTS "${LANG_RC}")
@@ -64,6 +70,7 @@ endfunction()
 
 # sal_add_plugin(NAME <plugin_name>
 #   SOURCES <source_files>...
+#   [SOURCE_DIR <plugin_root>]
 #   [INCLUDES <include_dirs>...]
 #   [DEFINES <preprocessor_defines>...]
 #   [LIBS <libraries>...]
@@ -77,7 +84,7 @@ endfunction()
 function(sal_add_plugin)
   cmake_parse_arguments(PARSE_ARGV 0 PLUGIN
     "NO_SHARED;NO_PCH;NO_LANG"
-    "NAME;RC;DEF;PCH"
+    "NAME;SOURCE_DIR;RC;DEF;PCH"
     "SOURCES;INCLUDES;DEFINES;LIBS"
   )
 
@@ -86,7 +93,11 @@ function(sal_add_plugin)
   endif()
 
   set(TARGET_NAME "plugin_${PLUGIN_NAME}")
-  set(PLUGIN_DIR "${SAL_PLUGINS}/${PLUGIN_NAME}")
+  if(PLUGIN_SOURCE_DIR)
+    get_filename_component(PLUGIN_DIR "${PLUGIN_SOURCE_DIR}" ABSOLUTE)
+  else()
+    set(PLUGIN_DIR "${SAL_PLUGINS}/${PLUGIN_NAME}")
+  endif()
 
   # Default PCH header
   if(NOT PLUGIN_PCH)
@@ -188,7 +199,7 @@ function(sal_add_plugin)
 
   # Build language file if it exists (unless NO_LANG is specified)
   if(NOT PLUGIN_NO_LANG)
-    sal_add_plugin_lang(NAME ${PLUGIN_NAME})
+    sal_add_plugin_lang(NAME ${PLUGIN_NAME} SOURCE_DIR "${PLUGIN_DIR}")
   endif()
 
   message(STATUS "Added plugin: ${PLUGIN_NAME}")

@@ -6,8 +6,8 @@
 // BuildScript — standalone script builder from CSelectionSnapshot.
 //
 // Builds a COperations script without depending on CFilesWindow,
-// Configuration globals, gEnvironment, or any UI. Handles the three
-// core operation types: Delete, Copy, Move.
+// Configuration globals, gEnvironment, or any UI. The current hardened
+// surface handles file-only Delete, Copy, and Move snapshots.
 //
 // Designed for headless / integration test use.
 
@@ -27,3 +27,13 @@ BOOL BuildScriptFromSnapshot(
     const CBuildConfig& config,
     CBuildScriptState& state,
     COperations* script);
+
+// Legacy ADS probe adapter used by production CBuildConfig callers. It lives
+// outside BuildScript.cpp so headless/private test targets can link the script
+// builder without dragging in worker.cpp.
+BOOL BuildScriptLegacyADSProbe(const char* sourceNameA,
+                               const wchar_t* sourceNameW,
+                               BOOL isDir,
+                               DWORD bytesPerCluster,
+                               CBuildADSProbeResult* result,
+                               void* context);

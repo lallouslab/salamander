@@ -19,6 +19,9 @@
 #include "common/unicode/helpers.h"
 
 const char* CVIEWERWINDOW_CLASSNAME = "Salamander's Viewer Window";
+#ifndef _UNICODE
+const wchar_t* CVIEWERWINDOW_CLASSNAMEW = L"Salamander's Viewer Window";
+#endif // _UNICODE
 
 char* ViewerHistory[VIEWER_HISTORY_SIZE];
 
@@ -522,7 +525,11 @@ CViewerGoToOffsetDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 CViewerWindow::CViewerWindow(const char* fileName, CViewType type, const char* caption,
                              BOOL wholeCaption, CObjectOrigin origin,
                              int enumFileNamesSourceUID, int enumFileNamesLastFileIndex)
+#ifdef _UNICODE
     : CWindow(origin), LineOffset(300, 100),
+#else  // _UNICODE
+    : CWindow(origin, TRUE), LineOffset(300, 100),
+#endif // _UNICODE
       FindDialog(HLanguage, IDD_FINDSET, IDD_FINDSET)
 {
     // GDI variables
@@ -1153,7 +1160,10 @@ void CViewerWindow::PaintDecodedText(HDC dc, const RECT& fullLine, int lines, in
             if (i >= clipFirstRow && i <= clipLastRow)
             {
                 RECT myLine = fullLine;
-                myLine.right = min(myLine.right, (int)(len2 + 1) * CharWidth);
+                // CJK/complex-script fallback glyphs can draw wider than the viewer's
+                // average CharWidth; clip decoded rows to the real viewport, not to
+                // logical cell count.
+                myLine.right = fullLine.right;
 
                 if (blackEnd)
                 {
@@ -1214,6 +1224,10 @@ void CViewerWindow::PaintDecodedText(HDC dc, const RECT& fullLine, int lines, in
 void CViewerWindow::Paint(HDC dc)
 {
     CALL_STACK_MESSAGE1("CViewerWindow::Paint()");
+    RECT clientRect;
+    GetClientRect(HWindow, &clientRect);
+    FillRect(dc, &clientRect, BkgndBrush);
+
     if (EnablePaint && !ExitTextMode && !FileName.empty() && Width > 0 && Height > 0)
     {
         //    HCURSOR oldCursor = GetCursor();
@@ -1976,6 +1990,7 @@ BOOL InitializeViewer()
         return FALSE;
     }
 
+#ifdef _UNICODE
     if (!CViewerWindow::RegisterUniversalClass(CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW,
                                                0,
                                                0,
@@ -1986,6 +2001,18 @@ BOOL InitializeViewer()
                                                NULL,
                                                CVIEWERWINDOW_CLASSNAME,
                                                NULL))
+#else  // _UNICODE
+    if (!CViewerWindow::RegisterUniversalClassW(CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW,
+                                                0,
+                                                0,
+                                                HANDLES(LoadIcon(HInstance,
+                                                                 MAKEINTRESOURCE(IDI_VIEWER))),
+                                                LoadCursor(NULL, IDC_ARROW),
+                                                (HBRUSH)(COLOR_WINDOW + 1),
+                                                NULL,
+                                                CVIEWERWINDOW_CLASSNAMEW,
+                                                NULL))
+#endif // _UNICODE
     {
         TRACE_E("Unable to register window class for viewer.");
         return FALSE;

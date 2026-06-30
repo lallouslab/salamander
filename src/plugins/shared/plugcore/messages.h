@@ -63,6 +63,7 @@ private:
     static const char* Version;
     BOOL Good;
     char* Name;
+    char* ObjectName;
     BOOL Sender;
     HANDLE StartupMutex;
     HANDLE DataMutex;

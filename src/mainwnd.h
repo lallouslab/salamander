@@ -596,6 +596,7 @@ public:
     void AddTrayIcon(BOOL updateIcon = FALSE);
     void RemoveTrayIcon();
     void SetTrayIconText(const char* text);
+    void SetTrayIconTextW(const wchar_t* text);
 
     // fills the menu with UserMenuItems items
     // customize specifies whether the configuration option should be added

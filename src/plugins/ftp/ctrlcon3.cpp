@@ -1101,7 +1101,7 @@ BOOL CControlConnectionSocket::ChangeWorkingPath(BOOL notInPanel, BOOL leftPanel
                                                 newPath.Size(), &fileNameCouldBeCut) &&
                                 fileNameCouldBeCut) // with VMS, 'fileNameCouldBeCut' == TRUE means it is definitely a file
                             {
-                                lstrcpyn(cutFileName, newPath, cutFileNameBufSize);
+                                lstrcpyn(cutFileName, newPath, MAX_PATH);
                                 lstrcpyn(path, prevUsedPath, pathBufSize);
                                 fileNameAlreadyCut = TRUE;
                                 if (pathWasCut != NULL)
@@ -1332,7 +1332,7 @@ BOOL CControlConnectionSocket::ChangeWorkingPath(BOOL notInPanel, BOOL leftPanel
                         {
                             errBuf[0] = 0; // in 'mode' 3 this is not reported as an error (we are trying to focus on the file)
                             if (cutFileName != NULL)
-                                lstrcpyn(cutFileName, newPath, cutFileNameBufSize);
+                                lstrcpyn(cutFileName, newPath, MAX_PATH);
                         }
                         else
                         {

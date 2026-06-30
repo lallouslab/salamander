@@ -11,6 +11,7 @@
 #include "fileswnd.h"
 #include "filesbox.h"
 #include "shiconov.h"
+#include "common/PanelTextPainter.h"
 #include "common/unicode/NameRenderPolicy.h"
 #include "darkmode.h"
 
@@ -814,7 +815,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                             totalCount = 2;
                         }
                         // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
-                        ExtTextOutW(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, DrawItemBuffW, (drawFlags & DRAWFLAG_MASK) ? 0 : totalCount, NULL);
+                        sally::ui::DrawPanelTextW(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, DrawItemBuffW, (drawFlags & DRAWFLAG_MASK) ? 0 : totalCount, NULL);
                     }
                     else
                     {
@@ -832,16 +833,16 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                             totalCount = 2;
                         }
                         // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
-                        ExtTextOut(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, DrawItemBuff, (drawFlags & DRAWFLAG_MASK) ? 0 : totalCount, NULL);
+                        sally::ui::DrawPanelTextA(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, DrawItemBuff, (drawFlags & DRAWFLAG_MASK) ? 0 : totalCount, NULL);
                     }
                     goto SKIP1;
                 }
             }
             // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
             if (useWideDisplay)
-                ExtTextOutW(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, f->NameW, (drawFlags & DRAWFLAG_MASK) ? 0 : nameLenW, NULL);
+                sally::ui::DrawPanelTextW(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, f->NameW, (drawFlags & DRAWFLAG_MASK) ? 0 : nameLenW, NULL);
             else
-                ExtTextOut(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, TransferBuffer, (drawFlags & DRAWFLAG_MASK) ? 0 : nameLen, NULL);
+                sally::ui::DrawPanelTextA(hDC, r.left + 2, y, ETO_OPAQUE, &adjR, TransferBuffer, (drawFlags & DRAWFLAG_MASK) ? 0 : nameLen, NULL);
         SKIP1:
             if (!Configuration.FullRowSelect || GetViewMode() == vmBrief)
             {
@@ -869,7 +870,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                     SetBkColor(hDC, bkClr);
                     if (drawFlags & DRAWFLAG_MASK) // mask is b&w; we must not paint a colored background into it
                         SetBkColor(hDC, RGB(255, 255, 255));
-                    ExtTextOut(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
+                    sally::ui::DrawPanelTextA(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
                 }
             }
         }
@@ -957,7 +958,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                             if (extPosW != NULL)
                             {
                                 TransferLen = (int)wcslen(extPosW);
-                                // Copy extension to wide buffer and draw with ExtTextOutW below
+                                // Copy extension to wide buffer and draw it below.
                                 wmemcpy(DrawItemBuffW, extPosW, TransferLen + 1);
                             }
                             else
@@ -977,7 +978,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                     }
 
                     if (TransferLen == 0)
-                        ExtTextOut(hDC, r.left, y, ETO_OPAQUE, &adjR, "", 0, NULL); // just clearing
+                        sally::ui::DrawPanelTextA(hDC, r.left, y, ETO_OPAQUE, &adjR, "", 0, NULL); // just clearing
                     else if (f->UseWideName() && column->ID == COLUMN_ID_EXTENSION)
                     {
                         // Unicode extension drawing - use DrawItemBuffW which was populated above
@@ -1002,7 +1003,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                                     DrawItemBuffW[1] = L'.';
                                     totalCount = 2;
                                 }
-                                ExtTextOutW(hDC, r.left + SPACE_WIDTH / 2, y, ETO_OPAQUE, &adjR, DrawItemBuffW, totalCount, NULL);
+                                sally::ui::DrawPanelTextW(hDC, r.left + SPACE_WIDTH / 2, y, ETO_OPAQUE, &adjR, DrawItemBuffW, totalCount, NULL);
                             }
                             else
                             {
@@ -1014,7 +1015,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                                 }
                                 else
                                     deltaX = SPACE_WIDTH / 2;
-                                ExtTextOutW(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, DrawItemBuffW, TransferLen, NULL);
+                                sally::ui::DrawPanelTextW(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, DrawItemBuffW, TransferLen, NULL);
                             }
                         }
                         else
@@ -1028,7 +1029,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                             }
                             else
                                 deltaX = SPACE_WIDTH / 2;
-                            ExtTextOutW(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, DrawItemBuffW, TransferLen, NULL);
+                            sally::ui::DrawPanelTextW(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, DrawItemBuffW, TransferLen, NULL);
                         }
                     }
                     else
@@ -1060,7 +1061,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                                     DrawItemBuff[1] = '.';
                                     totalCount = 2;
                                 }
-                                ExtTextOut(hDC, r.left + SPACE_WIDTH / 2, y, ETO_OPAQUE, &adjR, DrawItemBuff, totalCount, NULL);
+                                sally::ui::DrawPanelTextA(hDC, r.left + SPACE_WIDTH / 2, y, ETO_OPAQUE, &adjR, DrawItemBuff, totalCount, NULL);
                             }
                             else
                             {
@@ -1072,7 +1073,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                                 }
                                 else
                                     deltaX = SPACE_WIDTH / 2;
-                                ExtTextOut(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, TransferBuffer, TransferLen, NULL);
+                                sally::ui::DrawPanelTextA(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, TransferBuffer, TransferLen, NULL);
                             }
                         }
                         else
@@ -1089,7 +1090,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                             else
                                 deltaX = SPACE_WIDTH / 2;
 
-                            ExtTextOut(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, TransferBuffer, TransferLen, NULL);
+                            sally::ui::DrawPanelTextA(hDC, r.left + deltaX, y, ETO_OPAQUE, &adjR, TransferBuffer, TransferLen, NULL);
                         }
                     }
                 }
@@ -1115,7 +1116,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                 SetBkColor(hDC, GetCOLORREF(CurrentColors[ITEM_BK_NORMAL]));
                 if (drawFlags & DRAWFLAG_MASK) // mask is b&w; we must not paint a colored background into it
                     SetBkColor(hDC, RGB(255, 255, 255));
-                ExtTextOut(hDC, r.left, r.top, ETO_OPAQUE, &adjR, "", 0, NULL);
+                sally::ui::DrawPanelTextA(hDC, r.left, r.top, ETO_OPAQUE, &adjR, "", 0, NULL);
             }
         }
 
@@ -1849,13 +1850,13 @@ void CFilesWindow::DrawIconThumbnailItem(HDC hTgtDC, int itemIndex, RECT* itemRe
         // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
         if (useWideDisplay)
         {
-            ExtTextOutW(hDC, rect.left + (itemWidth - out1Width) / 2, y,
-                        ETO_OPAQUE, &r, out1W, (drawFlags & DRAWFLAG_MASK) ? 0 : out1Len, NULL);
+            sally::ui::DrawPanelTextW(hDC, rect.left + (itemWidth - out1Width) / 2, y,
+                                      ETO_OPAQUE, &r, out1W, (drawFlags & DRAWFLAG_MASK) ? 0 : out1Len, NULL);
         }
         else
         {
-            ExtTextOut(hDC, rect.left + (itemWidth - out1Width) / 2, y,
-                       ETO_OPAQUE, &r, out1, (drawFlags & DRAWFLAG_MASK) ? 0 : out1Len, NULL);
+            sally::ui::DrawPanelTextA(hDC, rect.left + (itemWidth - out1Width) / 2, y,
+                                      ETO_OPAQUE, &r, out1, (drawFlags & DRAWFLAG_MASK) ? 0 : out1Len, NULL);
         }
 
         // display the centered second line
@@ -1864,13 +1865,13 @@ void CFilesWindow::DrawIconThumbnailItem(HDC hTgtDC, int itemIndex, RECT* itemRe
             // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
             if (useWideDisplay)
             {
-                ExtTextOutW(hDC, rect.left + (itemWidth - out2Width) / 2, y += FontCharHeight,
-                            0, NULL, out2W, (drawFlags & DRAWFLAG_MASK) ? 0 : out2Len, NULL);
+                sally::ui::DrawPanelTextW(hDC, rect.left + (itemWidth - out2Width) / 2, y += FontCharHeight,
+                                          0, &r, out2W, (drawFlags & DRAWFLAG_MASK) ? 0 : out2Len, NULL);
             }
             else
             {
-                ExtTextOut(hDC, rect.left + (itemWidth - out2Width) / 2, y += FontCharHeight,
-                           0, NULL, out2, (drawFlags & DRAWFLAG_MASK) ? 0 : out2Len, NULL);
+                sally::ui::DrawPanelTextA(hDC, rect.left + (itemWidth - out2Width) / 2, y += FontCharHeight,
+                                          0, &r, out2, (drawFlags & DRAWFLAG_MASK) ? 0 : out2Len, NULL);
             }
         }
 
@@ -2312,11 +2313,11 @@ void CFilesWindow::DrawTileItem(HDC hTgtDC, int itemIndex, RECT* itemRect, DWORD
         // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
         if (useWideDisplay)
         {
-            ExtTextOutW(hDC, textX, textY, ETO_OPAQUE, &r, out0W, (drawFlags & DRAWFLAG_MASK) ? 0 : out0LenW, NULL);
+            sally::ui::DrawPanelTextW(hDC, textX, textY, ETO_OPAQUE, &r, out0W, (drawFlags & DRAWFLAG_MASK) ? 0 : out0LenW, NULL);
         }
         else
         {
-            ExtTextOut(hDC, textX, textY, ETO_OPAQUE, &r, out0, (drawFlags & DRAWFLAG_MASK) ? 0 : out0Len, NULL);
+            sally::ui::DrawPanelTextA(hDC, textX, textY, ETO_OPAQUE, &r, out0, (drawFlags & DRAWFLAG_MASK) ? 0 : out0Len, NULL);
         }
 
         // display the second line
@@ -2332,7 +2333,7 @@ void CFilesWindow::DrawTileItem(HDC hTgtDC, int itemIndex, RECT* itemRect, DWORD
                     r.bottom--;
             }
             // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
-            ExtTextOut(hDC, textX, textY, ETO_OPAQUE, &r, out1, (drawFlags & DRAWFLAG_MASK) ? 0 : out1Len, NULL);
+            sally::ui::DrawPanelTextA(hDC, textX, textY, ETO_OPAQUE, &r, out1, (drawFlags & DRAWFLAG_MASK) ? 0 : out1Len, NULL);
         }
         // display the third line and clear the background of the area below it
         if (out2[0] != 0)
@@ -2343,7 +2344,7 @@ void CFilesWindow::DrawTileItem(HDC hTgtDC, int itemIndex, RECT* itemRect, DWORD
                 r.bottom--;
             textY += FontCharHeight;
             // DRAWFLAG_MASK: hack, under XP some stuff is added in font of the text in the mask while drawing short texts; not an issue if text is not drawn
-            ExtTextOut(hDC, textX, textY, ETO_OPAQUE, &r, out2, (drawFlags & DRAWFLAG_MASK) ? 0 : out2Len, NULL);
+            sally::ui::DrawPanelTextA(hDC, textX, textY, ETO_OPAQUE, &r, out2, (drawFlags & DRAWFLAG_MASK) ? 0 : out2Len, NULL);
         }
 
         //*****************************************

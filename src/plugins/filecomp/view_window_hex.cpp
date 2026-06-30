@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "paint_helpers.h"
 
 // ****************************************************************************
 //
@@ -274,7 +275,7 @@ void CHexFileViewWindow::Paint()
         r.left = r1.right;
         r.right = LineNumWidth;
         SetBkColor(dc, LineColors[LC_NORMAL].BkColor);
-        ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r, NULL, 0, NULL);
+        FileCompFillRect(dc, &r);
         // draw the gap between the columns with DWORD spacing
         for (i = HScrollOffs / 13; i < BytesPerLine / 4; i++)
         {
@@ -282,7 +283,7 @@ void CHexFileViewWindow::Paint()
             r.right = r.left + FontWidth * 2;
             if (r.left < LineNumWidth)
                 r.left = LineNumWidth;
-            ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r, NULL, 0, NULL);
+            FileCompFillRect(dc, &r);
         }
         // draw the rest
         for (i = clipFirstRow; i < clipLastRow; i++)
@@ -379,7 +380,7 @@ void CHexFileViewWindow::Paint()
                             r.right = r2.right;
                             if (r.left < LineNumWidth)
                                 r.left = LineNumWidth;
-                            ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r, NULL, 0, NULL);
+                            FileCompFillRect(dc, &r);
                         }
                     }
                 }
@@ -394,7 +395,7 @@ void CHexFileViewWindow::Paint()
             {
                 r3.right = Width;
                 SetBkColor(dc, LineColors[LC_NORMAL].BkColor);
-                ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r3, NULL, 0, NULL);
+                FileCompFillRect(dc, &r3);
             }
         }
     }
@@ -413,7 +414,7 @@ void CHexFileViewWindow::Paint()
         {
             if (r2.left < LineNumWidth)
                 r2.left = LineNumWidth;
-            ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r2, NULL, 0, NULL);
+            FileCompFillRect(dc, &r2);
         }
     }
 
@@ -429,11 +430,11 @@ void CHexFileViewWindow::Paint()
 
         // draw only the background behind the line number
         SetBkColor(dc, LineColors[LC_NORMAL].LineNumBkColor);
-        ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r1, NULL, 0, NULL);
+        FileCompFillRect(dc, &r1);
 
         // draw an empty line
         SetBkColor(dc, LineColors[LC_NORMAL].BkColor);
-        ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r2, NULL, 0, NULL);
+        FileCompFillRect(dc, &r2);
     }
 
     if (!PaintEnabled)
@@ -448,11 +449,11 @@ void CHexFileViewWindow::Paint()
 
         // draw only the background behind the line number
         SetBkColor(dc, LineColors[LC_NORMAL].LineNumBkColor);
-        ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r1, NULL, 0, NULL);
+        FileCompFillRect(dc, &r1);
 
         // draw an empty line
         SetBkColor(dc, LineColors[LC_NORMAL].BkColor);
-        ExtTextOut(dc, 0, 0, ETO_OPAQUE, &r2, NULL, 0, NULL);
+        FileCompFillRect(dc, &r2);
     }
 
     SelectObject(dc, oldFont);

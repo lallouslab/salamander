@@ -258,7 +258,7 @@ char* LoadStr(int resID)
     HINSTANCE hInstance = HInstance;
 
 RELOAD:
-    int size = LoadString(hInstance, resID, act, 10000 - (act - buffer));
+    int size = LoadString(hInstance, resID, act, (int)(10000 - (act - buffer)));
     // 'size' counts copied characters excluding the terminator
     //  DWORD error = GetLastError();
     char* ret;
@@ -328,7 +328,7 @@ int GetRootPath(char* root, const char* path)
             s++; // '\\'
         while (*s != 0 && *s != '\\')
             s++;
-        int len = s - path;
+        int len = (int)(s - path);
         memcpy(root, path, len);
         root[len] = '\\';
         root[len + 1] = 0;
@@ -555,7 +555,7 @@ BOOL GetTargetDirectoryAux(HWND parent, HWND hCenterWindow,
         bd.InitDir = initDir;
         bd.HCenterWindow = hCenterWindow;
         bi.lParam = (LPARAM)&bd;
-        ITEMIDLIST* res = SHBrowseForFolder(&bi);
+        PIDLIST_ABSOLUTE res = SHBrowseForFolder(&bi);
         BOOL ret = FALSE; // return value
         if (res != NULL)
         {

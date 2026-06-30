@@ -50,25 +50,29 @@ CSalShExtPastedData SalShExtPastedData;
 void InitSalShLib()
 {
     CALL_STACK_MESSAGE1("InitSalShLib()");
+    char sharedMemMutexName[256];
+    char sharedMemName[256];
+    const char* mutexName = SALSHEXT_GetSharedMemMutexName(sharedMemMutexName, _countof(sharedMemMutexName));
+    const char* mappingName = SALSHEXT_GetSharedMemName(sharedMemName, _countof(sharedMemName));
     PSID psidEveryone;
     PACL paclNewDacl;
     SECURITY_ATTRIBUTES sa;
     SECURITY_DESCRIPTOR sd;
     SECURITY_ATTRIBUTES* saPtr = CreateAccessableSecurityAttributes(&sa, &sd, GENERIC_ALL, &psidEveryone, &paclNewDacl);
 
-    SalShExtSharedMemMutex = HANDLES_Q(CreateMutex(saPtr, FALSE, SALSHEXT_SHAREDMEMMUTEXNAME));
+    SalShExtSharedMemMutex = HANDLES_Q(CreateMutex(saPtr, FALSE, mutexName));
     if (SalShExtSharedMemMutex == NULL)
-        SalShExtSharedMemMutex = HANDLES_Q(OpenMutex(SYNCHRONIZE, FALSE, SALSHEXT_SHAREDMEMMUTEXNAME));
+        SalShExtSharedMemMutex = HANDLES_Q(OpenMutex(SYNCHRONIZE, FALSE, mutexName));
     if (SalShExtSharedMemMutex != NULL)
     {
         WaitForSingleObject(SalShExtSharedMemMutex, INFINITE);
         SalShExtSharedMem = HANDLES_Q(CreateFileMapping(INVALID_HANDLE_VALUE, saPtr, PAGE_READWRITE, // FIXME_X64 nepredavame x86/x64 nekompatibilni data?
                                                         0, sizeof(CSalShExtSharedMem),
-                                                        SALSHEXT_SHAREDMEMNAME));
+                                                        mappingName));
         BOOL created;
         if (SalShExtSharedMem == NULL)
         {
-            SalShExtSharedMem = HANDLES_Q(OpenFileMapping(FILE_MAP_WRITE, FALSE, SALSHEXT_SHAREDMEMNAME));
+            SalShExtSharedMem = HANDLES_Q(OpenFileMapping(FILE_MAP_WRITE, FALSE, mappingName));
             created = FALSE;
         }
         else

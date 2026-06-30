@@ -464,10 +464,10 @@ void CPreviewWindow::DisplayControlInfo()
                                 control->OX + control->OCX, control->OY + control->OCY, control->OCX, control->OCY);
             }
             p += swprintf_s(p, _countof(info) - (p - info), L" Style:0x%08X ExStyle:0x%08X\n", control->Style, control->ExStyle);
-            if (control->ClassName != NULL && LOWORD(control->ClassName) != 0xFFFF)
+            if (control->ClassName != NULL && !IsClassAtomValue(control->ClassName))
                 p += swprintf_s(p, _countof(info) - (p - info), L" Class:%s\n", control->ClassName);
             else
-                p += swprintf_s(p, _countof(info) - (p - info), L" Class:0x%08X\n", (DWORD)control->ClassName);
+                p += swprintf_s(p, _countof(info) - (p - info), L" Class:0x%IX\n", GetPtrValue(control->ClassName));
         }
         else
         {
@@ -627,7 +627,7 @@ CPreviewWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             pt.x = GET_X_LPARAM(pos);
             pt.y = GET_Y_LPARAM(pos);
 
-            DWORD ncHitTest = SendMessageW(HDialog, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
+            DWORD ncHitTest = (DWORD)SendMessageW(HDialog, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
             if (ncHitTest == HTCAPTION)
             {
                 TextWindow.SelectIndex(0);

@@ -7,6 +7,7 @@
 #include <crtdbg.h>
 #include <stdio.h>
 
+#include "PVIPCNames.h"
 #include "PVMessage.h"
 #include "PixelAccess.h"
 #include "Thumbnailer.h"
@@ -148,7 +149,7 @@ int WINAPI _tWinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPTST
             printf("Received WM_USER\n");
 #endif
 
-            _sntprintf(eventName, SizeOf(eventName), _T("%s_ev%x"), SalamanderMutex, msg.lParam);
+            BuildPictViewMessageEventName(eventName, SizeOf(eventName), SalamanderMutex, msg.lParam);
             hEvent = OpenEvent(EVENT_ALL_ACCESS, FALSE, eventName);
             _ASSERTE(hEvent);
             PVMessage::HandleMessage(msg.wParam, msg.lParam, hEvent);

@@ -59,11 +59,9 @@ inline bool ShouldOverrideEditWithWide(const LookInSeed& seed)
 {
     if (seed.wide.empty())
         return false;
-    // Round-trip the wide through CP_ACP; if the result matches the wide
-    // seed, the ANSI render Transfer produced is already faithful.
-    std::string ansiRoundTrip = WideToAnsi(seed.wide);
-    std::wstring backToWide = AnsiToWide(ansiRoundTrip.c_str());
-    return backToWide != seed.wide;
+
+    std::string ansi;
+    return !sally::unicode::TryWideToAnsiRoundTripExact(seed.wide, ansi);
 }
 
 inline std::string EscapeLookInPathSeparators(const std::string& text)

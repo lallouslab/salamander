@@ -7,6 +7,7 @@
 #include "GUI.CAnimation.h"
 #include "Utils.CZString.h"
 #include "Utils.CStringFormatter.h"
+#include "common/PanelTextPainter.h"
 
 #define LA_LID_SIZE 0
 #define LA_LID_FILE 1
@@ -184,14 +185,14 @@ public:
 
         RECT rct = rect;
         rct.bottom = yPos;
-        ExtTextOut(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
+        sally::ui::DrawPanelTextA(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
         rct.top = yPos;
         rct.right = xPos;
         rct.bottom = yPos + rctH;
-        ExtTextOut(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
+        sally::ui::DrawPanelTextA(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
         rct.left = xPos + rctW;
         rct.right = rect.right;
-        ExtTextOut(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
+        sally::ui::DrawPanelTextA(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
 
         //Y-position for next text line
         int texty = yPos + rctH + 6;
@@ -200,7 +201,7 @@ public:
         rct.left = rect.left;
         rct.top = yPos + rctH;
         rct.bottom = texty + this->_lineHeight + 2;
-        ExtTextOut(hdc, xPos, texty, ETO_OPAQUE, &rct, this->_title->GetString(), (UINT)this->_title->GetLength(), NULL);
+        sally::ui::DrawPanelTextA(hdc, xPos, texty, ETO_OPAQUE, &rct, this->_title->GetString(), (UINT)this->_title->GetLength(), NULL);
 
         texty += this->_lineHeight + 2;
 
@@ -208,18 +209,18 @@ public:
         rct.top = texty;
         rct.right = xPos;
         rct.bottom = texty + 1;
-        ExtTextOut(hdc, xPos, texty, ETO_OPAQUE, &rct, NULL, 0, NULL);
+        sally::ui::DrawPanelTextA(hdc, xPos, texty, ETO_OPAQUE, &rct, NULL, 0, NULL);
 
         //right black line
         rct.left = xPos + rctW;
         rct.right = rect.right;
-        ExtTextOut(hdc, xPos, texty, ETO_OPAQUE, &rct, NULL, 0, NULL);
+        sally::ui::DrawPanelTextA(hdc, xPos, texty, ETO_OPAQUE, &rct, NULL, 0, NULL);
 
         //bottom black
         rct.left = rect.left;
         rct.top = texty + 1;
         rct.bottom = texty + 6;
-        ExtTextOut(hdc, xPos, texty, ETO_OPAQUE, &rct, NULL, 0, NULL);
+        sally::ui::DrawPanelTextA(hdc, xPos, texty, ETO_OPAQUE, &rct, NULL, 0, NULL);
 
         //Dividing line
         MoveToEx(hdc, xPos, texty, NULL);
@@ -233,10 +234,10 @@ public:
             rct.bottom = texty + this->_lineHeight;
             rct.left = rect.left;
             rct.right = xPos + this->_headersWidth + 6;
-            ExtTextOut(hdc, xPos, texty, ETO_OPAQUE, &rct, this->_headers[i]->GetString(), (UINT)this->_headers[i]->GetLength(), NULL);
+            sally::ui::DrawPanelTextA(hdc, xPos, texty, ETO_OPAQUE, &rct, this->_headers[i]->GetString(), (UINT)this->_headers[i]->GetLength(), NULL);
             rct.left = xPos + this->_headersWidth + 6;
             rct.right = rect.right;
-            ExtTextOut(hdc, xPos + this->_headersWidth + 6, texty, ETO_OPAQUE, &rct, this->_values[i]->GetString(), (UINT)this->_values[i]->GetLength(), NULL);
+            sally::ui::DrawPanelTextA(hdc, xPos + this->_headersWidth + 6, texty, ETO_OPAQUE, &rct, this->_values[i]->GetString(), (UINT)this->_values[i]->GetLength(), NULL);
             texty += this->_lineHeight;
         }
         rct.top = texty;
@@ -244,7 +245,7 @@ public:
         rct.left = rect.left;
         rct.right = rect.right;
 
-        ExtTextOut(hdc, xPos + rctW - this->_escinfoWidth, texty + 2, ETO_OPAQUE, &rct, this->_escinfo->GetString(), (UINT)this->_escinfo->GetLength(), NULL);
+        sally::ui::DrawPanelTextA(hdc, xPos + rctW - this->_escinfoWidth, texty + 2, ETO_OPAQUE, &rct, this->_escinfo->GetString(), (UINT)this->_escinfo->GetLength(), NULL);
 
         //animation black background
         Rectangle(hdc, xPos, yPos, xPos + rctW, yPos + rctH);

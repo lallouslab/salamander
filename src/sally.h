@@ -1060,6 +1060,18 @@ public:
                                      DWORD* pressedButton,
                                      DWORD* silentMask);
 
+    BOOL SafeFileOpenW(SAFE_FILE* file,
+                       const wchar_t* fileName,
+                       const char* displayFileName,
+                       DWORD dwDesiredAccess,
+                       DWORD dwShareMode,
+                       DWORD dwCreationDisposition,
+                       DWORD dwFlagsAndAttributes,
+                       HWND hParent,
+                       DWORD flags,
+                       DWORD* pressedButton,
+                       DWORD* silentMask);
+
     virtual HANDLE WINAPI SafeFileCreate(const char* fileName,
                                          DWORD dwDesiredAccess,
                                          DWORD dwShareMode,
@@ -1075,6 +1087,23 @@ public:
                                          int skipPathMax,
                                          CQuadWord* allocateWholeFile,
                                          SAFE_FILE* file);
+
+    HANDLE SafeFileCreateW(const wchar_t* fileName,
+                           const char* displayFileName,
+                           DWORD dwDesiredAccess,
+                           DWORD dwShareMode,
+                           DWORD dwFlagsAndAttributes,
+                           BOOL isDir,
+                           HWND hParent,
+                           const char* srcFileName,
+                           const char* srcFileInfo,
+                           DWORD* silentMask,
+                           BOOL allowSkip,
+                           BOOL* skipped,
+                           char* skipPath,
+                           int skipPathMax,
+                           CQuadWord* allocateWholeFile,
+                           SAFE_FILE* file);
 
     virtual void WINAPI SafeFileClose(SAFE_FILE* file);
 

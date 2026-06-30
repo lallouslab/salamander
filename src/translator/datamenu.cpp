@@ -150,8 +150,8 @@ BOOL CMenuData::LoadMenu(LPCSTR original, LPCSTR translated, CData* data)
         oStr = (LPCWSTR)original;
         tStr = (LPCWSTR)translated;
 
-        int oLen = wcslen((LPCWSTR)original) + 1;
-        int tLen = wcslen((LPCWSTR)translated) + 1;
+        int oLen = (int)wcslen((LPCWSTR)original) + 1;
+        int tLen = (int)wcslen((LPCWSTR)translated) + 1;
 
         original += oLen * sizeof(WCHAR);
         translated += tLen * sizeof(WCHAR);
@@ -274,8 +274,8 @@ BOOL CMenuData::LoadMenuEx(LPCSTR original, LPCSTR translated, CData* data)
             return FALSE;
         }
 
-        int oLen = wcslen((LPCWSTR)oText) + 1;
-        int tLen = wcslen((LPCWSTR)tText) + 1;
+        int oLen = (int)wcslen((LPCWSTR)oText) + 1;
+        int tLen = (int)wcslen((LPCWSTR)tText) + 1;
 
         CMenuItem item;
         ZeroMemory(&item, sizeof(item));
@@ -363,7 +363,7 @@ BOOL CData::SaveMenus(HANDLE hUpdateRes)
         {
             result = UpdateResource(hUpdateRes, RT_MENU, MAKEINTRESOURCE(menuData->ID),
                                     MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-                                    buff, iter - buff);
+                                    buff, (DWORD)(iter - buff));
         }
         if (!result)
             return FALSE;

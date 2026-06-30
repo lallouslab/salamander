@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "../remote_ipc_names.h"
 
 HINSTANCE DLLInstance = NULL;
 
@@ -246,8 +247,10 @@ int RemoteCompareFiles(HINSTANCE hInstance, LPTSTR lpCmdLine)
                     MessageBox(NULL, LoadStr(IDS_LAUNCHSAL), LoadStr(IDS_SPLERROR), MB_OK | MB_ICONERROR);
                     break;
                 }
+                char startedEventName[128];
+                sally::filecomp::BuildFileCompStartedEventNameForCurrentProcess(startedEventName, (int)sizeof(startedEventName));
                 HANDLE started =
-                    CreateEvent(NULL, TRUE, FALSE, StartedEventName);
+                    CreateEvent(NULL, TRUE, FALSE, startedEventName);
                 WaitForSingleObject(started, 5000);
                 CloseHandle(started);
                 CloseHandle(pi.hProcess);
@@ -269,7 +272,8 @@ int RemoteCompareFiles(HINSTANCE hInstance, LPTSTR lpCmdLine)
 
         if (wait)
         {
-            wsprintf(msg.ReleaseEvent, "FCREMOTE%X", GetCurrentProcessId());
+            sally::filecomp::BuildFileCompReleaseEventNameForCurrentProcess(
+                msg.ReleaseEvent, (int)sizeof(msg.ReleaseEvent), GetCurrentProcessId());
             releaseEvent = CreateEvent(NULL, TRUE, FALSE, msg.ReleaseEvent);
         }
         else

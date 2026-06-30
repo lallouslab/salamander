@@ -11,6 +11,7 @@
 #include "salinflt.h"
 #include "ui/IPrompter.h"
 #include "common/IClipboard.h"
+#include "common/ExternalToolRunner.h"
 #include "common/unicode/helpers.h"
 
 //****************************************************************************
@@ -1832,17 +1833,19 @@ BOOL SalOpenExecute(HWND hWindow, const char* fileName)
         strcat(cmdline, add);
 
         // start the salopen.exe process
-        STARTUPINFO si;
-        memset(&si, 0, sizeof(STARTUPINFO));
-        si.cb = sizeof(STARTUPINFO);
-        PROCESS_INFORMATION pi;
         {
             CALL_STACK_MESSAGE1("SalOpenExecute::create-process");
-            if (!HANDLES_Q(CreateProcess(NULL, cmdline, NULL, NULL, FALSE,
-                                         CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS,
-                                         NULL, NULL, &si, &pi)))
+            std::wstring cmdlineW = AnsiToWide(cmdline);
+            ExternalToolRequest request;
+            request.commandLine = cmdlineW.c_str();
+            request.creationFlags = CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS;
+
+            ExternalToolResult result = gExternalToolRunner != NULL
+                                            ? gExternalToolRunner->Launch(request)
+                                            : ExternalToolResult::Error(ERROR_INVALID_PARAMETER);
+            if (!result.success)
             {
-                DWORD err = GetLastError();
+                DWORD err = result.errorCode;
                 TRACE_E("SalOpenExecute failed: \"" << cmdline << "\", " << GetErrorText(err));
                 return FALSE;
             }
@@ -1850,10 +1853,9 @@ BOOL SalOpenExecute(HWND hWindow, const char* fileName)
             {
                 { // when waiting, DDE associations (.html, .h, .cpp, etc.) do not work
                     //          CALL_STACK_MESSAGE1("SalOpenExecute::wait-for-process");
-                    //          WaitForSingleObject(pi.hProcess, INFINITE);
+                    //          result.processOwner->WaitForProcess(result.process, INFINITE);
                 }
-                HANDLES(CloseHandle(pi.hProcess));
-                HANDLES(CloseHandle(pi.hThread));
+                result.CloseProcess();
             }
         }
 

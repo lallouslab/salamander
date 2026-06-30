@@ -171,7 +171,7 @@ void CLayoutEditor::UpdateBuffer()
         else
             text = "Align To: Choose reference item.";
         SetBkMode(hDC, TRANSPARENT);
-        TextOut(hDC, p.x, p.y, text, strlen(text));
+        TextOut(hDC, p.x, p.y, text, (int)strlen(text));
     }
 
     // display changedRect for debugging purposes
@@ -498,7 +498,7 @@ void CLayoutEditor::DrawCage(POINT pt)
     }
 
     int cageColor = COLOR_HIGHLIGHT;
-    FillRect(CageBitmap->HMemDC, &cageRect, (HBRUSH)(cageColor + 1));
+    FillRect(CageBitmap->HMemDC, &cageRect, (HBRUSH)(INT_PTR)(cageColor + 1));
 
     BLENDFUNCTION bf;
     bf.BlendOp = AC_SRC_OVER;
@@ -1388,7 +1388,7 @@ CLayoutEditor::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     repeatArrow = RepeatArrow = RepeatArrow * 10;
                 else
                     repeatArrow = RepeatArrow = 0;
-                RepeatArrow += wParam - '0';
+                RepeatArrow += (int)(wParam - '0');
             }
             else
             {

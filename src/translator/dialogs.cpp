@@ -359,12 +359,12 @@ void CLocales::FillComboBox(HWND hCombo)
     {
         GetLocaleInfo(MAKELCID(Items[i], SORT_DEFAULT), LOCALE_SLANGUAGE, buff, 500);
         SPrintFToEnd_s(buff, " - 0x%04x", Items[i]);
-        int index = SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)buff);
+        int index = (int)SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)buff);
         SendMessage(hCombo, CB_SETITEMDATA, index, Items[i]);
     }
     for (i = 0; i < Items.Count; i++)
     {
-        int lang = SendMessage(hCombo, CB_GETITEMDATA, i, 0);
+        int lang = (int)SendMessage(hCombo, CB_GETITEMDATA, i, 0);
         if (lang == Data.SLGSignature.LanguageID)
         {
             SendMessage(hCombo, CB_SETCURSEL, i, 0);
@@ -443,7 +443,7 @@ void CPropertiesDialog::Transfer(CTransferInfo& ti)
     }
     else
     {
-        int index = SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+        int index = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
         Data.SLGSignature.LanguageID = (WORD)SendMessage(hCombo, CB_GETITEMDATA, index, 0);
         Data.SetDirty();
         Data.SLGSignature.SLTDataChanged();
@@ -511,7 +511,7 @@ void CFindDialog::Transfer(CTransferInfo& ti)
                     }
             if (from > 0)
             {
-                int len = wcslen(buff) + 1;
+                int len = (int)wcslen(buff) + 1;
                 wchar_t* text = (wchar_t*)malloc(len * sizeof(wchar_t));
                 if (text != NULL)
                 {

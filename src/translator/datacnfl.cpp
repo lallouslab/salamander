@@ -59,10 +59,10 @@ struct CKey
     WORD Index;
     WORD LVIndex;
     WORD ControlID; // If it is 0, LVIndex is used; otherwise ControlID is used and LVIndex is 0
-    DWORD Param1;
-    DWORD Param2;
-    DWORD Param3;
-    DWORD Param4;
+    DWORD_PTR Param1;
+    DWORD_PTR Param2;
+    DWORD_PTR Param3;
+    DWORD_PTR Param4;
     BOOL Conflict;
 };
 
@@ -80,18 +80,18 @@ public:
 
     // Add a key to the array; returns TRUE if the insertion succeeds
     // FALSE if memory is insufficient
-    BOOL AddKey(wchar_t key, WORD index, WORD lvIndex, WORD controlID, DWORD param1 = 0, DWORD param2 = 0,
-                DWORD param3 = 0, DWORD param4 = 0);
-    BOOL AddString(const wchar_t* string, WORD index, WORD lvIndex, WORD controlID, DWORD param1 = 0,
-                   DWORD param2 = 0, DWORD param3 = 0, DWORD param4 = 0);
+    BOOL AddKey(wchar_t key, WORD index, WORD lvIndex, WORD controlID, DWORD_PTR param1 = 0, DWORD_PTR param2 = 0,
+                DWORD_PTR param3 = 0, DWORD_PTR param4 = 0);
+    BOOL AddString(const wchar_t* string, WORD index, WORD lvIndex, WORD controlID, DWORD_PTR param1 = 0,
+                   DWORD_PTR param2 = 0, DWORD_PTR param3 = 0, DWORD_PTR param4 = 0);
 
     // Must be called before the first GetNextConflict invocation
     void PrepareConflictIteration(CDialogData* dialog = NULL);
 
     // Returns TRUE if a conflict was found and fills the pointers
     // Returns FALSE when there are no more conflicts
-    BOOL GetNextConflict(WORD* index, WORD* lvIndex, WORD* controlID, DWORD* param1 = NULL,
-                         DWORD* param2 = NULL, DWORD* param3 = NULL, DWORD* param4 = NULL);
+    BOOL GetNextConflict(WORD* index, WORD* lvIndex, WORD* controlID, DWORD_PTR* param1 = NULL,
+                         DWORD_PTR* param2 = NULL, DWORD_PTR* param3 = NULL, DWORD_PTR* param4 = NULL);
 
     // Walk through 'string', remove the hotkeys already used, and return the rest in 'availableKeys'
     void GetAvailableKeys(const wchar_t* string, wchar_t* availableKeys, int availableKeysSize);
@@ -167,8 +167,8 @@ void CKeyConflict::PrepareConflictIteration(CDialogData* dialog)
     Iterator = 0;
 }
 
-BOOL CKeyConflict::GetNextConflict(WORD* index, WORD* lvIndex, WORD* controlID, DWORD* param1, DWORD* param2,
-                                   DWORD* param3, DWORD* param4)
+BOOL CKeyConflict::GetNextConflict(WORD* index, WORD* lvIndex, WORD* controlID, DWORD_PTR* param1, DWORD_PTR* param2,
+                                   DWORD_PTR* param3, DWORD_PTR* param4)
 {
     if (Iterator >= Keys.Count)
         return FALSE;
@@ -195,7 +195,7 @@ BOOL CKeyConflict::GetNextConflict(WORD* index, WORD* lvIndex, WORD* controlID, 
     return FALSE;
 }
 
-BOOL CKeyConflict::AddKey(wchar_t key, WORD index, WORD lvIndex, WORD controlID, DWORD param1, DWORD param2, DWORD param3, DWORD param4)
+BOOL CKeyConflict::AddKey(wchar_t key, WORD index, WORD lvIndex, WORD controlID, DWORD_PTR param1, DWORD_PTR param2, DWORD_PTR param3, DWORD_PTR param4)
 {
     CKey item;
     item.Key = LOWORD(CharLowerW((wchar_t*)MAKELPARAM(key, 0)));
@@ -216,7 +216,7 @@ BOOL IsAlphaW(wchar_t ch)
     return IsCharAlphaW(ch) || IsCharAlphaNumericW(ch);
 }
 
-BOOL CKeyConflict::AddString(const wchar_t* string, WORD index, WORD lvIndex, WORD controlID, DWORD param1, DWORD param2, DWORD param3, DWORD param4)
+BOOL CKeyConflict::AddString(const wchar_t* string, WORD index, WORD lvIndex, WORD controlID, DWORD_PTR param1, DWORD_PTR param2, DWORD_PTR param3, DWORD_PTR param4)
 {
     const wchar_t* p = string;
     while (*p != 0)
@@ -636,7 +636,7 @@ BOOL IsPrintfCharacter(const wchar_t* text, int* length)
         p++;
         if (*p == L'%') // escape sequence for '%'
         {
-            *length = p - text + 1;
+            *length = (int)(p - text + 1);
             return TRUE;
         }
         while (*p == L'-' || *p == L'+' || *p == L'#' || *p == L'0' || *p == L' ') // flags
@@ -674,7 +674,7 @@ BOOL IsPrintfCharacter(const wchar_t* text, int* length)
             *p == L'E' || *p == L'f' || *p == L'g' || *p == L'G' || *p == L'i' || *p == L'o' || *p == L'p' ||
             *p == L's' || *p == L'S' || *p == L'u' || *p == L'x' || *p == L'X' || *p == L'Z') // type
         {
-            *length = p - text + 1;
+            *length = (int)(p - text + 1);
             return TRUE;
         }
     }
@@ -800,8 +800,8 @@ BOOL ValidateTextEnding(const wchar_t* original, const wchar_t* translated, WORD
     if (*oWS == 0 && *tWS != 0 || *oWS != 0 && *tWS == 0)
         return FALSE;
 
-    int oLen = wcslen(original);
-    int tLen = wcslen(translated);
+    int oLen = (int)wcslen(original);
+    int tLen = (int)wcslen(translated);
 
     const wchar_t* oIter = original + oLen - 1;
     const wchar_t* tIter = translated + tLen - 1;
@@ -902,7 +902,7 @@ BOOL ShouldValidateLayoutFor(const CControl* control)
         return FALSE;
 
     // A short static control without text represents a horizontal separator
-    if ((DWORD)control->ClassName == 0x0082ffff && (control->TCY < 2) && (control->TWindowName[0] == 0))
+    if (control->ClassName == MakeClassAtomValue(0x0082) && (control->TCY < 2) && (control->TWindowName[0] == 0))
         return FALSE;
 
     return TRUE;
@@ -946,8 +946,8 @@ BOOL ShouldValidateAlignment(CDialogData* dialog, const CControl* control1,
     *checkRight = FALSE;
     *checkVertical = TRUE;
 
-    if ((DWORD)control1->ClassName == 0x0082ffff &&
-        (DWORD)control2->ClassName == 0x0082ffff &&
+    if (control1->ClassName == MakeClassAtomValue(0x0082) &&
+        control2->ClassName == MakeClassAtomValue(0x0082) &&
         control1->TCY == 1 && control2->TCY == 1) // check horizontal lines on both sides
     {
         *checkLeft = control1->TY < 20 && control2->TY < 20; // only if they start at the dialog edge; otherwise they likely continue after a static text and validating makes no sense
@@ -956,11 +956,11 @@ BOOL ShouldValidateAlignment(CDialogData* dialog, const CControl* control1,
     }
 
     // Align "left text" statics and radio/check boxes to the left edge
-    if (((DWORD)control1->ClassName == 0x0080ffff && IsRadioOrCheckBox(control1->Style) ||
-         (DWORD)control1->ClassName == 0x0082ffff && IsStaticLeftText(control1->Style) &&
+    if ((control1->ClassName == MakeClassAtomValue(0x0080) && IsRadioOrCheckBox(control1->Style) ||
+         control1->ClassName == MakeClassAtomValue(0x0082) && IsStaticLeftText(control1->Style) &&
              control1->TCY > 1 && !Data.IgnoreStaticItIsProgressBar(dialog->ID, control1->ID)) &&
-        ((DWORD)control2->ClassName == 0x0080ffff && IsRadioOrCheckBox(control2->Style) ||
-         (DWORD)control2->ClassName == 0x0082ffff && IsStaticLeftText(control2->Style) &&
+        (control2->ClassName == MakeClassAtomValue(0x0080) && IsRadioOrCheckBox(control2->Style) ||
+         control2->ClassName == MakeClassAtomValue(0x0082) && IsStaticLeftText(control2->Style) &&
              control2->TCY > 1 && !Data.IgnoreStaticItIsProgressBar(dialog->ID, control2->ID)))
     {
         *checkLeft = TRUE;
@@ -972,7 +972,7 @@ BOOL ShouldValidateAlignment(CDialogData* dialog, const CControl* control1,
     if (control1->ClassName != control2->ClassName)
         return FALSE;
 
-    if ((DWORD)control1->ClassName == 0x0080ffff) // BUTTON
+    if (control1->ClassName == MakeClassAtomValue(0x0080)) // BUTTON
     {
         CButtonType b1 = GetButtonType(control1->Style);
         CButtonType b2 = GetButtonType(control2->Style);
@@ -983,7 +983,7 @@ BOOL ShouldValidateAlignment(CDialogData* dialog, const CControl* control1,
         return *checkRight || (control1->Style & BS_TYPEMASK) == (control2->Style & BS_TYPEMASK);
     }
 
-    if ((DWORD)control1->ClassName == 0x0082ffff) // STATIC or progress bar
+    if (control1->ClassName == MakeClassAtomValue(0x0082)) // STATIC or progress bar
     {
         if (Data.IgnoreStaticItIsProgressBar(dialog->ID, control1->ID)) // progress bar
         {
@@ -1001,7 +1001,7 @@ BOOL ShouldValidateAlignment(CDialogData* dialog, const CControl* control1,
                !Data.IgnoreStaticItIsProgressBar(dialog->ID, control2->ID); // exclude progress bars
     }
 
-    if ((DWORD)control1->ClassName == 0x0081ffff) // EDIT
+    if (control1->ClassName == MakeClassAtomValue(0x0081)) // EDIT
     {
         if ((control1->Style & WS_BORDER) != (control2->Style & WS_BORDER))
             return FALSE; // aligning edits with and without borders makes no sense
@@ -1021,7 +1021,7 @@ BOOL ShouldValidateSize(const CControl* control1, const CControl* control2)
     if (control1->ClassName != control2->ClassName)
         return FALSE;
 
-    if ((DWORD)control1->ClassName == 0x0080ffff) // BUTTON
+    if (control1->ClassName == MakeClassAtomValue(0x0080)) // BUTTON
     {
         CButtonType b1 = GetButtonType(control1->Style);
         CButtonType b2 = GetButtonType(control2->Style);
@@ -1029,14 +1029,14 @@ BOOL ShouldValidateSize(const CControl* control1, const CControl* control2)
                b1 == btGroup && b2 == btGroup; // if it is a push button or group box
     }
 
-    if ((DWORD)control1->ClassName == 0x0081ffff) // EDIT
+    if (control1->ClassName == MakeClassAtomValue(0x0081)) // EDIT
     {
         if ((control1->Style & WS_BORDER) != (control2->Style & WS_BORDER))
             return FALSE; // Do not align edit boxes with and without borders—it makes no sense
         return TRUE;
     }
 
-    if ((DWORD)control1->ClassName == 0x0085ffff) // COMBOBOX
+    if (control1->ClassName == MakeClassAtomValue(0x0085)) // COMBOBOX
     {
         return TRUE;
     }
@@ -1057,7 +1057,7 @@ enum EnumSpacingControlType
 
 EnumSpacingControlType GetSpacingControlType(const CControl* control)
 {
-    if ((DWORD)control->ClassName == 0x0080ffff) // BUTTON
+    if (control->ClassName == MakeClassAtomValue(0x0080)) // BUTTON
     {
         switch (GetButtonType(control->Style))
         {
@@ -1071,16 +1071,16 @@ EnumSpacingControlType GetSpacingControlType(const CControl* control)
     }
 
     /*
-  if ((DWORD)control->ClassName == 0x0082ffff) // STATIC
+  if (control->ClassName == MakeClassAtomValue(0x0082)) // STATIC
   {
     return esctStatic;
   }
   */
-    if ((DWORD)control->ClassName == 0x0081ffff) // EDIT
+    if (control->ClassName == MakeClassAtomValue(0x0081)) // EDIT
     {
         return esctEditBox;
     }
-    if ((DWORD)control->ClassName == 0x0085ffff) // COMBO
+    if (control->ClassName == MakeClassAtomValue(0x0085)) // COMBO
     {
         return esctComboBox;
     }
@@ -1199,7 +1199,7 @@ void GetMutualControlsPosition(const CControl* control1, const CControl* control
 
 BOOL IsControlForLabelPlacingTest(const CDialogData* dialog, const CControl* control, const CControl* firstControl, int* deltaY)
 {
-    if ((DWORD)control->ClassName == 0x0080ffff) // BUTTON
+    if (control->ClassName == MakeClassAtomValue(0x0080)) // BUTTON
     {
         switch (GetButtonType(control->Style))
         {
@@ -1207,7 +1207,7 @@ BOOL IsControlForLabelPlacingTest(const CDialogData* dialog, const CControl* con
         {
             if (firstControl != NULL)
             {
-                if ((DWORD)firstControl->ClassName == 0x0080ffff) // BUTTON
+                if (firstControl->ClassName == MakeClassAtomValue(0x0080)) // BUTTON
                 {
                     CButtonType b = GetButtonType(firstControl->Style);
                     if (b == btCheck || b == btRadio) // Checkbox or radio button before the button
@@ -1217,7 +1217,7 @@ BOOL IsControlForLabelPlacingTest(const CDialogData* dialog, const CControl* con
                     }
                 }
 
-                if ((DWORD)firstControl->ClassName == 0x0082ffff) // STATIC
+                if (firstControl->ClassName == MakeClassAtomValue(0x0082)) // STATIC
                 {
                     DWORD ss = (firstControl->Style & SS_TYPEMASK);
                     if (ss == SS_LEFT || ss == SS_RIGHT || ss == SS_CENTER || ss == SS_SIMPLE || ss == SS_LEFTNOWORDWRAP)
@@ -1227,7 +1227,7 @@ BOOL IsControlForLabelPlacingTest(const CDialogData* dialog, const CControl* con
                     }
                 }
 
-                if ((DWORD)firstControl->ClassName == 0x0081ffff && // EDIT
+                if (firstControl->ClassName == MakeClassAtomValue(0x0081) && // EDIT
                     (firstControl->Style & WS_BORDER) != 0)         // With a border
                 {
                     *deltaY = (control->TCY - firstControl->TCY) / 2; // Button after an edit box (likely a Browse button) — align the tops (edits always have *deltaY == 0)
@@ -1254,7 +1254,7 @@ BOOL IsControlForLabelPlacingTest(const CDialogData* dialog, const CControl* con
         }
     }
 
-    if ((DWORD)control->ClassName == 0x0082ffff) // STATIC a progress bar
+    if (control->ClassName == MakeClassAtomValue(0x0082)) // STATIC a progress bar
     {
         if (Data.IgnoreStaticItIsProgressBar(dialog->ID, control->ID)) // progress bar
         {
@@ -1269,25 +1269,25 @@ BOOL IsControlForLabelPlacingTest(const CDialogData* dialog, const CControl* con
         }
     }
 
-    if (firstControl != NULL && LOWORD(control->ClassName) != 0xFFFF && wcscmp(control->ClassName, L"SysDateTimePick32") == 0) // DATEPICK
+    if (firstControl != NULL && !IsClassAtomValue(control->ClassName) && wcscmp(control->ClassName, L"SysDateTimePick32") == 0) // DATEPICK
     {
         *deltaY = 0;
         return TRUE;
     }
 
-    if (firstControl != NULL && LOWORD(control->ClassName) != 0xFFFF && wcscmp(control->ClassName, L"msctls_progress32") == 0) // progress
+    if (firstControl != NULL && !IsClassAtomValue(control->ClassName) && wcscmp(control->ClassName, L"msctls_progress32") == 0) // progress
     {
         *deltaY = (control->TCY - 12) / 2;
         return TRUE;
     }
 
-    if (firstControl != NULL && (DWORD)control->ClassName == 0x0085ffff) // COMBO
+    if (firstControl != NULL && control->ClassName == MakeClassAtomValue(0x0085)) // COMBO
     {
         *deltaY = 0;
         return TRUE;
     }
 
-    if ((DWORD)control->ClassName == 0x0081ffff) // EDIT
+    if (control->ClassName == MakeClassAtomValue(0x0081)) // EDIT
     {
         BOOL hasBorder = ((control->Style & WS_BORDER) != 0);
         if (hasBorder)
@@ -1312,7 +1312,7 @@ BOOL IsNotLeftStaticFollowedByLine(const CControl* control, CDialogData* dialogD
             if (i == 1 && controlIndex > 0)
                 control2 = dialogData->Controls[controlIndex - 1];
             if (control2 != NULL && control2->TCY == 1 &&
-                control2->ClassName == (wchar_t*)0x0082FFFF &&                                   // STATIC: horizontal line
+                control2->ClassName == MakeClassAtomValue(0x0082) &&                                   // STATIC: horizontal line
                 control2->TY >= control->TY && control2->TY < control->TY + control->TCY &&      // The line sits vertically within the control
                 control2->TX >= control->TX && control2->TX - (control->TX + control->TCX) < 20) // The line starts after the control, at most 20 dialog units away
             {
@@ -1450,17 +1450,17 @@ BOOL IsLabelCorrectlyPlaced(CDialogData* dialogData, int controlIndex, int* cont
                 abs(deltaX) <= (tryingNextCtrl ? TOPLABELDISTANCE_MAX_X2 : TOPLABELDISTANCE_MAX_X1)) // The control must not be too far in X from the label
             {
                 CButtonType bt;
-                if ((DWORD)control2->ClassName == 0x0081ffff ||                                                    // EDIT
-                    (DWORD)control2->ClassName == 0x0083ffff ||                                                    // LISTBOX
-                    (DWORD)control2->ClassName == 0x0085ffff ||                                                    // COMBO
-                    LOWORD(control2->ClassName) != 0xFFFF && wcscmp(control2->ClassName, L"SysListView32") == 0 || // LISTVIEW
-                    (DWORD)control2->ClassName == 0x0080ffff &&                                                    // BUTTON: push-button + checkbox + radiobutton
+                if (control2->ClassName == MakeClassAtomValue(0x0081) ||                                                    // EDIT
+                    control2->ClassName == MakeClassAtomValue(0x0083) ||                                                    // LISTBOX
+                    control2->ClassName == MakeClassAtomValue(0x0085) ||                                                    // COMBO
+                    !IsClassAtomValue(control2->ClassName) && wcscmp(control2->ClassName, L"SysListView32") == 0 || // LISTVIEW
+                    control2->ClassName == MakeClassAtomValue(0x0080) &&                                                    // BUTTON: push-button + checkbox + radiobutton
                         ((bt = GetButtonType(control2->Style)) == btPush || bt == btCheck || bt == btRadio))
                 {
                     // Label is above the control
 #define LABEL2CONTROL_SPACING_V -2 // 2 for space
                     int labelDY = LABEL2CONTROL_SPACING_V - 8 * (control1->TCY / 8);
-                    BOOL control2IsCheckOrRadio = (DWORD)control2->ClassName == 0x0080ffff && (bt == btCheck || bt == btRadio);
+                    BOOL control2IsCheckOrRadio = control2->ClassName == MakeClassAtomValue(0x0080) && (bt == btCheck || bt == btRadio);
                     if (control2IsCheckOrRadio)
                         labelDY += (control2->TCY - 10) / 2; // BUTTON: checkbox + radiobutton: the Y offset depends on button height (typically 10 or 12)
                     if (deltaY != labelDY &&
@@ -1471,8 +1471,8 @@ BOOL IsLabelCorrectlyPlaced(CDialogData* dialogData, int controlIndex, int* cont
                         return FALSE;
                     }
 #define LABEL2CHECKBOX_H_ALIGN -7 // Allow labels of push-button/checkbox/radio columns to be offset by exactly 7 dialog units (used by PictView; without the offset it looks ugly)
-                    BOOL control2IsPushOrCheckOrRadio = (DWORD)control2->ClassName == 0x0080ffff && (bt == btPush || bt == btCheck || bt == btRadio);
-                    BOOL control2IsEditWithoutBorder = (DWORD)control2->ClassName == 0x0081ffff && (control2->Style & WS_BORDER) == 0;
+                    BOOL control2IsPushOrCheckOrRadio = control2->ClassName == MakeClassAtomValue(0x0080) && (bt == btPush || bt == btCheck || bt == btRadio);
+                    BOOL control2IsEditWithoutBorder = control2->ClassName == MakeClassAtomValue(0x0081) && (control2->Style & WS_BORDER) == 0;
                     if (deltaX != (control2IsEditWithoutBorder ? 2 : 0) &&
                         (!control2IsPushOrCheckOrRadio || deltaX != LABEL2CHECKBOX_H_ALIGN) &&
                         !Data.IgnoreProblem(iltIncorPlLbl, dialogData->ID, control1->ID, control2->ID))
@@ -1533,7 +1533,7 @@ BOOL ControlHasStandardSize(const CDialogData* dialog, const CControl* control)
 #define PROGRESSBAR_STANDARD_H 12
 #define ETCHEDHORZ_STANDARD_H 1
 
-    if ((DWORD)control->ClassName == 0x0080ffff) // BUTTON
+    if (control->ClassName == MakeClassAtomValue(0x0080)) // BUTTON
     {
         switch (GetButtonType(control->Style))
         {
@@ -1550,7 +1550,7 @@ BOOL ControlHasStandardSize(const CDialogData* dialog, const CControl* control)
         }
     }
 
-    if ((DWORD)control->ClassName == 0x0082ffff) // STATIC + progress bar
+    if (control->ClassName == MakeClassAtomValue(0x0082)) // STATIC + progress bar
     {
         if (Data.IgnoreStaticItIsProgressBar(dialog->ID, control->ID))
             return control->TCY == PROGRESSBAR_STANDARD_H;
@@ -1565,7 +1565,7 @@ BOOL ControlHasStandardSize(const CDialogData* dialog, const CControl* control)
             return TRUE;
     }
 
-    if ((DWORD)control->ClassName == 0x0081ffff) // EDIT
+    if (control->ClassName == MakeClassAtomValue(0x0081)) // EDIT
     {
         return (control->Style & (ES_READONLY | ES_MULTILINE)) || control->TCY == EDITBOX_STANDARD_H1 ||
                control->TCY == EDITBOX_STANDARD_H2;
@@ -1775,7 +1775,7 @@ BOOL IsControlClippedAux(const CDialogData* dialog, const CControl* control, HDC
         txtR.right += cxReserveUsed;
         if (controlType == ectPushButton)
         {
-            int len = wcslen(controlText);
+            int len = (int)wcslen(controlText);
             bool isAlpha = len > 0 && (IsCharAlphaNumericW(controlText[0] == L'&' && len > 1 ? controlText[1] : controlText[0]) || IsCharAlphaNumericW(controlText[len - 1]));
             wndR.right -= isAlpha ? buttonMarginsAlphaCX : buttonMarginsSymbolCX; // Button margins—no idea how to get them programmatically, so they are hard-coded (Petr: increased from 6 to 12 for text buttons to catch ugly small buttons)
             wndR.bottom -= buttonMarginsCY;                                       // Button margins—no idea how to get them programmatically, so they are hard-coded
@@ -1957,7 +1957,7 @@ BOOL IsControlClipped(const CDialogData* dialog, const CControl* control, HWND h
 
     wchar_t buff[1000];
     EnumControlType controlType;
-    switch ((DWORD)control->ClassName)
+    switch (GetPtrValue(control->ClassName))
     {
     case 0x0080ffff:
     {
@@ -2407,7 +2407,7 @@ void CData::ValidateTranslation(HWND hParent)
                             BOOL showInLV = control->ShowInLVWithControls(ctrlID);
                             if (showInLV && control->ID == section->SectionControlControlID)
                             {
-                                conflict.AddString(control->TWindowName, ctrlID, lvIndex, 0, 2, (DWORD)dialog);
+                                conflict.AddString(control->TWindowName, ctrlID, lvIndex, 0, 2, (DWORD_PTR)dialog);
                                 menuPreview->AddText(control->TWindowName);
                                 found = TRUE;
                                 break;
@@ -2491,7 +2491,7 @@ void CData::ValidateTranslation(HWND hParent)
 
                         if (multiTextOrComboItem == NULL || control->TWindowName != NULL && control->TWindowName[0] != 0)
                         {
-                            conflict.AddString(control->TWindowName, ctrlID, showInLV ? lvIndex : 0, showInLV ? 0 : control->ID, 1, (DWORD)dialog);
+                            conflict.AddString(control->TWindowName, ctrlID, showInLV ? lvIndex : 0, showInLV ? 0 : control->ID, 1, (DWORD_PTR)dialog);
                             menuPreview->AddText(control->TWindowName);
                         }
                         else
@@ -2507,7 +2507,7 @@ void CData::ValidateTranslation(HWND hParent)
                             {
                                 if (buff[0] != 0)
                                 {
-                                    conflict.AddString(buff, ctrlID, showInLV ? lvIndex : 0, showInLV ? 0 : control->ID, 1, (DWORD)dialog);
+                                    conflict.AddString(buff, ctrlID, showInLV ? lvIndex : 0, showInLV ? 0 : control->ID, 1, (DWORD_PTR)dialog);
                                     menuPreview->AddText(buff);
                                 }
                             }
@@ -2523,10 +2523,10 @@ void CData::ValidateTranslation(HWND hParent)
             WORD foundIndex;
             WORD foundLVIndex;
             WORD foundControlID;
-            DWORD subIndex;
-            DWORD sectionIndex;
-            DWORD indexInSection;
-            DWORD itemType;
+            DWORD_PTR subIndex;
+            DWORD_PTR sectionIndex;
+            DWORD_PTR indexInSection;
+            DWORD_PTR itemType;
             BOOL foundConflict = FALSE;
             while (conflict.GetNextConflict(&foundIndex, &foundLVIndex, &foundControlID, &itemType, &subIndex, &sectionIndex, &indexInSection))
             {
@@ -3135,7 +3135,7 @@ void CData::ValidateTranslation(HWND hParent)
                 if (multiTextOrComboItem == NULL && !showInLV)
                     continue;
 
-                DWORD className = (DWORD)control->ClassName;
+                UINT_PTR className = GetPtrValue(control->ClassName);
                 //                STATIC     ||              BUTTON     ||      COMBO BOX
                 if ((className == 0x0082ffff || className == 0x0080ffff ||
                      className == 0x0085ffff && multiTextOrComboItem != NULL && multiTextOrComboItem->Type == cltComboBox) &&
@@ -3188,7 +3188,7 @@ void CData::ValidateTranslation(HWND hParent)
                         minHSpacing = CONTROL_TO_DIALOG_MIN_H_SPACING;
                     }
 
-                    if ((DWORD)control->ClassName == 0x0082ffff &&    // STATIC
+                    if (control->ClassName == MakeClassAtomValue(0x0082) &&    // STATIC
                         (control->Style & SS_TYPEMASK) == SS_RIGHT && // Right-aligned text may go closer to the edge (the left side is rarely used)
                         control->TCY > 1 && control->TCX > 1)         // Horizontal and vertical lines may extend to the dialog edges
                     {

@@ -10,7 +10,7 @@
 //
 
 void CFTPWorker::HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                           BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                           BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                            int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
                                            int replyCode)
 {
@@ -308,11 +308,11 @@ void CFTPWorker::HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuit
                         CFTPServerPathType type = Oper->GetFTPServerPathType(ftpPath);
                         if (FTPPathAppend(type, ftpPath, ftpPath.Size(), CurItem->Name, TRUE))
                         { // we have the path, send CWD to the examined directory on the server
-                            _snprintf_s(errText, _TRUNCATE, LoadStr(IDS_LOGMSGRESOLVINGLINK), ftpPath);
+                            _snprintf_s(errText, _TRUNCATE, LoadStr(IDS_LOGMSGRESOLVINGLINK), ftpPath.Get());
                             Logs.LogMessage(LogUID, errText, -1, TRUE);
 
                             PrepareFTPCommand(buf, buf.Size(), errBuf, errBuf.Size(),
-                                              ftpcmdChangeWorkingPath, &cmdLen, ftpPath); // cannot report an error
+                                              ftpcmdChangeWorkingPath, &cmdLen, ftpPath.Get()); // cannot report an error
                             sendCmd = TRUE;
                             SubState = fwssWorkResLnkWaitForCWDRes;
 
@@ -845,7 +845,7 @@ void CFTPWorker::HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuit
                                                 }
                                                 *d = 0;
                                                 PrepareFTPCommand(buf, buf.Size(), errBuf, errBuf.Size(),
-                                                                  ftpcmdChangeAttrsQuoted, &cmdLen, attr, nameToQuotes); // cannot report an error
+                                                                  ftpcmdChangeAttrsQuoted, &cmdLen, attr, nameToQuotes.Get()); // cannot report an error
                                                 sendCmd = TRUE;
                                                 SubState = fwssWorkChAttrWaitForCHMODQuotedRes;
                                                 finished = FALSE;

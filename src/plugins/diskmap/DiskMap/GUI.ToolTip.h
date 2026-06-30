@@ -9,6 +9,7 @@
 #include "Utils.CZString.h"
 #include "Utils.CStringFormatter.h"
 #include "Utils.CZSmartIconLoader.h"
+#include "common/PanelTextPainter.h"
 
 const TCHAR szToolTipWindowClass[] = TEXT("Zar.DM.ToolTip.WC");
 
@@ -566,7 +567,7 @@ public:
         int linepos = TT_MARGIN_Y + max(16, szc.cy + TT_MARGIN_Y / 2);
         RECT rct = oR;
         rct.bottom = linepos + 1;
-        ExtTextOut(hdc, TT_MARGIN_X + TT_MARGIN_X + 32 + TT_MARGIN_X / 2, TT_MARGIN_Y + 0, ETO_OPAQUE, &rct, this->_stitle, (UINT)this->_stitlelen, NULL);
+        sally::ui::DrawPanelTextA(hdc, TT_MARGIN_X + TT_MARGIN_X + 32 + TT_MARGIN_X / 2, TT_MARGIN_Y + 0, ETO_OPAQUE, &rct, this->_stitle, (UINT)this->_stitlelen, NULL);
 
         //Dividing line
         MoveToEx(hdc, TT_MARGIN_X + TT_MARGIN_X + 32, linepos, NULL);
@@ -581,7 +582,7 @@ public:
 
         rct.top = rct.bottom;
         rct.bottom = y;
-        ExtTextOut(hdc, TT_MARGIN_X + TT_MARGIN_X + 32 + TT_MARGIN_X / 2, TT_MARGIN_Y + this->_headerheight - szn.cy, ETO_OPAQUE, &rct, this->_sftype, (UINT)this->_sftypelen, NULL);
+        sally::ui::DrawPanelTextA(hdc, TT_MARGIN_X + TT_MARGIN_X + 32 + TT_MARGIN_X / 2, TT_MARGIN_Y + this->_headerheight - szn.cy, ETO_OPAQUE, &rct, this->_sftype, (UINT)this->_sftypelen, NULL);
 
         for (int i = 0; i < TT_LINECOUNT; i++)
         {
@@ -596,17 +597,17 @@ public:
                 rct.bottom = y + szn.cy;
                 rct.left = oR.left;
                 rct.right = TT_MARGIN_X + this->_vals_x;
-                ExtTextOut(hdc, TT_MARGIN_X, y, ETO_OPAQUE, &rct, this->_headers[j]->GetString(), (UINT)this->_headers[j]->GetLength(), NULL);
+                sally::ui::DrawPanelTextA(hdc, TT_MARGIN_X, y, ETO_OPAQUE, &rct, this->_headers[j]->GetString(), (UINT)this->_headers[j]->GetLength(), NULL);
                 rct.left = rct.right;
                 rct.right = oR.right;
-                ExtTextOut(hdc, TT_MARGIN_X + this->_vals_x, y, ETO_OPAQUE, &rct, this->_values[j]->GetString(), (UINT)this->_values[j]->GetLength(), NULL);
+                sally::ui::DrawPanelTextA(hdc, TT_MARGIN_X + this->_vals_x, y, ETO_OPAQUE, &rct, this->_values[j]->GetString(), (UINT)this->_values[j]->GetLength(), NULL);
                 y += szn.cy;
             }
         }
         rct.left = oR.left;
         rct.top = rct.bottom;
         rct.bottom = oR.bottom;
-        ExtTextOut(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
+        sally::ui::DrawPanelTextA(hdc, 0, 0, ETO_OPAQUE, &rct, NULL, 0, NULL);
 
         int iy = (this->_headerheight - 32) / 2;
         //TODO: Detect icon size

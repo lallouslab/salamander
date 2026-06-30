@@ -193,7 +193,7 @@ ExecuteWinDir(HWND msgParent, void* param)
     CALL_STACK_MESSAGE1("ExecuteWinDir(, )");
     CExpData* data = (CExpData*)param;
     UINT l = GetWindowsDirectory(data->Buffer, data->Buffer.Size());
-    if (l < 0 || l >= data->Buffer.Size())
+    if (l == 0 || l >= (UINT)data->Buffer.Size())
         *data->Buffer = 0;
     else
         SG->SalPathAddBackslash(data->Buffer, data->Buffer.Size());
@@ -206,7 +206,7 @@ ExecuteDOSWinDir(HWND msgParent, void* param)
     CALL_STACK_MESSAGE1("ExecuteDOSWinDir(, )");
     CExpData* data = (CExpData*)param;
     UINT l = GetWindowsDirectory(data->Buffer, data->Buffer.Size());
-    if (l < 0 || l >= data->Buffer.Size())
+    if (l == 0 || l >= (UINT)data->Buffer.Size())
         *data->Buffer = 0;
     else
     {
@@ -224,7 +224,7 @@ ExecuteSysDir(HWND msgParent, void* param)
     CALL_STACK_MESSAGE1("ExecuteSysDir(, )");
     CExpData* data = (CExpData*)param;
     UINT l = GetSystemDirectory(data->Buffer, data->Buffer.Size());
-    if (l < 0 || l >= data->Buffer.Size())
+    if (l == 0 || l >= (UINT)data->Buffer.Size())
         *data->Buffer = 0;
     else
         SG->SalPathAddBackslash(data->Buffer, data->Buffer.Size());
@@ -237,7 +237,7 @@ ExecuteDOSSysDir(HWND msgParent, void* param)
     CALL_STACK_MESSAGE1("ExecuteDOSSysDir(, )");
     CExpData* data = (CExpData*)param;
     UINT l = GetSystemDirectory(data->Buffer, data->Buffer.Size());
-    if (l < 0 || l >= data->Buffer.Size())
+    if (l == 0 || l >= (UINT)data->Buffer.Size())
         *data->Buffer = 0;
     else
     {
@@ -277,7 +277,7 @@ ExecuteWinDir2(HWND msgParent, void* param)
     CALL_STACK_MESSAGE1("ExecuteWinDir2(, )");
     CExpData* data = (CExpData*)param;
     UINT l = GetWindowsDirectory(data->Buffer, data->Buffer.Size());
-    if (l < 0 || l >= data->Buffer.Size())
+    if (l == 0 || l >= (UINT)data->Buffer.Size())
         *data->Buffer = 0;
     else
         SG->SalPathRemoveBackslash(data->Buffer);
@@ -290,7 +290,7 @@ ExecuteSysDir2(HWND msgParent, void* param)
     CALL_STACK_MESSAGE1("ExecuteSysDir2(, )");
     CExpData* data = (CExpData*)param;
     UINT l = GetSystemDirectory(data->Buffer, data->Buffer.Size());
-    if (l < 0 || l >= data->Buffer.Size())
+    if (l == 0 || l >= (UINT)data->Buffer.Size())
         *data->Buffer = 0;
     else
         SG->SalPathRemoveBackslash(data->Buffer);

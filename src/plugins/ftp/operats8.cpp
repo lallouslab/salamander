@@ -81,8 +81,8 @@ BOOL CFTPWorker::HandleFlushDataError(CFTPQueueItemCopyOrMove* curItem, BOOL& lo
 }
 
 void CFTPWorker::HandleEventInWorkingState3(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                            char* buf, char* errBuf, int& cmdLen, BOOL& sendCmd,
-                                            char* reply, int replySize, int replyCode, char* errText,
+                                            CPathBuffer& buf, CPathBuffer& errBuf, int& cmdLen, BOOL& sendCmd,
+                                            char* reply, int replySize, int replyCode, CPathBuffer& errText,
                                             BOOL& conClosedRetryItem, BOOL& lookForNewWork,
                                             BOOL& handleShouldStop)
 {

@@ -18,20 +18,6 @@
 
 #define NOHANDLES(function) function // obrana proti zanaseni maker HANDLES do zdrojaku pomoci CheckHnd
 
-//const char *SALSHEXT_SHAREDMEMMUTEXNAME = "SalShExt_SharedMemMutex"; // salshext.dll (Sal 2.5 beta 1)
-//const char *SALSHEXT_SHAREDMEMNAME = "SalShExt_SharedMem";           // salshext.dll (Sal 2.5 beta 1)
-//const char *SALSHEXT_SHAREDMEMMUTEXNAME = "SalExten_SharedMemMutex"; // salexten.dll - pracovni verze, pred 2.5 beta 2
-//const char *SALSHEXT_SHAREDMEMNAME = "SalExten_SharedMem";           // salexten.dll - pracovni verze, pred 2.5 beta 2
-//const char *SALSHEXT_SHAREDMEMMUTEXNAME = "SalExten_SharedMemMutex2";// salexten.dll (od verze 2.5 beta 2) + salamext.dll
-//const char *SALSHEXT_SHAREDMEMNAME = "SalExten_SharedMem2";          // salexten.dll (od verze 2.5 beta 2) + salamext.dll
-//const char *SALSHEXT_DOPASTEEVENTNAME = "SalExten_DoPasteEvent2";    // salamext.dll - pracovni verze pro 2.52 beta 1, pouzivala se jen pod Vista+
-//const char *SALSHEXT_SHAREDMEMMUTEXNAME = "SalExten_SharedMemMutex3";// salamext.dll (od verze 2.52 beta 1)
-//const char *SALSHEXT_SHAREDMEMNAME = "SalExten_SharedMem3";          // salamext.dll (od verze 2.52 beta 1)
-//const char *SALSHEXT_DOPASTEEVENTNAME = "SalExten_DoPasteEvent3";    // salamext.dll (od verze 2.52 beta 1, pouziva se jen pod Vista+)
-const char* SALSHEXT_SHAREDMEMMUTEXNAME = "SalExten_SharedMemMutex5"; // salextx64.dll (Sally 1.0)
-const char* SALSHEXT_SHAREDMEMNAME = "SalExten_SharedMem5";           // salextx64.dll (Sally 1.0)
-const char* SALSHEXT_DOPASTEEVENTNAME = "SalExten_DoPasteEvent5";     // salextx64.dll (Sally 1.0)
-
 //const char *SHEXREG_OPENSALAMANDER = "ServantSalamander";                                // salshext.dll (Sal 2.5 beta 1)
 //const char *SHEXREG_OPENSALAMANDER_DESCR = "Shell Extension for Servant Salamander";     // salshext.dll (Sal 2.5 beta 1)
 //const char *SHEXREG_OPENSALAMANDER = "ServantSalamander25";                              // salexten.dll - 2.5 beta 2 az RC1

@@ -2342,6 +2342,8 @@ public:
     virtual BOOL WINAPI IsCriticalShutdown();
 
     virtual void WINAPI CloseAllOwnedEnabledDialogs(HWND parent, DWORD tid = 0);
+
+    virtual BOOL WINAPI GetThemeInfo(CSalamanderThemeInfo* info);
 };
 
 //

@@ -11,6 +11,7 @@
 #include "fileswnd.h"
 #include "zip.h"
 #include "pack.h"
+#include "common/ExternalToolRunner.h"
 #include "common/IFileSystem.h"
 #include "common/widepath.h"
 #include "common/unicode/helpers.h"
@@ -698,26 +699,44 @@ BOOL PackList(CFilesWindow* panel, const char* archiveFileName, CSalamanderDirec
     }
 
     // create structures for the new process
-    PROCESS_INFORMATION pi;
-    STARTUPINFO si;
-    memset(&si, 0, sizeof(STARTUPINFO));
-    si.cb = sizeof(STARTUPINFO);
-    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
-    si.wShowWindow = SW_HIDE;
-    si.hStdInput = NULL;
-    si.hStdOutput = StdOutWr;
-    si.hStdError = StdErrWr;
+    std::wstring cmdLineW = AnsiToWide(cmdLine);
+    std::wstring currentDirW;
+    if (currentDir[0] != 0)
+        currentDirW = AnsiToWide(currentDir);
+    ExternalToolRequest request;
+    request.commandLine = cmdLineW.c_str();
+    request.workingDirectory = currentDirW.empty() ? NULL : currentDirW.c_str();
+    request.inheritHandles = true;
+    request.createNewConsole = true;
+    request.hideWindow = true;
+    request.creationFlags = CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS;
+    request.hStdInput = NULL;
+    request.hStdOutput = StdOutWr;
+    request.hStdError = StdErrWr;
     // and start it ...
-    if (!HANDLES(CreateProcess(NULL, cmdLine, NULL, NULL, TRUE, CREATE_NEW_CONSOLE | CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS,
-                               NULL, currentDir, &si, &pi)))
+    ExternalToolResult launchResult = gExternalToolRunner != NULL
+                                          ? gExternalToolRunner->Launch(request)
+                                          : ExternalToolResult::Error(ERROR_INVALID_PARAMETER);
+    if (!launchResult.success)
     {
         // if this failed, we have a bad path to salspawn
-        DWORD err = GetLastError();
+        DWORD err = launchResult.errorCode;
         HANDLES(CloseHandle(StdOutRd));
         HANDLES(CloseHandle(StdOutWr));
         HANDLES(CloseHandle(StdErrWr));
         return (*PackErrorHandlerPtr)(NULL, IDS_PACKERR_PROCESS, SpawnExe, GetErrorText(err));
     }
+    HANDLE processHandle = launchResult.DetachNativeProcessHandle();
+    if (processHandle == NULL)
+    {
+        DWORD err = GetLastError();
+        launchResult.CloseProcess();
+        HANDLES(CloseHandle(StdOutRd));
+        HANDLES(CloseHandle(StdOutWr));
+        HANDLES(CloseHandle(StdErrWr));
+        return (*PackErrorHandlerPtr)(NULL, IDS_PACKERR_PROCESS, SpawnExe, GetErrorText(err));
+    }
+    HANDLES_ADD(__htProcess, __hoCreateProcess, processHandle);
 
     // We no longer need these handles; the child will close the duplicates, we keep only StdOutRd
     HANDLES(CloseHandle(StdOutWr));
@@ -766,8 +785,7 @@ BOOL PackList(CFilesWindow* panel, const char* archiveFileName, CSalamanderDirec
         if (buffOffset >= 990)
         {
             HANDLES(CloseHandle(StdOutRd));
-            HANDLES(CloseHandle(pi.hProcess));
-            HANDLES(CloseHandle(pi.hThread));
+            HANDLES(CloseHandle(processHandle));
             return (*PackErrorHandlerPtr)(NULL, IDS_PACKERR_PARSE);
         }
     }
@@ -776,13 +794,12 @@ BOOL PackList(CFilesWindow* panel, const char* archiveFileName, CSalamanderDirec
     HANDLES(CloseHandle(StdOutRd));
 
     // Wait for the external program to finish (it should be done already but better be sure)
-    if (WaitForSingleObject(pi.hProcess, INFINITE) == WAIT_FAILED)
+    if (WaitForSingleObject(processHandle, INFINITE) == WAIT_FAILED)
     {
         char buffer[1000];
         strcpy(buffer, "WaitForSingleObject: ");
         strcat(buffer, GetErrorText(GetLastError()));
-        HANDLES(CloseHandle(pi.hProcess));
-        HANDLES(CloseHandle(pi.hThread));
+        HANDLES(CloseHandle(processHandle));
         return (*PackErrorHandlerPtr)(NULL, IDS_PACKERR_GENERAL, buffer);
     }
 
@@ -791,19 +808,17 @@ BOOL PackList(CFilesWindow* panel, const char* archiveFileName, CSalamanderDirec
 
     // find out how it ended - hopefully all return 0 as success
     DWORD exitCode;
-    if (!GetExitCodeProcess(pi.hProcess, &exitCode))
+    if (!GetExitCodeProcess(processHandle, &exitCode))
     {
         char buffer[1000];
         strcpy(buffer, "GetExitCodeProcess: ");
         strcat(buffer, GetErrorText(GetLastError()));
-        HANDLES(CloseHandle(pi.hProcess));
-        HANDLES(CloseHandle(pi.hThread));
+        HANDLES(CloseHandle(processHandle));
         return (*PackErrorHandlerPtr)(NULL, IDS_PACKERR_GENERAL, buffer);
     }
 
     // release the process handles
-    HANDLES(CloseHandle(pi.hProcess));
-    HANDLES(CloseHandle(pi.hThread));
+    HANDLES(CloseHandle(processHandle));
 
     if (exitCode != 0)
     {

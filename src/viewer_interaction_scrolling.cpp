@@ -710,6 +710,7 @@ CViewerWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 GetClientRect(HWindow, &ti.rect);
                 SendMessage(HToolTip, TTM_NEWTOOLRECT, 0, (LPARAM)&ti);
             }
+            InvalidateRect(HWindow, NULL, FALSE);
         }
         break;
     }

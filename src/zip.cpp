@@ -11,6 +11,7 @@
 #include "menu.h"
 #include "cfgdlg.h"
 #include "dialogs.h"
+#include "darkmode.h"
 #include "mainwnd.h"
 #include "plugins.h"
 #include "filesbox.h"
@@ -5218,6 +5219,36 @@ void CSalamanderGeneral::CloseAllOwnedEnabledDialogs(HWND parent, DWORD tid)
 {
     CALL_STACK_MESSAGE2("CSalamanderGeneral::CloseAllOwnedEnabledDialogs(, %d)", tid);
     ::CloseAllOwnedEnabledDialogs(parent, tid);
+}
+
+BOOL CSalamanderGeneral::GetThemeInfo(CSalamanderThemeInfo* info)
+{
+    SLOW_CALL_STACK_MESSAGE1("CSalamanderGeneral::GetThemeInfo()");
+    if (MainThreadID != GetCurrentThreadId())
+    {
+        TRACE_E("You can call CSalamanderGeneral::GetThemeInfo() only from main thread!");
+        return FALSE;
+    }
+    if (info == NULL || info->Size < sizeof(CSalamanderThemeInfo))
+        return FALSE;
+
+    int themeMode = SALTHEME_MODE_UNKNOWN;
+    switch (Configuration.ThemeMode)
+    {
+    case THEME_MODE_LIGHT:
+        themeMode = SALTHEME_MODE_LIGHT;
+        break;
+    case THEME_MODE_DARK:
+        themeMode = SALTHEME_MODE_DARK;
+        break;
+    case THEME_MODE_SYSTEM:
+        themeMode = SALTHEME_MODE_SYSTEM;
+        break;
+    }
+
+    info->ThemeMode = themeMode;
+    info->UseDarkColors = DarkMode_ShouldUseDark();
+    return TRUE;
 }
 
 //

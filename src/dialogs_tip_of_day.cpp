@@ -7,6 +7,7 @@
 #include <lm.h>
 
 #include "ui/IPrompter.h"
+#include "common/TipOfDayResource.h"
 #include "common/unicode/helpers.h"
 #include "common/widepath.h"
 #include "mainwnd.h"
@@ -207,18 +208,13 @@ BOOL
 CTipOfTheDayDialog::LoadTips(BOOL quiet)
 {
   CALL_STACK_MESSAGE2("CTipOfTheDayDialog::LoadTips(%d)", quiet);
-  CPathBuffer fileName; // Heap-allocated for long path support
-  GetModuleFileName(HInstance, fileName, fileName.Size());
-  CutDirectory(fileName);
-  SalPathAppend(fileName, "help\\tips.txt", fileName.Size());
-  HANDLE hFile = HANDLES_Q(CreateFileW(AnsiToWide(fileName).c_str(), GENERIC_READ, FILE_SHARE_READ |
-                                      FILE_SHARE_WRITE, NULL,
-                                      OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
+  std::wstring fileNameW;
+  HANDLE hFile = HANDLES_Q(sally::tip_of_day::OpenTipsFileForReadW(HInstance, fileNameW));
   if (hFile == INVALID_HANDLE_VALUE)
   {
     if (!quiet)
     {
-      std::wstring msg = FormatStrW(LoadStrW(IDS_FILEREADERROR), AnsiToWide(fileName).c_str());
+      std::wstring msg = FormatStrW(LoadStrW(IDS_FILEREADERROR), fileNameW.c_str());
       gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
     }
     return FALSE;
@@ -229,7 +225,7 @@ CTipOfTheDayDialog::LoadTips(BOOL quiet)
   {
     if (!quiet)
     {
-      std::wstring msg = FormatStrW(LoadStrW(IDS_FILEREADERROR), AnsiToWide(fileName).c_str());
+      std::wstring msg = FormatStrW(LoadStrW(IDS_FILEREADERROR), fileNameW.c_str());
       gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
     }
     HANDLES(CloseHandle(hFile));
@@ -249,7 +245,7 @@ CTipOfTheDayDialog::LoadTips(BOOL quiet)
   {
     if (!quiet)
     {
-      std::wstring msg = FormatStrW(LoadStrW(IDS_FILEREADERROR), AnsiToWide(fileName).c_str());
+      std::wstring msg = FormatStrW(LoadStrW(IDS_FILEREADERROR), fileNameW.c_str());
       gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
     }
     free(data);
@@ -1967,11 +1963,13 @@ CExitingOpenSal::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 //
 
 CConfirmADSLossDlg::CConfirmADSLossDlg(HWND parent, BOOL isFile, const char* name,
-                                       const char* streams, BOOL isMove) : CCommonDialog(HLanguage, IDD_CONFIRMADSLOSS, parent)
+                                       const char* streams, BOOL isMove,
+                                       const wchar_t* nameW) : CCommonDialog(HLanguage, IDD_CONFIRMADSLOSS, parent)
 {
     IsFile = isFile;
     IsMove = isMove;
     Name = name;
+    NameW = nameW;
     Streams = streams;
 }
 
@@ -1985,7 +1983,12 @@ CConfirmADSLossDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         CStaticText* name;
         if ((name = new CStaticText(HWindow, IDS_FILENAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(Name);
+        {
+            if (NameW != NULL)
+                name->SetTextToDblQuotesIfNeededW(NameW);
+            else
+                name->SetTextToDblQuotesIfNeeded(Name);
+        }
         else
             TRACE_E(LOW_MEMORY);
 
@@ -2126,11 +2129,13 @@ CConfirmEncryptionLossDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 // CErrorReadingADSDlg
 //
 
-CErrorReadingADSDlg::CErrorReadingADSDlg(HWND parent, const char* file, const char* error, const char* title) : CCommonDialog(HLanguage, IDD_CANNOTGETADSINFO, parent)
+CErrorReadingADSDlg::CErrorReadingADSDlg(HWND parent, const char* file, const char* error,
+                                         const char* title, const wchar_t* fileW) : CCommonDialog(HLanguage, IDD_CANNOTGETADSINFO, parent)
 {
     File = file;
     Error = error;
     Title = title;
+    FileW = fileW;
 }
 
 INT_PTR
@@ -2149,7 +2154,12 @@ CErrorReadingADSDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         CStaticText* name;
         if ((name = new CStaticText(HWindow, IDS_FILENAME, STF_PATH_ELLIPSIS)) != NULL)
-            name->SetTextToDblQuotesIfNeeded(File);
+        {
+            if (FileW != NULL)
+                name->SetTextToDblQuotesIfNeededW(FileW);
+            else
+                name->SetTextToDblQuotesIfNeeded(File);
+        }
         else
             TRACE_E(LOW_MEMORY);
 

@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "shexreg_ipc_names.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -176,15 +178,6 @@ extern "C"
     //
     // Data and constants for communication between Salamander and SalamExt
     //
-
-    // mutex name used to access the shared memory (opened via OpenMutex after it was created with CreateMutex)
-    extern const char* SALSHEXT_SHAREDMEMMUTEXNAME;
-    // shared-memory name (opened via OpenFileMapping after being created with CreateFileMapping)
-    extern const char* SALSHEXT_SHAREDMEMNAME;
-    // event name used to request Paste in the source Salamander; used only on Vista+
-    // (older OS versions can post WM_USER_SALSHEXT_PASTE directly from the copy hook; on Vista+
-    // that post fails when Salamander runs "as admin")
-    extern const char* SALSHEXT_DOPASTEEVENTNAME;
 
 // IMPORTANT: do not change these constants; older versions rely on them
 #define WM_USER_SALSHEXT_PASTE WM_APP + 139      // [postMsgIndex, 0] - SalamExt requests execution of the Paste command

@@ -179,14 +179,19 @@ CH_CopyCallback(THIS_ HWND hwnd, UINT wFunc, UINT wFlags,
 
     if (wFunc == FO_MOVE || wFunc == FO_COPY)
     {
-        salShExtSharedMemMutex = OpenMutex(SYNCHRONIZE, FALSE, SALSHEXT_SHAREDMEMMUTEXNAME);
+        char sharedMemMutexName[256];
+        char sharedMemName[256];
+        char doPasteEventName[256];
+        salShExtSharedMemMutex = OpenMutex(SYNCHRONIZE, FALSE,
+                                           SALSHEXT_GetSharedMemMutexName(sharedMemMutexName, sizeof(sharedMemMutexName) / sizeof(sharedMemMutexName[0])));
         if (salShExtSharedMemMutex != NULL)
         {
 
             WriteToLog("CH_CopyCallback: salShExtSharedMemMutex");
 
             WaitForSingleObject(salShExtSharedMemMutex, INFINITE);
-            salShExtSharedMem = OpenFileMapping(FILE_MAP_WRITE, FALSE, SALSHEXT_SHAREDMEMNAME);
+            salShExtSharedMem = OpenFileMapping(FILE_MAP_WRITE, FALSE,
+                                                SALSHEXT_GetSharedMemName(sharedMemName, sizeof(sharedMemName) / sizeof(sharedMemName[0])));
             if (salShExtSharedMem != NULL)
             {
 
@@ -269,7 +274,8 @@ CH_CopyCallback(THIS_ HWND hwnd, UINT wFunc, UINT wFlags,
                             else // another process or at least a different thread -> communication with the main window is possible
                             {
                                 salShExtSharedMemView->SalBusyState = 0 /* will be used to detect whether Salamander reports itself as "busy" */;
-                                salShExtDoPasteEvent = OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, SALSHEXT_DOPASTEEVENTNAME);
+                                salShExtDoPasteEvent = OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE,
+                                                                 SALSHEXT_GetDoPasteEventName(doPasteEventName, sizeof(doPasteEventName) / sizeof(doPasteEventName[0])));
                                 if (salShExtDoPasteEvent != NULL) // Vista+: PostMessage cannot be used between the copy-hook and Salamander running "as admin", so we use 'salShExtDoPasteEvent' instead
                                 {
 

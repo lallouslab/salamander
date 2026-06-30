@@ -10,6 +10,7 @@
 #include "common/fsutil.h"
 #include "common/unicode/helpers.h"
 #include "common/IEnvironment.h"
+#include "common/CommandShellService.h"
 #include "common/IRegistry.h"
 #include <shlwapi.h>
 #undef PathIsPrefix // otherwise conflicts with CSalamanderGeneral::PathIsPrefix
@@ -4470,56 +4471,47 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         {
             activePanel->UserWorkedOnThisPath = TRUE;
 
-            CPathBuffer cmd; // Heap-allocated for long path support
-            if (!GetEnvironmentVariable("COMSPEC", cmd, cmd.Size()))
-                cmd[0] = 0;
+            CommandShellRequest policyRequest;
+            CommandShellPolicyResult policy = gCommandShellService != NULL
+                                                  ? gCommandShellService->GetPolicyInfo(policyRequest)
+                                                  : CommandShellPolicyResult::Error(ERROR_INVALID_PARAMETER);
+            const char* shellPolicyName = policy.success ? policy.info.executableNameForPolicy.c_str() : "";
 
             if (SystemPolicies.GetNoRun() ||
-                (SystemPolicies.GetMyRunRestricted() && !SystemPolicies.GetMyCanRun(cmd)))
+                (SystemPolicies.GetMyRunRestricted() && !SystemPolicies.GetMyCanRun(shellPolicyName)))
             {
                 gPrompter->ShowErrorWithHelp(LoadStrW(IDS_POLICIESRESTRICTION_TITLE), LoadStrW(IDS_POLICIESRESTRICTION), IDH_GROUPPOLICY);
                 return 0;
             }
 
-            AddDoubleQuotesIfNeeded(cmd, cmd.Size()); // CreateProcess requires the name with spaces in quotes (otherwise it tries various options; see help)
-
             SetDefaultDirectories();
 
-            STARTUPINFO si;
-            memset(&si, 0, sizeof(STARTUPINFO));
-            si.cb = sizeof(STARTUPINFO);
-            si.lpTitle = LoadStr(IDS_COMMANDSHELL);
-            // There is an undocumented flag 0x400 where we can pass the monitor handle into si.hStdOutput
-            // Unfortunately it works with SOL.EXE but not with CMD.EXE, so we use the old method
-            // with a dummy window
-            // On W2K the flag appears as #define STARTF_HASHMONITOR 0x00000400  // same as HASSHELLDATA
-            // STARTF_MONITOR was mentioned online in an article about undocumented features
-            si.dwFlags = STARTF_USESHOWWINDOW;
+            CommandShellRequest request;
+            request.workingDirectory = (activePanel->Is(ptDisk) || activePanel->Is(ptZIPArchive)) ? activePanel->GetPathW() : NULL;
+            request.windowTitle = LoadStrW(IDS_COMMANDSHELL);
+            request.useShowWindow = true;
+            request.showWindow = SW_SHOWNORMAL;
             POINT p;
             if (MultiMonGetDefaultWindowPos(MainWindow->HWindow, &p))
             {
                 // if the main window is on another monitor we should open
                 // the new window there as well, preferably at the default position (same as on the primary)
-                si.dwFlags |= STARTF_USEPOSITION;
-                si.dwX = p.x;
-                si.dwY = p.y;
+                request.usePosition = true;
+                request.x = p.x;
+                request.y = p.y;
                 // TRACE_I("MultiMonGetDefaultWindowPos(): x = " << p.x << ", y = " << p.y);
             }
-            si.wShowWindow = SW_SHOWNORMAL;
 
-            PROCESS_INFORMATION pi;
-
-            if (!HANDLES(CreateProcess(NULL, cmd, NULL, NULL, FALSE,
-                                       CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS, NULL,
-                                       (activePanel->Is(ptDisk) || activePanel->Is(ptZIPArchive)) ? activePanel->GetPath() : NULL, &si, &pi)))
+            CommandShellResult result = gCommandShellService != NULL
+                                            ? gCommandShellService->LaunchShell(request)
+                                            : CommandShellResult::Error(ERROR_INVALID_PARAMETER);
+            if (!result.success)
             {
-                DWORD err = GetLastError();
-                gPrompter->ShowError(LoadStrW(IDS_ERROREXECPROMPT), GetErrorTextW(err));
+                gPrompter->ShowError(LoadStrW(IDS_ERROREXECPROMPT), GetErrorTextW(result.errorCode));
             }
             else
             {
-                HANDLES(CloseHandle(pi.hProcess));
-                HANDLES(CloseHandle(pi.hThread));
+                result.CloseProcess();
             }
 
             return 0;

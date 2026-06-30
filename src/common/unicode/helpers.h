@@ -45,6 +45,49 @@ inline void WideToAnsi(const std::wstring& s, char* buffer, int bufferSize)
     buffer[bufferSize - 1] = '\0'; // Ensure null termination
 }
 
+namespace sally::unicode
+{
+// Converts a UTF-16 string to the process ANSI codepage only when the result
+// round-trips exactly. Use this before falling back from a wide source of
+// truth to a legacy ANSI mirror.
+inline bool TryWideToAnsiRoundTripExact(const std::wstring& value, std::string& ansi)
+{
+    ansi.clear();
+    if (value.empty())
+        return true;
+
+    BOOL usedDefaultChar = FALSE;
+    int required = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, value.c_str(), -1,
+                                       NULL, 0, NULL, &usedDefaultChar);
+    if (required <= 0 || usedDefaultChar)
+        return false;
+
+    std::string converted((size_t)required, '\0');
+    usedDefaultChar = FALSE;
+    if (WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, value.c_str(), -1,
+                            converted.data(), required, NULL, &usedDefaultChar) == 0 ||
+        usedDefaultChar)
+    {
+        return false;
+    }
+    converted.resize((size_t)required - 1);
+
+    int roundTripLen = MultiByteToWideChar(CP_ACP, 0, converted.c_str(), -1, NULL, 0);
+    if (roundTripLen <= 0)
+        return false;
+
+    std::wstring roundTrip((size_t)roundTripLen, L'\0');
+    if (MultiByteToWideChar(CP_ACP, 0, converted.c_str(), -1, roundTrip.data(), roundTripLen) == 0)
+        return false;
+    roundTrip.resize((size_t)roundTripLen - 1);
+    if (roundTrip != value)
+        return false;
+
+    ansi = converted;
+    return true;
+}
+} // namespace sally::unicode
+
 // Trim spaces from the beginning and spaces/dots from the end of a filename
 // component, matching Explorer's manual-create behavior.
 inline BOOL MakeValidFileNameComponentW(wchar_t* path)

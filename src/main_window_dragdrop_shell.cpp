@@ -20,6 +20,7 @@
 #include "toolbar.h"
 #include "salinflt.h"
 #include "menu.h"
+#include "common/CommandShellService.h"
 #include "common/widepath.h"
 extern "C"
 {
@@ -962,55 +963,58 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     {
                         MainWindow->SetDefaultDirectories((initDir[0] != 0) ? initDir.Get() : NULL);
 
-                        STARTUPINFO si;
-                        memset(&si, 0, sizeof(STARTUPINFO));
-                        si.cb = sizeof(STARTUPINFO);
-                        si.lpTitle = LoadStr(IDS_COMMANDSHELL);
-                        si.dwFlags = STARTF_USESHOWWINDOW;
+                        CommandShellRequest request;
+                        std::wstring batNameW = AnsiToWide(batName);
+                        std::wstring initDirW;
+                        if (initDir[0] != 0)
+                            initDirW = AnsiToWide(initDir);
+
+                        request.command = batNameW.c_str();
+                        request.workingDirectory = initDirW.empty() ? NULL : initDirW.c_str();
+                        request.windowTitle = LoadStrW(IDS_COMMANDSHELL);
+                        request.keepOpen = UserMenuItems->At(itemIndex)->UseWindow &&
+                                           !UserMenuItems->At(itemIndex)->CloseShell;
+                        request.hideWindow = !UserMenuItems->At(itemIndex)->UseWindow;
+                        request.useShowWindow = true;
+                        request.showWindow = (UserMenuItems->At(itemIndex)->UseWindow ? SW_SHOWNORMAL : SW_HIDE);
+
                         POINT p;
                         if (UserMenuItems->At(itemIndex)->UseWindow &&
                             MultiMonGetDefaultWindowPos(MainWindow->HWindow, &p))
                         {
                             // if the main window is on another monitor, we should open
                             // the new window there, preferably at the default position (as on the primary monitor)
-                            si.dwFlags |= STARTF_USEPOSITION;
-                            si.dwX = p.x;
-                            si.dwY = p.y;
+                            request.usePosition = true;
+                            request.x = p.x;
+                            request.y = p.y;
                         }
-                        si.wShowWindow = (UserMenuItems->At(itemIndex)->UseWindow ? SW_SHOWNORMAL : SW_HIDE);
 
-                        PROCESS_INFORMATION pi;
-
-                        GetEnvironmentVariable("COMSPEC", cmdLine, USRMNUCMDLINE_MAXLEN - 20);
-                        AddDoubleQuotesIfNeeded(cmdLine, USRMNUCMDLINE_MAXLEN - 10); // CreateProcess requires the name with spaces in quotes (otherwise it tries various options, see help)
-                        if (!UserMenuItems->At(itemIndex)->UseWindow || UserMenuItems->At(itemIndex)->CloseShell)
-                            strcat(cmdLine, " /C "); // run command and close immediately after it finishes
-                        else
-                            strcat(cmdLine, " /K "); // run command and keep the shell open after it finishes
-
-                        char* s = cmdLine + strlen(cmdLine);
-                        if ((s - cmdLine) + strlen(batName) < USRMNUCMDLINE_MAXLEN - 2)
-                            sprintf(s, "\"%s\"", batName);
-                        else
-                            strcpy(cmdLine, batName);
-
-                        if (!HANDLES(CreateProcess(NULL, cmdLine, NULL, NULL, FALSE,
-                                                   CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS,
-                                                   NULL, NULL, &si, &pi)))
+                        CommandShellResult result = gCommandShellService != NULL
+                                                        ? gCommandShellService->LaunchCommand(request)
+                                                        : CommandShellResult::Error(ERROR_INVALID_PARAMETER);
+                        if (!result.success)
                         {
-                            DWORD err = GetLastError();
-                            if (strlen(cmdLine) > 2 * MAX_PATH)
-                                strcpy(cmdLine + 2 * MAX_PATH, "..."); // shorten just in case (probably never needed)
-                            std::wstring msg = FormatStrW(LoadStrW(IDS_EXECERROR), AnsiToWide(cmdLine).c_str(), GetErrorTextW(err));
+                            std::wstring msg = FormatStrW(LoadStrW(IDS_EXECERROR), batNameW.c_str(), GetErrorTextW(result.errorCode));
                             cacheGuard.ReleaseNow();
                             gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
                         }
                         else
                         {
-                            DiskCache.AssignName(batUniqueName, pi.hProcess, TRUE, crtDirect);
-                            cacheGuard.Dismiss(); // ownership transferred to AssignName
-                            //            HANDLES(CloseHandle(pi.hProcess));   // handled by DiskCache
-                            HANDLES(CloseHandle(pi.hThread));
+                            HANDLE processHandle = result.DetachNativeProcessHandle();
+                            if (processHandle == NULL)
+                            {
+                                DWORD err = GetLastError();
+                                result.CloseProcess();
+                                cacheGuard.ReleaseNow();
+                                std::wstring msg = FormatStrW(LoadStrW(IDS_EXECERROR), batNameW.c_str(), GetErrorTextW(err));
+                                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
+                            }
+                            else
+                            {
+                                HANDLES_ADD(__htProcess, __hoCreateProcess, processHandle);
+                                DiskCache.AssignName(batUniqueName, processHandle, TRUE, crtDirect);
+                                cacheGuard.Dismiss(); // ownership transferred to AssignName
+                            }
                         }
                     }
                     else // an empty .BAT is not worth running (in case of low memory or other crazy errors)

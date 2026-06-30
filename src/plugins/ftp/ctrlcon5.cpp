@@ -570,7 +570,7 @@ BOOL CControlConnectionSocket::CreateDir(char* changedPath, HWND parent, char* n
                     {
                         if (!FTPIsPrefixOfServerPath(pathType, workPath, newPath))
                         {
-                            lstrcpyn(changedPath, newPath, changedPath.Size());
+                            lstrcpyn(changedPath, newPath, FTP_MAX_PATH);
                             refreshWorkingPath = FALSE;
                         }
                         if (FTPIsTheSameServerPath(pathType, newPath, workPath))
@@ -610,7 +610,7 @@ BOOL CControlConnectionSocket::CreateDir(char* changedPath, HWND parent, char* n
                 }
             }
             if (refreshWorkingPath)
-                lstrcpyn(changedPath, workPath, changedPath.Size());
+                lstrcpyn(changedPath, workPath, FTP_MAX_PATH);
         }
 
         if (!run)
@@ -770,7 +770,7 @@ BOOL CControlConnectionSocket::QuickRename(char* changedPath, HWND parent, const
                                     retryMsgAux = retryMsgBuf;
                                 }
                             }
-                            lstrcpyn(changedPath, workPath, changedPath.Size());
+                            lstrcpyn(changedPath, workPath, FTP_MAX_PATH);
                         }
                         else // error (including an unexpected reply)
                         {

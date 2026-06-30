@@ -28,12 +28,12 @@ BOOL PathAppend(char* path, const char* name, int pathSize)
 {
     if (*name == '\\')
         name++;
-    int l = strlen(path);
+    int l = (int)strlen(path);
     if (l > 0 && path[l - 1] == '\\')
         l--;
     if (*name != 0)
     {
-        int n = strlen(name);
+        int n = (int)strlen(name);
         if (l + 1 + n < pathSize) // do we still fit including the terminating null?
         {
             if (l != 0)

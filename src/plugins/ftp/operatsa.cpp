@@ -10,9 +10,9 @@
 //
 
 void CFTPWorker::HandleEventInWorkingState4(CFTPWorkerEvent event, BOOL& sendQuitCmd, BOOL& postActivate,
-                                            BOOL& reportWorkerChange, char* buf, char* errBuf, char* host,
+                                            BOOL& reportWorkerChange, CPathBuffer& buf, CPathBuffer& errBuf, char* host,
                                             int& cmdLen, BOOL& sendCmd, char* reply, int replySize,
-                                            int replyCode, char* ftpPath, char* errText,
+                                            int replyCode, CPathBuffer& ftpPath, CPathBuffer& errText,
                                             BOOL& conClosedRetryItem, BOOL& lookForNewWork,
                                             BOOL& handleShouldStop, BOOL& quitCmdWasSent)
 {
@@ -122,11 +122,11 @@ void CFTPWorker::HandleEventInWorkingState4(CFTPWorkerEvent event, BOOL& sendQui
             CFTPServerPathType type = Oper->GetFTPServerPathType(ftpPath);
             if (FTPPathAppend(type, ftpPath, ftpPath.Size(), curItem->TgtName, TRUE))
             { // we have the path, send CWD to the examined directory on the server
-                _snprintf_s(errText, errText.Size(), _TRUNCATE, LoadStr(IDS_LOGMSGRESOLVINGLINK), ftpPath);
+                _snprintf_s(errText, errText.Size(), _TRUNCATE, LoadStr(IDS_LOGMSGRESOLVINGLINK), ftpPath.Get());
                 Logs.LogMessage(LogUID, errText, -1, TRUE);
 
                 PrepareFTPCommand(buf, buf.Size(), errBuf, errBuf.Size(),
-                                  ftpcmdChangeWorkingPath, &cmdLen, ftpPath); // cannot report an error
+                                  ftpcmdChangeWorkingPath, &cmdLen, ftpPath.Get()); // cannot report an error
                 sendCmd = TRUE;
                 SubState = fwssWorkUploadResLnkWaitForCWDRes;
 
@@ -531,11 +531,11 @@ void CFTPWorker::HandleEventInWorkingState4(CFTPWorkerEvent event, BOOL& sendQui
                         {
                             if (!nameExists) // no collision -> try to create the target directory
                             {
-                                _snprintf_s(errText, errText.Size(), _TRUNCATE, LoadStr(IDS_LOGMSGCREATEDIR), UploadAutorenameNewName);
+                                _snprintf_s(errText, errText.Size(), _TRUNCATE, LoadStr(IDS_LOGMSGCREATEDIR), UploadAutorenameNewName.Get());
                                 Logs.LogMessage(LogUID, errText, -1, TRUE);
 
                                 PrepareFTPCommand(buf, buf.Size(), errBuf, errBuf.Size(),
-                                                  ftpcmdCreateDir, &cmdLen, UploadAutorenameNewName); // cannot report an error
+                                                  ftpcmdCreateDir, &cmdLen, UploadAutorenameNewName.Get()); // cannot report an error
                                 sendCmd = TRUE;
                                 SubState = fwssWorkUploadAutorenDirWaitForMKDRes;
                                 break;
@@ -640,7 +640,7 @@ void CFTPWorker::HandleEventInWorkingState4(CFTPWorkerEvent event, BOOL& sendQui
             if (FTPPathAppend(type, ftpPath, ftpPath.Size(), curItem->TgtName, TRUE))
             { // we have the path, send CWD to the examined directory on the server
                 PrepareFTPCommand(buf, buf.Size(), errBuf, errBuf.Size(),
-                                  ftpcmdChangeWorkingPath, &cmdLen, ftpPath); // cannot report an error
+                                  ftpcmdChangeWorkingPath, &cmdLen, ftpPath.Get()); // cannot report an error
                 sendCmd = TRUE;
                 SubState = fwssWorkUploadGetTgtPathWaitForCWDRes;
 

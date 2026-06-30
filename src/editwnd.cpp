@@ -12,6 +12,7 @@
 #include "editwnd.h"
 #include "stswnd.h"
 #include "darkmode.h"
+#include "common/CommandShellService.h"
 #include "common/unicode/helpers.h"
 #include "common/unicode/WideVariableExpansion.h"
 #include <uxtheme.h>
@@ -360,11 +361,12 @@ int GetCmdLineLimit()
 
     if (WindowsXP64AndLater) // XP64 + Vista + Win7 + ...
     {
-        CPathBuffer cmd;
-        if (!GetEnvironmentVariable("COMSPEC", cmd, cmd.Size()))
-            cmd[0] = 0;
-        AddDoubleQuotesIfNeeded(cmd, cmd.Size()); // CreateProcess expects names with spaces quoted (otherwise it tries various variants; see help)
-        return 8191 - lstrlen(cmd) - 6;         // 6 = strlen(" /K ") + 2 (two quotation marks around the command itself)
+        CommandShellRequest request;
+        CommandShellPolicyResult policy = gCommandShellService != NULL
+                                              ? gCommandShellService->GetPolicyInfo(request)
+                                              : CommandShellPolicyResult::Error(ERROR_INVALID_PARAMETER);
+        int comspecLen = policy.success ? (int)policy.info.quotedComspec.length() : 0;
+        return 8191 - comspecLen - 6; // 6 = strlen(" /K ") + 2 (two quotation marks around the command itself)
     }
     else
         return 8192; // XP
@@ -446,13 +448,14 @@ CEditLine::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         // let the command fall through to the shell so the message box text stays simple
                     }
 
-                    CPathBuffer cmd;
-                    if (!GetEnvironmentVariable("COMSPEC", cmd, cmd.Size()))
-                        cmd[0] = 0;
-                    AddDoubleQuotesIfNeeded(cmd, cmd.Size()); // CreateProcess wants names with spaces quoted (or it tries alternatives, see help)
+                    CommandShellRequest policyRequest;
+                    CommandShellPolicyResult policy = gCommandShellService != NULL
+                                                          ? gCommandShellService->GetPolicyInfo(policyRequest)
+                                                          : CommandShellPolicyResult::Error(ERROR_INVALID_PARAMETER);
+                    const char* shellPolicyName = policy.success ? policy.info.executableNameForPolicy.c_str() : "";
 
                     if (SystemPolicies.GetMyRunRestricted() &&
-                        (!SystemPolicies.GetMyCanRun(cmd) || !SystemPolicies.GetMyCanRun(cmdLine)))
+                        (!SystemPolicies.GetMyCanRun(shellPolicyName) || !SystemPolicies.GetMyCanRun(cmdLine)))
                     {
                         gPrompter->ShowErrorWithHelp(LoadStrW(IDS_POLICIESRESTRICTION_TITLE), LoadStrW(IDS_POLICIESRESTRICTION), IDH_GROUPPOLICY);
                         return 0;
@@ -465,64 +468,36 @@ CEditLine::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     if (setWait)
                         oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
 
-                    BOOL cmdTooLong = FALSE;
-                    if (strlen(cmd) + 4 < SALCMDLINE_MAXLEN + MAX_PATH)
-                    {
-                        if ((Configuration.CloseShell != 0) ^ ((GetKeyState(VK_MENU) & 0x8000) != 0))
-                            strcat(cmd, " /C "); // so that the shell closes
-                        else
-                            strcat(cmd, " /K "); // so that the shell stays active
-                    }
-                    else
-                        cmdTooLong = TRUE;
-                    if (strlen(cmd) + strlen(cmdLine) + 2 < SALCMDLINE_MAXLEN + MAX_PATH)
-                    {
-                        strcat(cmd, "\"");
-                        strcat(cmd, cmdLine); // the user's command line must be quoted, otherwise commands containing quotes fail (e.g. >>"C:\APPS\WinRAR\UnRAR.exe" e "test.rar"<< prints >>'C:\APPS\WinRAR\UnRAR.exe" e "test.rar' is not recognized<<)
-                        strcat(cmd, "\"");
-                    }
-                    else
-                        cmdTooLong = TRUE;
-
-                    STARTUPINFO si;
-                    memset(&si, 0, sizeof(STARTUPINFO));
-                    si.cb = sizeof(STARTUPINFO);
-                    si.lpTitle = LoadStr(IDS_COMMANDSHELL);
-                    si.dwFlags = STARTF_USESHOWWINDOW;
+                    CommandShellRequest request;
+                    request.keepOpen = !((Configuration.CloseShell != 0) ^ ((GetKeyState(VK_MENU) & 0x8000) != 0));
+                    request.workingDirectory = panel->GetPathW();
+                    request.windowTitle = LoadStrW(IDS_COMMANDSHELL);
+                    request.useShowWindow = true;
+                    request.showWindow = SW_SHOWNORMAL;
                     POINT p;
                     if (MultiMonGetDefaultWindowPos(MainWindow->HWindow, &p))
                     {
                         // if the main window is on another monitor, we should open
                         // the created window there as well, ideally at the default position (same as on the primary)
-                        si.dwFlags |= STARTF_USEPOSITION;
-                        si.dwX = p.x;
-                        si.dwY = p.y;
+                        request.usePosition = true;
+                        request.x = p.x;
+                        request.y = p.y;
                     }
-                    si.wShowWindow = SW_SHOWNORMAL;
 
-                    PROCESS_INFORMATION pi;
+                    std::wstring commandW = AnsiToWide(cmdLine);
+                    request.command = commandW.c_str();
 
-                    BOOL proc_ret = FALSE;
-                    DWORD err = 0;
-                    if (!cmdTooLong)
-                    {
-                        CALL_STACK_MESSAGE3("CEditLine::WindowProc::CreateProcess(, %s, , , , , , %s, ,)",
-                                            strlen(cmd) > 300 ? "(very long cmd)" : cmd,
-                                            MainWindow->GetActivePanel()->GetPath());
-                        proc_ret = HANDLES(CreateProcess(NULL, cmd, NULL, NULL, FALSE,
-                                                         CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS,
-                                                         NULL, MainWindow->GetActivePanel()->GetPath(), &si, &pi));
-                        err = GetLastError();
-                    }
-                    if (cmdTooLong || !proc_ret)
+                    CommandShellResult result = gCommandShellService != NULL
+                                                    ? gCommandShellService->LaunchCommand(request)
+                                                    : CommandShellResult::Error(ERROR_INVALID_PARAMETER);
+                    if (!result.success)
                     {
                         gPrompter->ShowError(LoadStrW(IDS_ERROREXECCMDLINE),
-                                             cmdTooLong ? LoadStrW(IDS_TOOLONGPATH) : GetErrorTextW(err));
+                                             result.errorCode == ERROR_FILENAME_EXCED_RANGE ? LoadStrW(IDS_TOOLONGPATH) : GetErrorTextW(result.errorCode));
                     }
                     else
                     {
-                        HANDLES(CloseHandle(pi.hProcess));
-                        HANDLES(CloseHandle(pi.hThread));
+                        result.CloseProcess();
                         executed = TRUE;
                     }
                     if (setWait)

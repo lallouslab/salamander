@@ -27,7 +27,7 @@ void OnGoto(HWND hWnd)
         lvi.mask = LVIF_PARAM;
         lvi.iItem = index;
         ListView_GetItem(hWnd, &lvi);
-        int lineIndex = lvi.lParam;
+        int lineIndex = (int)lvi.lParam;
         COutLine* outLine = &OutWindow.OutLines[lineIndex];
         if (outLine->Type != rteNone)
         {
@@ -45,7 +45,7 @@ void OnGoto(HWND hWnd)
                 lParam |= TREE_TYPE_STRING;
                 break;
             }
-            HTREEITEM hItem = TreeWindow.GetItem(lParam);
+            HTREEITEM hItem = TreeWindow.GetItem((DWORD)lParam);
             if (hItem != NULL)
             {
                 TreeWindow.SelectItem(hItem);
@@ -87,7 +87,7 @@ void OnContextMenu(HWND hWnd, int x, int y)
         lvi.mask = LVIF_PARAM;
         lvi.iItem = index;
         ListView_GetItem(hWnd, &lvi);
-        int lineIndex = lvi.lParam;
+        int lineIndex = (int)lvi.lParam;
         outLine = &OutWindow.OutLines[lineIndex];
         if (outLine->Type == rteDialog || outLine->Type == rteMenu)
         {
@@ -217,7 +217,7 @@ wchar_t* dupstr(const wchar_t* s)
     wchar_t* p = NULL;
     if (s)
     {
-        int len = wcslen(s);
+        int len = (int)wcslen(s);
         p = (wchar_t*)malloc(2 * (len + 1));
         wcscpy_s(p, len + 1, s);
     }
@@ -537,9 +537,9 @@ COutWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 {
                     LVITEM lvi;
                     lvi.mask = LVIF_PARAM;
-                    lvi.iItem = cd->nmcd.dwItemSpec;
+                    lvi.iItem = (int)cd->nmcd.dwItemSpec;
                     ListView_GetItem(HListView, &lvi);
-                    int lineIndex = lvi.lParam;
+                    int lineIndex = (int)lvi.lParam;
                     COutLine* outLine = &OutWindow.OutLines[lineIndex];
                     COLORREF textColor = GetSysColor(COLOR_WINDOWTEXT); // mteInfo
                     switch (outLine->MsgType)

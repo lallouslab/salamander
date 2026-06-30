@@ -34,7 +34,7 @@ BOOL CVersionBlock::SetKey(const WCHAR* key)
 {
     if (Key != NULL)
         free(Key);
-    int size = (wcslen(key) + 1) * sizeof(WCHAR);
+    int size = (int)((wcslen(key) + 1) * sizeof(WCHAR));
     Key = (WCHAR*)malloc(size);
     if (Key == NULL)
     {
@@ -342,7 +342,7 @@ BOOL CVersionInfo::QueryValue(const char* block, BYTE** buffer, DWORD* size)
     case vbtString:
     {
         *buffer = (BYTE*)found->Value;
-        *size = wcslen((WCHAR*)found->Value);
+        *size = (DWORD)wcslen((WCHAR*)found->Value);
         return TRUE;
     }
 
@@ -427,7 +427,7 @@ BOOL CVersionInfo::SaveBlock(CVersionBlock* block, BYTE*& ptr, const BYTE* maxPt
     ptr += 2;
 
     // szKey
-    int size = (wcslen(block->Key) + 1) * sizeof(WCHAR);
+    int size = (int)((wcslen(block->Key) + 1) * sizeof(WCHAR));
     memcpy(ptr, block->Key, size);
     ptr += size;
 
@@ -453,7 +453,7 @@ BOOL CVersionInfo::SaveBlock(CVersionBlock* block, BYTE*& ptr, const BYTE* maxPt
 
     case vbtString:
     {
-        int strLen = wcslen((WCHAR*)block->Value);
+        int strLen = (int)wcslen((WCHAR*)block->Value);
         size = (strLen + 1) * sizeof(WCHAR);
 
         if (ptr + size + 4 > maxPtr)
@@ -487,7 +487,7 @@ BOOL CVersionInfo::SaveBlock(CVersionBlock* block, BYTE*& ptr, const BYTE* maxPt
 
     // When there are no children, store the size without padding.
     if (block->Children.Count == 0)
-        *wLength = ptr - oldPtr;
+        *wLength = (WORD)(ptr - oldPtr);
 
     // padding
     ptr = ALIGN_DWORD(BYTE*, ptr);
@@ -502,7 +502,7 @@ BOOL CVersionInfo::SaveBlock(CVersionBlock* block, BYTE*& ptr, const BYTE* maxPt
 
     // Otherwise include the padding in the stored size.
     if (block->Children.Count > 0)
-        *wLength = ptr - oldPtr;
+        *wLength = (WORD)(ptr - oldPtr);
 
     return TRUE;
 }
@@ -522,7 +522,7 @@ BOOL CVersionInfo::UpdateResource(HANDLE hUpdateRes, int resID)
         free(buff);
         return FALSE;
     }
-    DWORD resSize = ptr - buff;
+    DWORD resSize = (DWORD)(ptr - buff);
 
     BOOL result = TRUE;
     if (TLangID != MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL)) // Remove the non-neutral resource so the final .SLG contains only one version block

@@ -4,6 +4,8 @@
 
 find_package(Git QUIET)
 
+set(SALLY_LOCAL_DEV_VERSION "1.0.20" CACHE STRING "Sally local development version base")
+
 if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     # Get the latest tag
     execute_process(
@@ -26,8 +28,12 @@ if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     )
 
     if(GIT_TAG_RESULT EQUAL 0 AND GIT_HASH_RESULT EQUAL 0)
-        # Strip leading 'v' if present (v1.0.0 -> 1.0.0)
-        string(REGEX REPLACE "^v" "" GIT_TAG_VERSION "${GIT_TAG}")
+        if(SALLY_LOCAL_DEV_VERSION)
+            set(GIT_TAG_VERSION "${SALLY_LOCAL_DEV_VERSION}")
+        else()
+            # Strip leading 'v' if present (v1.0.0 -> 1.0.0)
+            string(REGEX REPLACE "^v" "" GIT_TAG_VERSION "${GIT_TAG}")
+        endif()
 
         # Check if we're exactly on the tag
         execute_process(

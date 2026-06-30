@@ -443,6 +443,9 @@ void ClearViewerHistory(BOOL dataOnly); // clears histories; for dataOnly==FALSE
 void UpdateViewerColors(SALCOLOR* colors);
 
 extern const char* CVIEWERWINDOW_CLASSNAME; // viewer window class
+#ifndef _UNICODE
+extern const wchar_t* CVIEWERWINDOW_CLASSNAMEW; // Unicode viewer window class
+#endif // _UNICODE
 
 extern CWindowQueue ViewerWindowQueue; // list of all viewer windows
 

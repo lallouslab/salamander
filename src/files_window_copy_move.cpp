@@ -24,6 +24,7 @@
 #include "common/IEnvironment.h"
 #include "common/widepath.h"
 
+#include "common/BuildScript.h"
 #include "common/CBuildScriptState.h"
 #include "common/CSelectionSnapshot.h"
 
@@ -82,7 +83,7 @@ CSelectionSnapshot CFilesWindow::TakeSnapshot(CActionType type, int selCount,
             }
             i++;
 
-            CSnapshotItem item;
+            CSnapshotItem item = {};
             item.Name = file->Name;
             if (file->NameW != NULL)
                 item.NameW = file->NameW;
@@ -99,6 +100,609 @@ CSelectionSnapshot CFilesWindow::TakeSnapshot(CActionType type, int selCount,
 
     return snap;
 }
+
+namespace
+{
+BOOL IsSnapshotBuilderDefaultMask(const char* mask)
+{
+    return mask == NULL || strcmp(mask, "*.*") == 0;
+}
+
+bool HasLongPathPrefixW(const std::wstring& path)
+{
+    return path.compare(0, 4, L"\\\\?\\") == 0;
+}
+
+std::wstring MakeLongPathSafeW(const std::wstring& path)
+{
+    if (path.length() < 240 || HasLongPathPrefixW(path))
+        return path;
+    if (path.compare(0, 2, L"\\\\") == 0)
+        return L"\\\\?\\UNC\\" + path.substr(2);
+    if (path.length() >= 3 && path[1] == L':' &&
+        (path[2] == L'\\' || path[2] == L'/'))
+    {
+        return L"\\\\?\\" + path;
+    }
+    return path;
+}
+
+std::wstring MaskNameW(const std::wstring& name, const char* mask)
+{
+    if (mask == NULL)
+        return name;
+
+    const std::wstring maskW = AnsiToWide(mask);
+    int ignPoints = 0;
+    for (wchar_t ch : name)
+        if (ch == L'.')
+            ignPoints++;
+    for (wchar_t ch : maskW)
+    {
+        if (ch == L'.')
+        {
+            ignPoints--;
+            break;
+        }
+    }
+    if (ignPoints < 0)
+        ignPoints = 0;
+
+    size_t n = 0;
+    std::wstring out;
+    out.reserve(name.length() + maskW.length());
+    for (size_t s = 0; s < maskW.length(); ++s)
+    {
+        switch (maskW[s])
+        {
+        case L'*':
+            while (n < name.length())
+            {
+                if (name[n] == L'.')
+                {
+                    if (ignPoints > 0)
+                        ignPoints--;
+                    else
+                        break;
+                }
+                out.push_back(name[n++]);
+            }
+            break;
+
+        case L'?':
+            if (n < name.length())
+            {
+                if (name[n] == L'.')
+                {
+                    if (ignPoints > 0)
+                    {
+                        ignPoints--;
+                        out.push_back(name[n++]);
+                    }
+                }
+                else
+                    out.push_back(name[n++]);
+            }
+            break;
+
+        case L'.':
+            out.push_back(L'.');
+            while (n < name.length())
+            {
+                if (name[n] == L'.')
+                {
+                    if (ignPoints > 0)
+                        ignPoints--;
+                    else
+                        break;
+                }
+                n++;
+            }
+            if (n < name.length() && name[n] == L'.')
+                n++;
+            break;
+
+        default:
+            out.push_back(maskW[s]);
+            if (n < name.length())
+            {
+                if (name[n] != L'.')
+                    n++;
+                else if (ignPoints > 0)
+                {
+                    ignPoints--;
+                    n++;
+                }
+            }
+            break;
+        }
+    }
+
+    while (!out.empty() && out.back() == L'.')
+        out.pop_back();
+    return out;
+}
+
+BOOL PopulateSnapshotTargetNames(CSelectionSnapshot& snapshot, const char* mask)
+{
+    if (IsSnapshotBuilderDefaultMask(mask))
+        return TRUE;
+
+    for (CSnapshotItem& item : snapshot.Items)
+    {
+        const std::wstring sourceNameW = !item.NameW.empty() ? item.NameW : AnsiToWide(item.Name.c_str());
+        if (sourceNameW.empty() || item.Name.empty())
+            return FALSE;
+
+        CPathBuffer targetNameA;
+        if (MaskName(targetNameA, targetNameA.Size(), item.Name.c_str(), mask) == NULL ||
+            targetNameA[0] == 0)
+        {
+            return FALSE;
+        }
+
+        std::wstring targetNameW = MaskNameW(sourceNameW, mask);
+        if (targetNameW.empty())
+            return FALSE;
+
+        item.TargetName = targetNameA.Get();
+        item.TargetNameW = targetNameW;
+        item.HasTargetName = true;
+    }
+    return TRUE;
+}
+
+BOOL SnapshotFilterPredicate(const CBuildFilterEntry& entry, void* context)
+{
+    CCriteriaData* criteria = static_cast<CCriteriaData*>(context);
+    if (criteria == NULL)
+        return TRUE;
+
+    WIN32_FIND_DATAW data = {};
+    data.dwFileAttributes = entry.Attr;
+    data.nFileSizeLow = (DWORD)(entry.Size & 0xFFFFFFFF);
+    data.nFileSizeHigh = (DWORD)(entry.Size >> 32);
+    data.ftLastWriteTime = entry.LastWrite;
+    if (entry.NameW != NULL && entry.NameW[0] != L'\0')
+        lstrcpynW(data.cFileName, entry.NameW, MAX_PATH);
+    else if (entry.NameA != NULL)
+        lstrcpynW(data.cFileName, AnsiToWide(entry.NameA).c_str(), MAX_PATH);
+    else
+        return FALSE;
+
+    return criteria->AgreeMasksAndAdvanced(&data);
+}
+
+BOOL DirectoryTreeNeedsLegacyADS(const std::wstring& sourcePathW, BOOL targetSupADS)
+{
+    std::wstring searchPathW = sourcePathW;
+    if (!searchPathW.empty() && searchPathW.back() != L'\\' && searchPathW.back() != L'/')
+        searchPathW.push_back(L'\\');
+    searchPathW.push_back(L'*');
+
+    WIN32_FIND_DATAW data = {};
+    searchPathW = MakeLongPathSafeW(searchPathW);
+
+    HANDLE find = FindFirstFileW(searchPathW.c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE)
+        return TRUE;
+
+    do
+    {
+        if (data.cFileName[0] == L'\0' ||
+            data.cFileName[0] == L'.' &&
+                (data.cFileName[1] == L'\0' || data.cFileName[1] == L'.' && data.cFileName[2] == L'\0'))
+        {
+            continue;
+        }
+
+        const std::string childNameA = WideToAnsi(data.cFileName);
+        const std::wstring childPathW = sally::unicode::BuildPanelChildPathW(
+            sourcePathW, childNameA.c_str(), data.cFileName);
+        const std::string childPathA = WideToAnsi(childPathW);
+        const BOOL isDir = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+        CQuadWord adsSize;
+        DWORD adsWinError = NO_ERROR;
+        if (CheckFileOrDirADS(childPathA.c_str(), isDir, &adsSize, NULL, NULL, NULL,
+                              &adsWinError, 0, NULL, NULL, childPathW) ||
+            adsWinError != NO_ERROR)
+        {
+            FindClose(find);
+            return adsWinError != NO_ERROR || !targetSupADS;
+        }
+
+        if (isDir && DirectoryTreeNeedsLegacyADS(childPathW, targetSupADS))
+        {
+            FindClose(find);
+            return TRUE;
+        }
+    } while (FindNextFileW(find, &data));
+
+    DWORD err = GetLastError();
+    FindClose(find);
+    return err != ERROR_NO_MORE_FILES;
+}
+
+BOOL ShouldReportADSProbeError(const char* sourcePath, DWORD adsWinError, BOOL sourcePathIsNet)
+{
+    if (adsWinError == NO_ERROR)
+        return FALSE;
+
+    if (adsWinError == ERROR_INVALID_FUNCTION &&
+        sourcePath != NULL && StrNICmp(sourcePath, "\\\\tsclient\\", 11) == 0)
+    {
+        return FALSE;
+    }
+
+    if ((adsWinError == ERROR_INVALID_PARAMETER || adsWinError == ERROR_NO_MORE_ITEMS) &&
+        sourcePathIsNet)
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+int NormalizeADSReadErrorResponse(int res, BOOL* ignoreAll)
+{
+    switch (res)
+    {
+    case IDRETRY:
+    case IDCANCEL:
+    case IDB_IGNORE:
+        return res;
+
+    case IDB_IGNOREALL:
+        if (ignoreAll != NULL)
+            *ignoreAll = TRUE;
+        return IDB_IGNORE;
+
+    default:
+        return IDB_IGNORE;
+    }
+}
+
+BOOL SnapshotSelectionNeedsLegacyADS(CActionType type, BOOL sourceSupADS,
+                                     BOOL targetSupADS,
+                                     const CSelectionSnapshot& snapshot,
+                                     const char* sourcePath,
+                                     const wchar_t* sourcePathW)
+{
+    if ((type != atCopy && type != atMove) || !sourceSupADS || sourcePath == NULL)
+        return FALSE;
+
+    std::wstring sourcePathWide = (sourcePathW != NULL && sourcePathW[0] != L'\0') ? std::wstring(sourcePathW) : AnsiToWide(sourcePath);
+    for (const CSnapshotItem& item : snapshot.Items)
+    {
+        CPathBuffer fullPath;
+        const size_t sourceLen = strlen(sourcePath);
+        const size_t itemLen = item.Name.length();
+        const BOOL addSlash = sourceLen > 0 && sourcePath[sourceLen - 1] != '\\';
+        if (sourceLen + (addSlash ? 1 : 0) + itemLen >= static_cast<size_t>(fullPath.Size()))
+            return TRUE;
+
+        lstrcpyn(fullPath, sourcePath, fullPath.Size());
+        if (addSlash)
+            strcat(fullPath, "\\");
+        strcat(fullPath, item.Name.c_str());
+
+        const std::wstring fullPathW = sally::unicode::BuildPanelChildPathW(
+            sourcePathWide, item.Name.c_str(), item.NameW.empty() ? NULL : item.NameW.c_str());
+
+        CQuadWord adsSize;
+        DWORD adsWinError = NO_ERROR;
+        if (CheckFileOrDirADS(fullPath, item.IsDir, &adsSize, NULL, NULL, NULL,
+                              &adsWinError, 0, NULL, NULL, fullPathW) ||
+            adsWinError != NO_ERROR)
+        {
+            return adsWinError != NO_ERROR || !targetSupADS;
+        }
+
+        if (item.IsDir && DirectoryTreeNeedsLegacyADS(fullPathW, targetSupADS))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+BOOL CanBuildFirstTrancheFromSnapshot(BOOL isDiskPanel, CActionType type,
+                                      char* targetPath, char* mask,
+                                      CAttrsData* attrsData,
+                                      CChangeCaseData* chCaseData,
+                                      BOOL onlySize,
+                                      BOOL sourceSupADS,
+                                      BOOL targetSupADS,
+                                      const char* sourcePath,
+                                      const wchar_t* sourcePathW,
+                                      CCriteriaData* filterCriteria,
+                                      const CSelectionSnapshot& snapshot)
+{
+    if (!isDiskPanel || onlySize || attrsData != NULL || chCaseData != NULL ||
+        snapshot.Items.empty())
+    {
+        return FALSE;
+    }
+
+    if (type != atCopy && type != atMove && type != atDelete)
+        return FALSE;
+
+    if (filterCriteria != NULL && type != atCopy && type != atMove)
+        return FALSE;
+
+    if ((type == atCopy || type == atMove) &&
+        (targetPath == NULL || targetPath[0] == 0))
+    {
+        return FALSE;
+    }
+
+    if (type == atDelete && !IsSnapshotBuilderDefaultMask(mask))
+        return FALSE;
+
+    for (const CSnapshotItem& item : snapshot.Items)
+    {
+        if (item.IsDir &&
+            ((item.Attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0 ||
+             (type == atDelete && Configuration.CnfrmSHDirDel &&
+              (item.Attr & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) != 0) ||
+             (type == atDelete && Configuration.CnfrmNEDirDel)))
+        {
+            return FALSE;
+        }
+    }
+
+    if (SnapshotSelectionNeedsLegacyADS(type, sourceSupADS, targetSupADS, snapshot,
+                                        sourcePath, sourcePathW))
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+bool SplitFullPathA(const char* fullPath, std::string& dir, std::string& name)
+{
+    if (fullPath == NULL || fullPath[0] == 0)
+        return false;
+    const char* slash = strrchr(fullPath, '\\');
+    if (slash == NULL || slash == fullPath || slash[1] == 0)
+        return false;
+    dir.assign(fullPath, slash - fullPath);
+    name.assign(slash + 1);
+    return !dir.empty() && !name.empty();
+}
+
+bool SplitFullPathW(const wchar_t* fullPath, std::wstring& dir, std::wstring& name)
+{
+    if (fullPath == NULL || fullPath[0] == L'\0')
+        return false;
+    const wchar_t* slash = wcsrchr(fullPath, L'\\');
+    if (slash == NULL || slash == fullPath || slash[1] == L'\0')
+        return false;
+    dir.assign(fullPath, slash - fullPath);
+    name.assign(slash + 1);
+    return !dir.empty() && !name.empty();
+}
+
+bool GenerateCopyOfTargetNameW(const std::wstring& directoryWithBackslash,
+                               const std::wstring& sourceNameW,
+                               bool isDir,
+                               std::vector<std::wstring>& reservedNames,
+                               std::wstring& targetNameW)
+{
+    const std::wstring copyTokenW = AnsiToWide(LoadStr(IDS_NEWNAME_COPY));
+    if (!isDir)
+    {
+        if (!sally::unicode::TryGenerateUniqueCopyName(directoryWithBackslash, sourceNameW,
+                                                       copyTokenW, reservedNames,
+                                                       targetNameW))
+        {
+            return false;
+        }
+        reservedNames.push_back(targetNameW);
+        return true;
+    }
+
+    if (directoryWithBackslash.empty() || sourceNameW.empty() || copyTokenW.empty())
+        return false;
+    if (directoryWithBackslash.back() != L'\\' && directoryWithBackslash.back() != L'/')
+        return false;
+
+    DWORD dirAttrs = GetFileAttributesW(directoryWithBackslash.c_str());
+    if (dirAttrs == INVALID_FILE_ATTRIBUTES || (dirAttrs & FILE_ATTRIBUTE_DIRECTORY) == 0)
+        return false;
+
+    for (int copyIndex = 1; copyIndex < 10000; ++copyIndex)
+    {
+        std::wstring candidate = sourceNameW;
+        candidate += L" - ";
+        candidate += copyTokenW;
+        if (copyIndex > 1)
+        {
+            candidate += L" (";
+            candidate += std::to_wstring(copyIndex);
+            candidate += L")";
+        }
+
+        if (sally::unicode::ContainsNameIgnoreCase(reservedNames, candidate))
+            continue;
+        if (!sally::unicode::IsOccupiedPathW(directoryWithBackslash, candidate))
+        {
+            targetNameW = candidate;
+            reservedNames.push_back(targetNameW);
+            return true;
+        }
+    }
+    return false;
+}
+
+BOOL CanBuildMain2FromSnapshot(BOOL isDiskPanel,
+                               BOOL copy,
+                               const char* targetDir,
+                               const wchar_t* targetDirW,
+                               const char* targetPathWithSlash,
+                               const std::wstring& targetPathWithSlashW,
+                               BOOL targetSupADS,
+                               BOOL targetIsFAT32,
+                               CCopyMoveData* data,
+                               CSelectionSnapshot& snapshot,
+                               CBuildConfig& config,
+                               COperations* script)
+{
+    if (!isDiskPanel || targetDir == NULL || targetDir[0] == 0 ||
+        targetDirW == NULL || targetDirW[0] == L'\0' ||
+        targetPathWithSlash == NULL || targetPathWithSlash[0] == 0 ||
+        data == NULL || data->Count < 1 ||
+        (data->MakeCopyOfName && !copy))
+    {
+        return FALSE;
+    }
+
+    std::string sourceDirA;
+    std::wstring sourceDirW;
+    std::vector<std::wstring> reservedNames;
+
+    snapshot.Action = copy ? EActionType::Copy : EActionType::Move;
+    snapshot.TargetPath = targetDir;
+    snapshot.TargetPathW = targetDirW;
+    snapshot.Mask = "*.*";
+    snapshot.CopySecurity = script->CopySecurity != FALSE;
+    snapshot.CopyAttrs = script->CopyAttrs != FALSE;
+    snapshot.PreserveDirTime = script->PreserveDirTime != FALSE;
+    snapshot.StartOnIdle = script->StartOnIdle != FALSE;
+
+    for (int i = 0; i < data->Count; ++i)
+    {
+        CCopyMoveRecord* record = data->At(i);
+        if (record == NULL || record->FileName == NULL || record->MapName != NULL ||
+            record->FileNameW == NULL)
+        {
+            return FALSE;
+        }
+
+        std::string itemSourceDirA;
+        std::string sourceNameA;
+        std::wstring itemSourceDirW;
+        std::wstring sourceNameW;
+        if (!SplitFullPathA(record->FileName, itemSourceDirA, sourceNameA) ||
+            !SplitFullPathW(record->FileNameW, itemSourceDirW, sourceNameW))
+        {
+            return FALSE;
+        }
+
+        if (i == 0)
+        {
+            sourceDirA = itemSourceDirA;
+            sourceDirW = itemSourceDirW;
+            snapshot.SourcePath = sourceDirA;
+            snapshot.SourcePathW = sourceDirW;
+        }
+        else if (StrICmp(sourceDirA.c_str(), itemSourceDirA.c_str()) != 0 ||
+                 _wcsicmp(sourceDirW.c_str(), itemSourceDirW.c_str()) != 0)
+        {
+            return FALSE;
+        }
+
+        WIN32_FILE_ATTRIBUTE_DATA attrData = {};
+        if (!GetFileAttributesExW(record->FileNameW, GetFileExInfoStandard, &attrData))
+            return FALSE;
+        DWORD attrs = attrData.dwFileAttributes;
+        const bool isDir = (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+        const BOOL sourceAndTargetSamePath = IsTheSamePath(sourceDirA.c_str(), const_cast<char*>(targetPathWithSlash));
+        if ((data->MakeCopyOfName && !sourceAndTargetSamePath) ||
+            (!data->MakeCopyOfName && sourceAndTargetSamePath))
+        {
+            return FALSE;
+        }
+
+        std::wstring targetNameW;
+        CPathBuffer targetNameA;
+        if (data->MakeCopyOfName)
+        {
+            if (!GenerateCopyOfTargetNameW(targetPathWithSlashW, sourceNameW,
+                                           isDir, reservedNames, targetNameW))
+            {
+                return FALSE;
+            }
+
+            if (WideCharToMultiByte(CP_ACP, 0, targetNameW.c_str(), -1,
+                                    targetNameA, targetNameA.Size(), "?", NULL) == 0 ||
+                targetNameA[0] == 0)
+            {
+                return FALSE;
+            }
+        }
+
+        CSnapshotItem item = {};
+        item.Name = sourceNameA;
+        item.NameW = sourceNameW;
+        if (data->MakeCopyOfName)
+        {
+            item.TargetName = targetNameA.Get();
+            item.TargetNameW = targetNameW;
+            item.HasTargetName = true;
+        }
+        item.IsDir = isDir;
+        item.Size = isDir ? 0 : ((((unsigned __int64)attrData.nFileSizeHigh) << 32) |
+                                 attrData.nFileSizeLow);
+        item.Attr = attrs;
+        item.LastWrite = attrData.ftLastWriteTime;
+        snapshot.Items.push_back(item);
+    }
+
+    if (sourceDirA.empty() || sourceDirW.empty() || snapshot.Items.empty())
+        return FALSE;
+
+    BOOL sourceSupADS = IsPathOnVolumeSupADS(sourceDirA.c_str(), NULL);
+
+    const CActionType actionType = copy ? atCopy : atMove;
+    if (SnapshotSelectionNeedsLegacyADS(actionType, sourceSupADS, targetSupADS, snapshot,
+                                        sourceDirA.c_str(), sourceDirW.c_str()))
+    {
+        snapshot.Items.clear();
+        return FALSE;
+    }
+
+    config.SourceSupportsADS = sourceSupADS;
+    config.TargetSupportsADS = targetSupADS;
+    config.TargetIsFAT32 = targetIsFAT32;
+    CTargetPathState targetPathState = GetTargetPathState(tpsUnknown, targetDir);
+    config.TargetPathIsEncrypted = targetPathState == tpsEncryptedExisting ||
+                                   targetPathState == tpsEncryptedNotExisting;
+    config.EnableADS = sourceSupADS && targetSupADS;
+    config.ADSProbe = BuildScriptLegacyADSProbe;
+    config.EnableExplicitTargetNames = data->MakeCopyOfName != FALSE;
+    config.EnableRecursiveDirectories = TRUE;
+    config.ClearReadOnly = script->ClearReadonlyMask == ~(FILE_ATTRIBUTE_READONLY);
+    return TRUE;
+}
+} // namespace
+
+#ifdef SALLY_PRIVATE_TESTS
+namespace sally::test
+{
+BOOL ShouldReportADSProbeErrorForTest(const char* sourcePath, DWORD adsWinError, BOOL sourcePathIsNet)
+{
+    return ShouldReportADSProbeError(sourcePath, adsWinError, sourcePathIsNet);
+}
+
+int NormalizeADSReadErrorResponseForTest(int res, BOOL* ignoreAll)
+{
+    return NormalizeADSReadErrorResponse(res, ignoreAll);
+}
+
+BOOL SnapshotSelectionNeedsLegacyADSForTest(CActionType type, BOOL sourceSupADS,
+                                            BOOL targetSupADS,
+                                            const CSelectionSnapshot& snapshot,
+                                            const char* sourcePath,
+                                            const wchar_t* sourcePathW)
+{
+    return SnapshotSelectionNeedsLegacyADS(type, sourceSupADS, targetSupADS,
+                                           snapshot, sourcePath, sourcePathW);
+}
+} // namespace sally::test
+#endif
 
 // Transient state for BuildScriptMain/Dir/File. The legacy builder is recursive,
 // so route all existing bsState references through a per-call active state.
@@ -762,6 +1366,19 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
         script->BytesPerCluster = d1 * d2;
         // W2K and later: the product d1 * d2 * d3 did not work on DFS trees, reported by Ludek.Vydra@k2atmitec.cz
         script->FreeSpace = MyGetDiskFreeSpace(targetPath);
+    }
+
+    CSelectionSnapshot snapshot;
+    CBuildConfig buildConfig;
+    if (CanBuildMain2FromSnapshot(Is(ptDisk), copy, targetDir, targetDirW,
+                                  targetPath, targetPathWide,
+                                  targetSupADS, targetIsFAT32,
+                                  data, snapshot, buildConfig, script))
+    {
+        const BOOL built = BuildScriptFromSnapshot(snapshot, buildConfig,
+                                                  GetActiveBuildScriptState(), script);
+        SetCurrentDirectoryToSystem();
+        return built;
     }
 
     int i;
@@ -1471,6 +2088,11 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
         *end = 0; // restore sourcePath
     }
 
+    CSelectionSnapshot snapshot = TakeSnapshot(type, selCount, selection, oneFile);
+    BOOL snapshotTargetNamesReady = TRUE;
+    if (type == atCopy || type == atMove)
+        snapshotTargetNamesReady = PopulateSnapshotTargetNames(snapshot, mask);
+
     if (selCount > 0 || oneFile != NULL)
     {
         if (type == atMove || type == atCopy) // outside Copy and Move it makes no sense to check
@@ -1482,6 +2104,84 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                 // W2K and later: the product d1 * d2 * d3 did not work on DFS trees, reported by Ludek.Vydra@k2atmitec.cz
                 script->FreeSpace = MyGetDiskFreeSpace(targetPath);
             }
+        }
+
+        BOOL wouldUseFastDirMove = FALSE;
+        if (type == atMove && Is(ptDisk))
+        {
+            BOOL selectionHasDir = FALSE;
+            for (const CSnapshotItem& item : snapshot.Items)
+            {
+                if (item.IsDir)
+                {
+                    selectionHasDir = TRUE;
+                    break;
+                }
+            }
+            wouldUseFastDirMove =
+                selectionHasDir && fastDirectoryMove && !script->CopySecurity &&
+                (script->CopyAttrs ||
+                 (targetPathState != tpsEncryptedExisting &&
+                  targetPathState != tpsEncryptedNotExisting)) &&
+                (filterCriteria == NULL ||
+                 (!filterCriteria->UseMasks && !filterCriteria->UseAdvanced &&
+                  !filterCriteria->SkipEmptyDirs)) &&
+                !script->SameRootButDiffVolume &&
+                HasTheSameRootPath(sourcePath, targetPath);
+        }
+
+        if (!wouldUseFastDirMove && snapshotTargetNamesReady &&
+            CanBuildFirstTrancheFromSnapshot(Is(ptDisk), type, targetPath, mask,
+                                             attrsData, chCaseData, onlySize,
+                                             sourceSupADS, targetSupADS, sourcePath,
+                                             sourcePathWArg,
+                                             filterCriteria, snapshot))
+        {
+            snapshot.TargetPath = targetPath != NULL ? targetPath : "";
+            if (targetPathW != NULL)
+                snapshot.TargetPathW = targetPathW;
+            snapshot.Mask = mask != NULL ? mask : "";
+            snapshot.UseRecycleBin = script->CanUseRecycleBin != FALSE;
+            snapshot.InvertRecycleBin = script->InvertRecycleBin != FALSE;
+            snapshot.OverwriteOlder = script->OverwriteOlder != FALSE;
+            snapshot.CopySecurity = script->CopySecurity != FALSE;
+            snapshot.CopyAttrs = script->CopyAttrs != FALSE;
+            snapshot.PreserveDirTime = script->PreserveDirTime != FALSE;
+            snapshot.IgnoreADS = filterCriteria != NULL && filterCriteria->IgnoreADS != FALSE;
+            snapshot.SkipEmptyDirs = filterCriteria != NULL && filterCriteria->SkipEmptyDirs != FALSE;
+            snapshot.StartOnIdle = script->StartOnIdle != FALSE;
+            snapshot.UseSpeedLimit = filterCriteria != NULL && filterCriteria->UseSpeedLimit != FALSE;
+            snapshot.SpeedLimit = filterCriteria != NULL ? filterCriteria->SpeedLimit : 0;
+
+            CBuildConfig buildConfig;
+            buildConfig.SourceSupportsADS = sourceSupADS;
+            buildConfig.TargetSupportsADS = targetSupADS;
+            buildConfig.TargetIsFAT32 = targetIsFAT32;
+            buildConfig.TargetPathIsEncrypted = targetPathState == tpsEncryptedExisting ||
+                                                targetPathState == tpsEncryptedNotExisting;
+            buildConfig.EnableRecursiveDirectories = TRUE;
+            buildConfig.EnableFilters = filterCriteria != NULL &&
+                                        (filterCriteria->UseMasks || filterCriteria->UseAdvanced);
+            buildConfig.SkipEmptyDirs = filterCriteria != NULL && filterCriteria->SkipEmptyDirs;
+            buildConfig.FilterPredicate = buildConfig.EnableFilters ? SnapshotFilterPredicate : nullptr;
+            buildConfig.FilterContext = buildConfig.EnableFilters ? filterCriteria : nullptr;
+            buildConfig.EnableADS = sourceSupADS && targetSupADS;
+            buildConfig.ADSProbe = BuildScriptLegacyADSProbe;
+            buildConfig.IgnoreADS = snapshot.IgnoreADS;
+            buildConfig.EnableExplicitTargetNames = !IsSnapshotBuilderDefaultMask(mask);
+            buildConfig.ClearReadOnly = script->ClearReadonlyMask == ~(FILE_ATTRIBUTE_READONLY);
+            buildConfig.NetwareFastDirMove = fastDirectoryMove;
+            buildConfig.ConfirmDeleteSystemHiddenDir = Configuration.CnfrmSHDirDel;
+            buildConfig.ConfirmDeleteNonEmptyDir = Configuration.CnfrmNEDirDel;
+
+            if (!BuildScriptFromSnapshot(snapshot, buildConfig, bsState, script))
+            {
+                SetCurrentDirectoryToSystem();
+                return FALSE;
+            }
+
+            SetCurrentDirectoryToSystem();
+            return TRUE;
         }
 
         int i = 0;
@@ -1602,7 +2302,8 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
 
 char ADSStreamsGlobalBuf[5000]; // ADS names separated by commas are stored in this buffer, it's global to avoid stack overflow during recursion
 
-void GetADSStreamsNames(char* listBuf, int bufSize, char* fileName, BOOL isDir)
+void GetADSStreamsNames(char* listBuf, int bufSize, char* fileName, BOOL isDir,
+                        const std::wstring& fileNameW = std::wstring())
 {
     if (bufSize > 0)
         listBuf[0] = 0;
@@ -1610,7 +2311,7 @@ void GetADSStreamsNames(char* listBuf, int bufSize, char* fileName, BOOL isDir)
     int streamNamesCount;
     BOOL lowMemory;
     if (CheckFileOrDirADS(fileName, isDir, NULL, &streamNames, &streamNamesCount, &lowMemory,
-                          NULL, 0, NULL, NULL) &&
+                          NULL, 0, NULL, NULL, fileNameW) &&
         !lowMemory && streamNames != NULL)
     {
         int size = bufSize;
@@ -1731,9 +2432,6 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
     *st = 0;
     if (!effectiveSourcePathW.empty())
         currentSourcePathW = sally::unicode::BuildPanelChildPathW(effectiveSourcePathW, dirName, dirNameW);
-    const BOOL sourcePathNeedsWideApis =
-        !currentSourcePathW.empty() &&
-        sally::unicode::WidePathNeedsExactPreservation(currentSourcePathW.c_str());
     auto currentSourcePathForMessageW = [&]() -> std::wstring {
         if (!currentSourcePathW.empty())
             return currentSourcePathW;
@@ -1938,7 +2636,7 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
         }
 
         BOOL dirCreated = FALSE;
-        if (sourcePathSupADS && !sourcePathNeedsWideApis)
+        if (sourcePathSupADS)
         {
             if ((targetPathState == tpsEncryptedNotExisting || targetPathState == tpsNotEncryptedNotExisting) && // target directory does not exist
                 (targetPathSupADS || !bsState.ConfirmADSLossAll))                                                        // if ADS should not be ignored
@@ -1953,7 +2651,8 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
             READADS_AGAIN:
 
                 if (CheckFileOrDirADS(sourcePath, TRUE, &adsSize, NULL, NULL, NULL, &adsWinError,
-                                      script->BytesPerCluster, &adsOccupiedSpace, NULL))
+                                      script->BytesPerCluster, &adsOccupiedSpace, NULL,
+                                      currentSourcePathW))
                 { // the source directory has ADS, they must be copied to the target directory
                     if (targetPathSupADS)
                     {
@@ -2007,12 +2706,14 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                                 res = IDB_SKIP;
                             else
                             {
-                                GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, sourcePath, TRUE);
+                                GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, sourcePath, TRUE,
+                                                   currentSourcePathW);
                                 if (ADSStreamsGlobalBuf[0] == 0)
                                     res = IDYES;
                                 else
                                 {
-                                    res = (int)CConfirmADSLossDlg(HWindow, FALSE, sourcePath, ADSStreamsGlobalBuf, type == atMove).Execute();
+                                    res = (int)CConfirmADSLossDlg(HWindow, FALSE, sourcePath, ADSStreamsGlobalBuf, type == atMove,
+                                                                  currentSourcePathW.empty() ? NULL : currentSourcePathW.c_str()).Execute();
                                 }
                             }
                         }
@@ -2043,10 +2744,7 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                 }
                 else // an error occurred or no ADS
                 {
-                    if (adsWinError != NO_ERROR &&                                                                    // an error occurred
-                        (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(sourcePath, "\\\\tsclient\\", 11) != 0) && // paths to local disks in Terminal Server do not support listing ADS (even though ADS is otherwise supported)
-                        (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
-                         !sourcePathIsNet)) // mounted FAT/FAT32 disk cannot be reliably detected on a network disk (e.g. \petr\f\drive_c) plus a Novell NetWare volume browsed via NDS appears to be NTFS so we try to read ADS, which reports this error
+                    if (ShouldReportADSProbeError(sourcePath, adsWinError, sourcePathIsNet))
                     {
                         if ((sourceDirAttr & FILE_ATTRIBUTE_REPARSE_POINT) == 0) // it's not a link (for a link, the content does not have to be copied)
                         {
@@ -2089,15 +2787,15 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                             res = IDB_IGNORE;
                         else
                         {
-                            res = (int)CErrorReadingADSDlg(HWindow, sourcePath, GetErrorText(adsWinError)).Execute();
+                            res = (int)CErrorReadingADSDlg(HWindow, sourcePath, GetErrorText(adsWinError),
+                                                           NULL, currentSourcePathW.empty() ? NULL : currentSourcePathW.c_str())
+                                      .Execute();
                         }
-                        switch (res)
+                        switch (NormalizeADSReadErrorResponse(res, &bsState.ErrReadingADSIgnoreAll))
                         {
                         case IDRETRY:
                             goto READADS_AGAIN;
 
-                        case IDB_IGNOREALL:
-                            bsState.ErrReadingADSIgnoreAll = TRUE; // intentional fallthrough
                         case IDB_IGNORE:
                             break;
 
@@ -2618,16 +3316,15 @@ READLINKTGTSIZE_AGAIN:
         else
         {
             res = (int)CErrorReadingADSDlg(parent, fileName, GetErrorText(err),
-                                           LoadStr(IDS_ERRORGETTINGLINKTGTSIZE))
+                                           LoadStr(IDS_ERRORGETTINGLINKTGTSIZE),
+                                           op != NULL && fileName == op->SourceName && op->HasWideSource() ? op->SourceNameW.c_str() : NULL)
                       .Execute();
         }
-        switch (res)
+        switch (NormalizeADSReadErrorResponse(res, ignoreAll))
         {
         case IDRETRY:
             goto READLINKTGTSIZE_AGAIN;
 
-        case IDB_IGNOREALL:
-            *ignoreAll = TRUE; // intentional fallthrough
         case IDB_IGNORE:
             break;
 
@@ -2898,24 +3595,21 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
             else
                 op.Size = COPY_MIN_FILE_SIZE; // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
 
-            // Skip ADS check for Unicode filenames - the ANSI path has lossy conversion (e.g. "??" for Korean)
-            // and CheckFileOrDirADS uses ANSI APIs that won't find the file. ADS copying will be skipped.
-            // TODO: Add CheckFileOrDirADSW for wide path support in the future.
-            if (fileNameW == NULL &&                          // skip ADS for Unicode filenames (ANSI path is invalid)
-                sourcePathSupADS &&                           // if there's a chance that ADS will be found and
+            if (sourcePathSupADS &&                           // if there's a chance that ADS will be found and
                 (targetPathSupADS || !bsState.ConfirmADSLossAll))     // if ADS should not be ignored
             {
                 CQuadWord adsSize;
                 CQuadWord adsOccupiedSpace;
                 DWORD adsWinError;
                 BOOL onlyDiscardableStreams;
+                const std::wstring adsSourceNameW = op.HasWideSource() ? op.SourceNameW : std::wstring();
 
             READFILEADS_AGAIN:
 
                 if (!invalidSrcName &&
                     CheckFileOrDirADS(op.SourceName, FALSE, &adsSize, NULL, NULL, NULL, &adsWinError,
                                       script->BytesPerCluster, &adsOccupiedSpace,
-                                      &onlyDiscardableStreams))
+                                      &onlyDiscardableStreams, adsSourceNameW))
                 { // the source file has ADS, they must be copied to the target file
                     if (targetPathSupADS)
                     {
@@ -2935,12 +3629,14 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
                                 res = IDB_SKIP;
                             else
                             {
-                                GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, op.SourceName, FALSE);
+                                GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, op.SourceName, FALSE,
+                                                   adsSourceNameW);
                                 if (ADSStreamsGlobalBuf[0] == 0)
                                     res = IDYES;
                                 else
                                 {
-                                    res = (int)CConfirmADSLossDlg(HWindow, TRUE, op.SourceName, ADSStreamsGlobalBuf, type == atMove).Execute();
+                                    res = (int)CConfirmADSLossDlg(HWindow, TRUE, op.SourceName, ADSStreamsGlobalBuf, type == atMove,
+                                                                  adsSourceNameW.empty() ? NULL : adsSourceNameW.c_str()).Execute();
                                 }
                             }
                         }
@@ -2976,10 +3672,8 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
                 else // an error occurred or no ADS
                 {
                     if (invalidSrcName ||
-                        adsWinError != NO_ERROR &&                                                                           // an error occurred
-                            (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(op.SourceName, "\\\\tsclient\\", 11) != 0) && // paths to local disks in Terminal Server do not support ADS listing (even though ADS is otherwise supported, irony of ironies)
-                            (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
-                             (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) == 0)) // mounted FAT/FAT32 disk cannot be detected on a network drive (e.g. \petr\f\drive_c) plus a Novell NetWare volume browsed via NDS - we think it is NTFS and thus try to read ADS, which reports this error
+                        ShouldReportADSProbeError(op.SourceName, adsWinError,
+                                                  (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) != 0))
                     {
                         // firstly, we try whether an error occurs even during opening the file - such an error
                         // the user understands it more easily, so we show it preferentially (before the ADS read error)
@@ -3002,15 +3696,15 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
                                 res = IDB_IGNORE;
                             else
                             {
-                                res = (int)CErrorReadingADSDlg(HWindow, op.SourceName, GetErrorText(adsWinError)).Execute();
+                                res = (int)CErrorReadingADSDlg(HWindow, op.SourceName, GetErrorText(adsWinError),
+                                                               NULL, op.HasWideSource() ? op.SourceNameW.c_str() : NULL)
+                                          .Execute();
                             }
-                            switch (res)
+                            switch (NormalizeADSReadErrorResponse(res, &bsState.ErrReadingADSIgnoreAll))
                             {
                             case IDRETRY:
                                 goto READFILEADS_AGAIN;
 
-                            case IDB_IGNOREALL:
-                                bsState.ErrReadingADSIgnoreAll = TRUE; // intentional fallthrough
                             case IDB_IGNORE:
                                 break;
 

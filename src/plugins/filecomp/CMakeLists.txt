@@ -3,6 +3,7 @@
 
 sal_add_plugin(NAME filecomp
   SOURCES
+    "${SAL_SRC}/common/PanelTextPainter.cpp"
     # Shared sources (filecomp doesn't use mhandles.cpp)
     "${SAL_SHARED}/auxtools.cpp"
     "${SAL_SHARED}/dbg.cpp"
@@ -47,8 +48,8 @@ sal_add_plugin(NAME filecomp
 
 # Remote file comparison helper executable
 add_executable(fcremote
-  "${SAL_SHARED}/plugcore/messages.cpp"
-  "${SAL_SRC}/common/rtc_stubs.cpp"
+  "${SAL_PLUGINS}/filecomp/fcremote/messages_fcremote.cpp"
+  "${SAL_PLUGINS}/filecomp/fcremote/rtc_stubs_fcremote.cpp"
   "${SAL_PLUGINS}/filecomp/fcremote/fcremote.cpp"
   "${SAL_PLUGINS}/filecomp/fcremote/fcremote.rc"
 )
@@ -67,7 +68,13 @@ target_compile_definitions(fcremote PRIVATE
 )
 
 if(MSVC)
-  target_compile_options(fcremote PRIVATE /MP /W3 /MT /GS- /EHs-c-)
+  target_compile_options(fcremote PRIVATE /MP /W3 /MT /GS-)
+  set_source_files_properties(
+    "${SAL_PLUGINS}/filecomp/fcremote/messages_fcremote.cpp"
+    "${SAL_PLUGINS}/filecomp/fcremote/rtc_stubs_fcremote.cpp"
+    "${SAL_PLUGINS}/filecomp/fcremote/fcremote.cpp"
+    PROPERTIES VS_SETTINGS "ExceptionHandling=false"
+  )
   target_link_options(fcremote PRIVATE
     /SUBSYSTEM:WINDOWS
     /MANIFEST:NO

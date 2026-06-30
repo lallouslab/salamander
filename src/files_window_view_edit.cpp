@@ -23,6 +23,7 @@
 #include "common/widepath.h"
 #include "common/fsutil.h"
 #include "common/CreateDirectoryFlow.h"
+#include "common/ViewerEditorLauncher.h"
 #include "ui/IPrompter.h"
 #include "common/IFileSystem.h"
 #include "common/unicode/AnsiFallbackPolicy.h"
@@ -1117,18 +1118,6 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
                     break;
                 }
 
-                STARTUPINFOW si;
-                PROCESS_INFORMATION pi;
-                memset(&si, 0, sizeof(si));
-                si.cb = sizeof(si);
-                si.dwX = place.rcNormalPosition.left;
-                si.dwY = place.rcNormalPosition.top;
-                si.dwXSize = place.rcNormalPosition.right - place.rcNormalPosition.left;
-                si.dwYSize = place.rcNormalPosition.bottom - place.rcNormalPosition.top;
-                si.dwFlags |= STARTF_USEPOSITION | STARTF_USESIZE |
-                              STARTF_USESHOWWINDOW;
-                si.wShowWindow = SW_SHOWNORMAL;
-
                 // Wide-aware command-line assembly. Same shape as EditFile:
                 // ExpandCommand/Arguments/InitDir run ANSI through CP_ACP, then we
                 // convert to wide and substitute the lossy CP_ACP mirrors of $(FullPath),
@@ -1212,31 +1201,53 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
                 cmdLineW.push_back(L' ');
                 cmdLineW.append(expArgumentsW);
 
-                BOOL launched = ::CreateProcessW(NULL, cmdLineW.data(), NULL, NULL, FALSE,
-                                                 NORMAL_PRIORITY_CLASS, NULL,
-                                                 expInitDirW.empty() ? NULL : expInitDirW.c_str(),
-                                                 &si, &pi);
-                if (!launched)
+                ViewerEditorProcessLaunchRequest request;
+                request.commandLine = cmdLineW.c_str();
+                request.workingDirectory = expInitDirW.empty() ? NULL : expInitDirW.c_str();
+                request.creationFlags = NORMAL_PRIORITY_CLASS;
+                request.usePosition = true;
+                request.x = place.rcNormalPosition.left;
+                request.y = place.rcNormalPosition.top;
+                request.useSize = true;
+                request.width = place.rcNormalPosition.right - place.rcNormalPosition.left;
+                request.height = place.rcNormalPosition.bottom - place.rcNormalPosition.top;
+                request.useShowWindow = true;
+                request.showWindow = SW_SHOWNORMAL;
+
+                ExternalToolResult launchResult = gViewerEditorLauncher != NULL
+                                                      ? gViewerEditorLauncher->LaunchProcess(request)
+                                                      : ExternalToolResult::Error(ERROR_INVALID_PARAMETER);
+                if (!launchResult.success)
                 {
-                    DWORD err = GetLastError();
                     std::wstring msg = FormatStrW(LoadStrW(IDS_ERROREXECVIEW),
                                                   expCommandW.c_str(),
-                                                  GetErrorTextW(err));
+                                                  GetErrorTextW(launchResult.errorCode));
                     gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
                 }
                 else
                 {
-                    HANDLES_ADD(__htProcess, __hoCreateProcess, pi.hProcess);
-                    HANDLES_ADD(__htThread, __hoCreateProcess, pi.hThread);
-                    success = TRUE;
-                    if (returnLock)
+                    HANDLE processHandle = launchResult.DetachNativeProcessHandle();
+                    if (processHandle == NULL)
                     {
-                        lock = pi.hProcess;
-                        lockOwner = TRUE;
+                        DWORD err = GetLastError();
+                        launchResult.CloseProcess();
+                        std::wstring msg = FormatStrW(LoadStrW(IDS_ERROREXECVIEW),
+                                                      expCommandW.c_str(),
+                                                      GetErrorTextW(err));
+                        gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
                     }
                     else
-                        HANDLES(CloseHandle(pi.hProcess));
-                    HANDLES(CloseHandle(pi.hThread));
+                    {
+                        HANDLES_ADD(__htProcess, __hoCreateProcess, processHandle);
+                        success = TRUE;
+                        if (returnLock)
+                        {
+                            lock = processHandle;
+                            lockOwner = TRUE;
+                        }
+                        else
+                            HANDLES(CloseHandle(processHandle));
+                    }
                 }
             }
             break;
@@ -1541,18 +1552,6 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
                 return;
             }
 
-            STARTUPINFOW si;
-            PROCESS_INFORMATION pi;
-            memset(&si, 0, sizeof(si));
-            si.cb = sizeof(si);
-            si.dwX = place.rcNormalPosition.left;
-            si.dwY = place.rcNormalPosition.top;
-            si.dwXSize = place.rcNormalPosition.right - place.rcNormalPosition.left;
-            si.dwYSize = place.rcNormalPosition.bottom - place.rcNormalPosition.top;
-            si.dwFlags |= STARTF_USEPOSITION | STARTF_USESIZE |
-                          STARTF_USESHOWWINDOW;
-            si.wShowWindow = SW_SHOWNORMAL;
-
             // Wide-aware command-line assembly. The ANSI ExpandCommand/Arguments/InitDir
             // above expanded the templates through CP_ACP, so any $(FullPath), $(Name) or
             // $(Path) substitutions that referenced a non-CP_ACP filename came out lossy
@@ -1639,30 +1638,46 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
             cmdLineW.push_back(L' ');
             cmdLineW.append(expArgumentsW);
 
-            // CreateProcessW: the lpCommandLine buffer must be writable per MSDN.
-            // std::wstring::data() returns a writable contiguous buffer (C++17+).
-            // Bypass the HANDLES wrapper around ::CreateProcessW (C__Handles only
-            // provides an ANSI CreateProcess shim) and register the resulting
-            // process+thread handles with HANDLES_ADD so the close calls below
-            // can match against the tracker.
-            BOOL launched = ::CreateProcessW(NULL, cmdLineW.data(), NULL, NULL, FALSE,
-                                             NORMAL_PRIORITY_CLASS, NULL,
-                                             expInitDirW.empty() ? NULL : expInitDirW.c_str(),
-                                             &si, &pi);
-            if (!launched)
+            ViewerEditorProcessLaunchRequest request;
+            request.commandLine = cmdLineW.c_str();
+            request.workingDirectory = expInitDirW.empty() ? NULL : expInitDirW.c_str();
+            request.creationFlags = NORMAL_PRIORITY_CLASS;
+            request.usePosition = true;
+            request.x = place.rcNormalPosition.left;
+            request.y = place.rcNormalPosition.top;
+            request.useSize = true;
+            request.width = place.rcNormalPosition.right - place.rcNormalPosition.left;
+            request.height = place.rcNormalPosition.bottom - place.rcNormalPosition.top;
+            request.useShowWindow = true;
+            request.showWindow = SW_SHOWNORMAL;
+
+            ExternalToolResult launchResult = gViewerEditorLauncher != NULL
+                                                  ? gViewerEditorLauncher->LaunchProcess(request)
+                                                  : ExternalToolResult::Error(ERROR_INVALID_PARAMETER);
+            if (!launchResult.success)
             {
-                DWORD err = GetLastError();
                 std::wstring msg = FormatStrW(LoadStrW(IDS_ERROREXECEDIT),
                                               expCommandW.c_str(),
-                                              GetErrorTextW(err));
+                                              GetErrorTextW(launchResult.errorCode));
                 gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
             }
             else
             {
-                HANDLES_ADD(__htProcess, __hoCreateProcess, pi.hProcess);
-                HANDLES_ADD(__htThread, __hoCreateProcess, pi.hThread);
-                HANDLES(CloseHandle(pi.hProcess));
-                HANDLES(CloseHandle(pi.hThread));
+                HANDLE processHandle = launchResult.DetachNativeProcessHandle();
+                if (processHandle == NULL)
+                {
+                    DWORD err = GetLastError();
+                    launchResult.CloseProcess();
+                    std::wstring msg = FormatStrW(LoadStrW(IDS_ERROREXECEDIT),
+                                                  expCommandW.c_str(),
+                                                  GetErrorTextW(err));
+                    gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
+                }
+                else
+                {
+                    HANDLES_ADD(__htProcess, __hoCreateProcess, processHandle);
+                    HANDLES(CloseHandle(processHandle));
+                }
             }
         }
     }
@@ -1848,9 +1863,11 @@ void CFilesWindow::EditNewFile()
                         else
                         {
                             // Wide-only names without an ANSI/8.3 alias still need a wide shell fallback.
-                            HINSTANCE openRes = ShellExecuteW(HWindow, L"open", pathW.c_str(), NULL, NULL, SW_SHOWNORMAL);
-                            if ((INT_PTR)openRes <= 32)
-                                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), GetErrorTextW((DWORD)(INT_PTR)openRes));
+                            ShellExecResult openResult = gViewerEditorLauncher != NULL
+                                                             ? gViewerEditorLauncher->OpenFileWithShell(HWindow, pathW.c_str(), SW_SHOWNORMAL)
+                                                             : ShellExecResult::Error(ERROR_INVALID_PARAMETER);
+                            if (!openResult.success)
+                                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), GetErrorTextW(openResult.errorCode));
                         }
 
                         // change only in the directory where the file was created

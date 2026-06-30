@@ -27,8 +27,10 @@
 // Maximum path length with \\?\ prefix (Windows limit)
 #define SAL_MAX_LONG_PATH 32767
 
-// Default heap capacity for CPathBuffer instances.
-// CPathBuffer starts at 4KB and can grow up to SAL_MAX_LONG_PATH on demand.
+// Legacy writable capacity requested by CPathBuffer::Size().
+// CPathBuffer construction starts with inline MAX_PATH storage. Calls to
+// Size() lazily grow to this 4KB capacity because legacy long-path call sites
+// pass Size() directly to WinAPI as the writable buffer length.
 #define SAL_PATH_BUFFER_INITIAL_CAPACITY 4096
 
 // Inline fallback capacity for CPathBuffer (used before heap allocation succeeds).
@@ -41,8 +43,9 @@
 // CPathBuffer
 //
 // RAII path buffer.
-// Starts with a 4KB heap buffer and grows on demand up to SAL_MAX_LONG_PATH.
-// Keeps a MAX_PATH inline fallback only for low-memory allocation failure.
+// Starts with MAX_PATH inline storage and grows on demand up to SAL_MAX_LONG_PATH.
+// Calling Size() is treated as asking for the legacy writable buffer size, so
+// it lazily grows to SAL_PATH_BUFFER_INITIAL_CAPACITY.
 // Use this instead of char[MAX_PATH] for paths that may exceed 260 characters.
 //
 // Usage:
@@ -57,18 +60,16 @@
 class CPathBuffer
 {
 public:
-    // Constructs empty buffer (pre-allocates default 4KB heap capacity)
+    // Constructs empty buffer (inline storage, grows on demand)
     CPathBuffer() : m_buffer(m_inline), m_capacity(SAL_PATH_BUFFER_INLINE_CAPACITY)
     {
         m_inline[0] = '\0';
-        EnsureCapacity(SAL_PATH_BUFFER_INITIAL_CAPACITY);
     }
 
     // Constructs buffer initialized with a path
     explicit CPathBuffer(const char* initialPath) : m_buffer(m_inline), m_capacity(SAL_PATH_BUFFER_INLINE_CAPACITY)
     {
         m_inline[0] = '\0';
-        EnsureCapacity(SAL_PATH_BUFFER_INITIAL_CAPACITY);
         Assign(initialPath);
     }
 
@@ -101,15 +102,27 @@ public:
         return *this;
     }
 
-    // Returns pointer to the buffer
-    char* Get() { return m_buffer; }
+    // Returns pointer to the writable buffer. Writable access keeps the legacy
+    // Size() contract safe even when C++ evaluates function arguments in either
+    // order, e.g. SomeWinApi(path, path.Size()).
+    char* Get()
+    {
+        EnsureCapacity(SAL_PATH_BUFFER_INITIAL_CAPACITY);
+        return m_buffer;
+    }
     const char* Get() const { return m_buffer; }
-    char* Data() { return m_buffer; }
+    char* Data() { return Get(); }
     const char* CStr() const { return m_buffer; }
 
-    // Returns current buffer capacity in characters including null terminator.
+    // Returns writable buffer capacity in characters including null terminator.
     // NOTE: legacy call sites may expect this as "buffer size".
-    int Size() const { return m_capacity; }
+    int Size()
+    {
+        EnsureCapacity(SAL_PATH_BUFFER_INITIAL_CAPACITY);
+        return m_capacity;
+    }
+
+    // Returns the currently allocated capacity without forcing heap growth.
     int Capacity() const { return m_capacity; }
     int MaxCapacity() const { return SAL_MAX_LONG_PATH; }
     int Length() const { return (m_buffer != NULL) ? (int)strlen(m_buffer) : 0; }
@@ -189,7 +202,7 @@ public:
 
     // Implicit conversion for convenience
     // NOTE: kept for compatibility during migration. Prefer Data()/CStr().
-    operator char*() { return m_buffer; }
+    operator char*() { return Get(); }
     operator const char*() const { return m_buffer; }
 
     // Returns TRUE if allocation succeeded

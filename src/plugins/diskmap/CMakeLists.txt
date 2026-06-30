@@ -3,6 +3,7 @@
 
 sal_add_plugin(NAME diskmap
   SOURCES
+    "${SAL_SRC}/common/PanelTextPainter.cpp"
     # DiskMap core
     "${SAL_PLUGINS}/diskmap/DiskMap/GUI.CWindow.cpp"
     "${SAL_PLUGINS}/diskmap/DiskMap/GUI.MainWindow.cpp"

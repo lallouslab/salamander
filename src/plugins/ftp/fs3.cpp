@@ -805,7 +805,7 @@ void CPluginFSInterface::SendUserFTPCommand(HWND parent)
                 if (ok && !success && Path[0] != 0) // send succeeded, but the server reports an error (+ignore the error for an empty path) -> user command cannot
                 {                                   // be sent (it may be tied to the current path in the panel)
                     CPathBuffer errBuf;
-                    _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_CHANGEWORKPATHERROR), Path, ftpReplyBuf);
+                    _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_CHANGEWORKPATHERROR), Path.Get(), ftpReplyBuf);
                     SalamanderGeneral->SalMessageBox(parent, errBuf, LoadStr(IDS_FTPERRORTITLE),
                                                      MB_OK | MB_ICONEXCLAMATION);
                     ok = FALSE;

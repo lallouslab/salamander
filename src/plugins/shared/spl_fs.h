@@ -239,6 +239,18 @@ inline BOOL SPLFSWideToAnsiExact(const wchar_t* src, char* dst, int dstSize)
     if (src == NULL)
         return TRUE;
 
+    if (GetACP() == CP_UTF8)
+    {
+        int converted = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, src, -1, dst, dstSize, NULL, NULL);
+        if (converted == 0)
+        {
+            dst[0] = 0;
+            return FALSE;
+        }
+        dst[dstSize - 1] = 0;
+        return TRUE;
+    }
+
     BOOL usedDefaultChar = FALSE;
     int converted = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, src, -1, dst, dstSize, NULL, &usedDefaultChar);
     if (converted == 0 || usedDefaultChar)

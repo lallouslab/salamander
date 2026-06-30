@@ -76,6 +76,7 @@ unsigned ThreadViewerMessageLoopBody(void* parameter)
     //  CALL_STACK_MESSAGE1("MoresStanislav: ThreadViewerMessageLoopBody 3");
 
     if (data->Success &&
+#ifdef _UNICODE
         view->CreateEx(Configuration.AlwaysOnTop ? WS_EX_TOPMOST : 0,
                        CVIEWERWINDOW_CLASSNAME,
                        LoadStr(IDS_VIEWERTITLE),
@@ -88,6 +89,20 @@ unsigned ThreadViewerMessageLoopBody(void* parameter)
                        ViewerMenu,
                        HInstance,
                        view) != NULL)
+#else  // _UNICODE
+        view->CreateExW(Configuration.AlwaysOnTop ? WS_EX_TOPMOST : 0,
+                        CVIEWERWINDOW_CLASSNAMEW,
+                        LoadStrW(IDS_VIEWERTITLE),
+                        WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL,
+                        data->Left,
+                        data->Top,
+                        data->Width,
+                        data->Height,
+                        NULL,
+                        ViewerMenu,
+                        HInstance,
+                        view) != NULL)
+#endif // _UNICODE
     {
         //    TRACE_I("MoresStanislav: ThreadViewerMessageLoopBody 4");
         //    CALL_STACK_MESSAGE1("MoresStanislav: ThreadViewerMessageLoopBody 4");

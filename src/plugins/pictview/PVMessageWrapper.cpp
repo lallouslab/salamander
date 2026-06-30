@@ -7,6 +7,7 @@
 #ifdef PICTVIEW_DLL_IN_SEPARATE_PROCESS
 
 #include "pictview.h"
+#include "PVIPCNames.h"
 #include "PVMessage.h"
 
 // PVWrapperImageHandle wraps LPPVHandle for use by the Wrapper
@@ -46,7 +47,7 @@ bool PVMessage::Init(ePVMSG type, size_t dataSize, LPPVHandle pvHandle)
 
     pWImg = (LPPVWrapperImageHandle)pvHandle;
     iID = PVWrapper.MessageID++;
-    _sntprintf(fileMapName, SizeOf(fileMapName), _T("%s_%d"), PVWrapper.MutexName, iID);
+    BuildPictViewMessageMapName(fileMapName, SizeOf(fileMapName), PVWrapper.MutexName, iID);
     hFileMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
                                  0, (DWORD)(dataSize + sizeof(PVMessageHeader)), fileMapName);
     if (!hFileMap)
@@ -81,7 +82,7 @@ bool PVMessage::Exec()
     TCHAR eventName[32];
     HANDLE hEvent;
 
-    _sntprintf(eventName, SizeOf(eventName), _T("%s_ev%x"), PVWrapper.MutexName, iID);
+    BuildPictViewMessageEventName(eventName, SizeOf(eventName), PVWrapper.MutexName, iID);
     hEvent = CreateEvent(NULL, FALSE, FALSE, eventName);
     if (!hEvent)
     {
@@ -173,7 +174,7 @@ bool PVMessageWithProgress::Exec(TProgressProc Progress, void* AppSpecific)
     TCHAR eventName[32];
     HANDLE hEvt;
 
-    _sntprintf(eventName, SizeOf(eventName), _T("%s_ev%x"), PVWrapper.MutexName, iID);
+    BuildPictViewMessageEventName(eventName, SizeOf(eventName), PVWrapper.MutexName, iID);
     hEvt = CreateEvent(NULL, FALSE, FALSE, eventName);
     if (!hEvt)
     {
@@ -840,7 +841,7 @@ bool PVWrapperImageHandle::CreateSharedMemoryForHBitmap(HBITMAP hBitmap, char* p
     *pDataSize += bmpHeader.bmiHeader.biSizeImage;
 
     iFileMapID = PVWrapper.MessageID++;
-    _snprintf_s(pSharedMemoryName, maxSharedMemoryName, _TRUNCATE, "%s_img%d", PVWrapper.MutexName, iFileMapID);
+    BuildPictViewImageMapName(pSharedMemoryName, maxSharedMemoryName, PVWrapper.MutexName, iFileMapID);
     hFileMap = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, *pDataSize, pSharedMemoryName);
     if (!hFileMap)
     {
@@ -914,7 +915,7 @@ bool PVWrapperImageHandle::CreateSharedMemoryForMemoryBlock(LPBYTE pBuffer, DWOR
 {
     iFileMapID = PVWrapper.MessageID++;
 
-    _snprintf_s(pSharedMemoryName, maxSharedMemoryName, _TRUNCATE, "%s_img%d", PVWrapper.MutexName, iFileMapID);
+    BuildPictViewImageMapName(pSharedMemoryName, maxSharedMemoryName, PVWrapper.MutexName, iFileMapID);
     hFileMap = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, dataSize, pSharedMemoryName);
     if (!hFileMap)
     {

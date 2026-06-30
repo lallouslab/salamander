@@ -12,6 +12,7 @@
 #include "dialogs.h"
 #include "dbviewer.h"
 #include "plugindarkmode.h"
+#include "common/PanelTextPainter.h"
 
 //****************************************************************************
 //
@@ -46,8 +47,8 @@ void CRendererWindow::PaintTopMargin(HDC hDC, HRGN hUpdateRgn, const RECT* clipR
             SelectClipRgn(hDC, hUpdateRgn);
             r.left = x;
             r.right = x + RowHeight - 1;
-            ExtTextOut(hDC, x + LeftTextMargin, TopTextMargin, ETO_OPAQUE,
-                       &r, "", 0, NULL);
+            sally::ui::DrawPanelTextA(hDC, x + LeftTextMargin, TopTextMargin, ETO_OPAQUE,
+                                      &r, "", 0, NULL);
             // draw separator lines
             MoveToEx(hDC, r.left, r.bottom, NULL);
             LineTo(hDC, r.right, r.bottom);
@@ -99,15 +100,15 @@ void CRendererWindow::PaintTopMargin(HDC hDC, HRGN hUpdateRgn, const RECT* clipR
                             CodeCharacters(textBuffer, textLen);
                         }
 
-                        ExtTextOutA(hDC, x + LeftTextMargin, TopTextMargin, ETO_OPAQUE,
-                                    &r, textBuffer, (UINT)textLen, NULL);
+                        sally::ui::DrawPanelTextA(hDC, x + LeftTextMargin, TopTextMargin, ETO_OPAQUE,
+                                                  &r, textBuffer, (UINT)textLen, NULL);
                     }
                     else
                     {
                         LPCWSTR colName = (LPCWSTR)column->Name;
 
-                        ExtTextOutW(hDC, x + LeftTextMargin, TopTextMargin, ETO_OPAQUE,
-                                    &r, colName, (UINT)wcslen(colName), NULL);
+                        sally::ui::DrawPanelTextW(hDC, x + LeftTextMargin, TopTextMargin, ETO_OPAQUE,
+                                                  &r, colName, (UINT)wcslen(colName), NULL);
                     }
 
                     // draw separator lines
@@ -134,7 +135,7 @@ void CRendererWindow::PaintTopMargin(HDC hDC, HRGN hUpdateRgn, const RECT* clipR
         r.right = Width;
         r.bottom++;
         SetBkColor(hDC, colors.InputBackground);
-        ExtTextOut(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
+        sally::ui::DrawPanelTextA(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
     }
 
     SelectObject(hDC, hOldPen);
@@ -189,7 +190,7 @@ void CRendererWindow::PaintBody(HDC hDC, HRGN hUpdateRgn, const RECT* clipRect, 
                     SelectClipRgn(hDC, hUpdateRgn);
                     r.left = 0;
                     r.right = RowHeight - 1;
-                    ExtTextOut(hDC, 0, r.top, ETO_OPAQUE, &r, "", 0, NULL);
+                    sally::ui::DrawPanelTextA(hDC, 0, r.top, ETO_OPAQUE, &r, "", 0, NULL);
                     if (fetchedIndex != i)
                     {
                         if (!Database.FetchRecord(HWindow, i))
@@ -290,11 +291,11 @@ void CRendererWindow::PaintBody(HDC hDC, HRGN hUpdateRgn, const RECT* clipRect, 
                                 inSelection = TRUE;
                             }
                             if (!Database.GetIsUnicode())
-                                ExtTextOutA(hDC, x + LeftTextMargin + xOffset, r.top + TopTextMargin,
-                                            ETO_OPAQUE | ETO_CLIPPED, &r, textBuffer, (UINT)textLen, NULL);
+                                sally::ui::DrawPanelTextA(hDC, x + LeftTextMargin + xOffset, r.top + TopTextMargin,
+                                                          ETO_OPAQUE, &r, textBuffer, (UINT)textLen, NULL);
                             else
-                                ExtTextOutW(hDC, x + LeftTextMargin + xOffset, r.top + TopTextMargin,
-                                            ETO_OPAQUE | ETO_CLIPPED, &r, textW, (UINT)textLen, NULL);
+                                sally::ui::DrawPanelTextW(hDC, x + LeftTextMargin + xOffset, r.top + TopTextMargin,
+                                                          ETO_OPAQUE, &r, textW, (UINT)textLen, NULL);
                             if (Bookmarks.IsMarked(visibleIndex, i))
                             {
                                 if (HMarkedIcon == NULL)
@@ -338,7 +339,7 @@ void CRendererWindow::PaintBody(HDC hDC, HRGN hUpdateRgn, const RECT* clipRect, 
                 r2.left = x;
                 r2.right = Width;
                 r2.bottom++;
-                ExtTextOut(hDC, 0, 0, ETO_OPAQUE, &r2, "", 0, NULL);
+                sally::ui::DrawPanelTextA(hDC, 0, 0, ETO_OPAQUE, &r2, "", 0, NULL);
             }
         }
 
@@ -356,7 +357,7 @@ void CRendererWindow::PaintBody(HDC hDC, HRGN hUpdateRgn, const RECT* clipRect, 
         r.left = 0;
         r.right = Width;
         r.bottom = Height;
-        ExtTextOut(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
+        sally::ui::DrawPanelTextA(hDC, 0, 0, ETO_OPAQUE, &r, "", 0, NULL);
     }
 
     SelectObject(hDC, hOldPen);

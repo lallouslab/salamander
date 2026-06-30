@@ -363,39 +363,7 @@ inline std::wstring BuildPanelChildPathW(const std::wstring& parentPathW,
 
 inline bool TryExactAnsiFallback(const std::wstring& value, std::string& ansi)
 {
-    ansi.clear();
-    if (value.empty())
-        return true;
-
-    BOOL usedDefaultChar = FALSE;
-    int required = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, value.c_str(), -1,
-                                       NULL, 0, NULL, &usedDefaultChar);
-    if (required <= 0 || usedDefaultChar)
-        return false;
-
-    std::string converted((size_t)required, '\0');
-    usedDefaultChar = FALSE;
-    if (WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, value.c_str(), -1,
-                            converted.data(), required, NULL, &usedDefaultChar) == 0 ||
-        usedDefaultChar)
-    {
-        return false;
-    }
-    converted.resize((size_t)required - 1);
-
-    int roundTripLen = MultiByteToWideChar(CP_ACP, 0, converted.c_str(), -1, NULL, 0);
-    if (roundTripLen <= 0)
-        return false;
-
-    std::wstring roundTrip((size_t)roundTripLen, L'\0');
-    if (MultiByteToWideChar(CP_ACP, 0, converted.c_str(), -1, roundTrip.data(), roundTripLen) == 0)
-        return false;
-    roundTrip.resize((size_t)roundTripLen - 1);
-    if (roundTrip != value)
-        return false;
-
-    ansi = std::move(converted);
-    return true;
+    return TryWideToAnsiRoundTripExact(value, ansi);
 }
 
 inline bool WidePathNeedsExactPreservation(const wchar_t* widePath)

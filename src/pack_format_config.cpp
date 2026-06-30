@@ -11,6 +11,7 @@
 #include "execute.h"
 #include "plugins.h"
 #include "pack.h"
+#include "common/ExternalToolRunner.h"
 #include "common/IFileSystem.h"
 #include "common/widepath.h"
 #include "fileswnd.h"
@@ -1686,23 +1687,22 @@ BOOL PackExecute(HWND parent, char* cmdLine, const char* currentDir, TPackErrorT
         return FALSE;
 
     // set everything needed to create the process
-    PROCESS_INFORMATION pi;
-    STARTUPINFO si;
-    memset(&si, 0, sizeof(STARTUPINFO));
-    si.cb = sizeof(STARTUPINFO);
+    ExternalToolRequest request;
+    request.inheritHandles = true;
+    request.creationFlags = CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS;
     if (PackWinTimeout != 0)
     {
-        si.dwFlags = STARTF_USESHOWWINDOW;
+        request.useShowWindow = true;
+        request.showWindow = SW_MINIMIZE;
         POINT p;
         if (MultiMonGetDefaultWindowPos(MainWindow->HWindow, &p))
         {
             // if the main window is on another monitor we should open the new window there
             // preferably at the default position (as on the primary monitor)
-            si.dwFlags |= STARTF_USEPOSITION;
-            si.dwX = p.x;
-            si.dwY = p.y;
+            request.usePosition = true;
+            request.x = p.x;
+            request.y = p.y;
         }
-        si.wShowWindow = SW_MINIMIZE;
     }
 
     // Determine what we are actually running (for error reporting)
@@ -1728,13 +1728,32 @@ BOOL PackExecute(HWND parent, char* cmdLine, const char* currentDir, TPackErrorT
         return (*PackErrorHandlerPtr)(parent, IDS_PACKERR_NOMEM);
     sprintf(tmpCmdLine, "\"%s\" %s %s", SpawnExe, SPAWN_EXE_PARAMS, cmdLine);
     // launch the external program
-    if (!HANDLES(CreateProcess(NULL, tmpCmdLine, NULL, NULL, TRUE, CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS, NULL, currentDir, &si, &pi)))
+    std::wstring tmpCmdLineW = AnsiToWide(tmpCmdLine);
+    std::wstring currentDirW;
+    if (currentDir != NULL && currentDir[0] != 0)
+        currentDirW = AnsiToWide(currentDir);
+    request.commandLine = tmpCmdLineW.c_str();
+    request.workingDirectory = currentDirW.empty() ? NULL : currentDirW.c_str();
+
+    ExternalToolResult launchResult = gExternalToolRunner != NULL
+                                          ? gExternalToolRunner->Launch(request)
+                                          : ExternalToolResult::Error(ERROR_INVALID_PARAMETER);
+    if (!launchResult.success)
     {
-        DWORD err = GetLastError();
+        DWORD err = launchResult.errorCode;
         free(tmpCmdLine);
         return (*PackErrorHandlerPtr)(parent, IDS_PACKERR_PROCESS, SpawnExe, GetErrorText(err));
     }
     free(tmpCmdLine);
+    HANDLE processHandle = launchResult.DetachNativeProcessHandle();
+    if (processHandle == NULL)
+    {
+        DWORD err = GetLastError();
+        launchResult.CloseProcess();
+        return (*PackErrorHandlerPtr)(parent, IDS_PACKERR_PROCESS, SpawnExe, GetErrorText(err));
+    }
+    HANDLES_ADD(__htProcess, __hoCreateProcess, processHandle);
+    DWORD processId = launchResult.processId;
 
     // create a modal window
     HWND hFocusedWnd = GetFocus();
@@ -1748,7 +1767,7 @@ BOOL PackExecute(HWND parent, char* cmdLine, const char* currentDir, TPackErrorT
     // activate the hourglass cursor
     HCURSOR prevCrsr = SetCursor(LoadCursor(NULL, IDC_WAIT));
     // Wait for the external program to finish
-    HANDLE objects[] = {pi.hProcess};
+    HANDLE objects[] = {processHandle};
     DWORD start = GetTickCount();
     DWORD elapsed = 0;
 
@@ -1799,7 +1818,7 @@ BOOL PackExecute(HWND parent, char* cmdLine, const char* currentDir, TPackErrorT
         {
             win = FindWindowEx(NULL, win, "ConsoleWindowClass", NULL);
             GetWindowThreadProcessId(win, &pid);
-            if (pid == pi.dwProcessId)
+            if (pid == processId)
             {
                 ShowWindow(win, SW_RESTORE);
                 break;
@@ -1847,26 +1866,23 @@ BOOL PackExecute(HWND parent, char* cmdLine, const char* currentDir, TPackErrorT
         char buffer[1000];
         strcpy(buffer, "WaitForSingleObject: ");
         strcat(buffer, GetErrorText(GetLastError()));
-        HANDLES(CloseHandle(pi.hProcess));
-        HANDLES(CloseHandle(pi.hThread));
+        HANDLES(CloseHandle(processHandle));
         return (*PackErrorHandlerPtr)(parent, IDS_PACKERR_GENERAL, buffer);
     }
 
     // and find out how it ended - hopefully they all return 0 as success
     DWORD exitCode;
-    if (!GetExitCodeProcess(pi.hProcess, &exitCode))
+    if (!GetExitCodeProcess(processHandle, &exitCode))
     {
         char buffer[1000];
         strcpy(buffer, "GetExitCodeProcess: ");
         strcat(buffer, GetErrorText(GetLastError()));
-        HANDLES(CloseHandle(pi.hProcess));
-        HANDLES(CloseHandle(pi.hThread));
+        HANDLES(CloseHandle(processHandle));
         return (*PackErrorHandlerPtr)(parent, IDS_PACKERR_GENERAL, buffer);
     }
 
     // release handles of the process
-    HANDLES(CloseHandle(pi.hProcess));
-    HANDLES(CloseHandle(pi.hThread));
+    HANDLES(CloseHandle(processHandle));
 
     if (exitCode != 0)
     {

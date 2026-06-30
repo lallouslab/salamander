@@ -15,41 +15,6 @@
 #define DIALOG_WIDE_MARGIN_HEIGHT 14
 #define BUTTONS_SPACING 4
 
-static UINT_PTR GetPtrValue(const void* value)
-{
-    return reinterpret_cast<UINT_PTR>(value);
-}
-
-static BOOL IsWordResourceValue(const wchar_t* value)
-{
-    return value != NULL && (GetPtrValue(value) >> 16) == 0;
-}
-
-static WORD GetWordResourceID(const wchar_t* value)
-{
-    return LOWORD(GetPtrValue(value));
-}
-
-static wchar_t* MakeWordResourceValue(WORD value)
-{
-    return reinterpret_cast<wchar_t*>((UINT_PTR)value);
-}
-
-static BOOL IsClassAtomValue(const wchar_t* value)
-{
-    return value != NULL && LOWORD(GetPtrValue(value)) == 0xFFFF;
-}
-
-static WORD GetClassAtomID(const wchar_t* value)
-{
-    return HIWORD(GetPtrValue(value));
-}
-
-static wchar_t* MakeClassAtomValue(WORD value)
-{
-    return reinterpret_cast<wchar_t*>((UINT_PTR)MAKELONG(0xFFFF, value));
-}
-
 static WORD* AlignWordPtrToDword(WORD* value)
 {
     return reinterpret_cast<WORD*>((GetPtrValue(value) + 3) & ~(UINT_PTR)3);
@@ -73,7 +38,7 @@ CStringList::~CStringList()
 
 BOOL CStringList::AddString(const char* string)
 {
-    int len = strlen(string);
+    int len = (int)strlen(string);
     char* buff = (char*)malloc(len + 1);
     if (buff == NULL)
     {
@@ -97,7 +62,7 @@ BOOL CStringList::GetStrings(char* buff, int size)
     *iter = 0;
     for (int i = 0; i < Strings.Count; i++)
     {
-        int strLen = strlen(Strings[i]);
+        int strLen = (int)strlen(Strings[i]);
         if (size - (iter - buff) <= strLen + 2)
         {
             TRACE_E("Buffer too small!");
@@ -1622,7 +1587,7 @@ CDialogData::PrepareTemplate(WORD* buff, BOOL addProgress, BOOL forPreview, BOOL
             *dialogHeight = (WORD)maxControlsRect.bottom;
     }
 
-    return (p - buff) * 2;
+    return (DWORD)((p - buff) * 2);
 }
 
 void CDialogData::TemplateAddRemoveStyles(WORD* buff, DWORD addStyles, DWORD removeStyles)

@@ -1,7 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2026 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "precomp.h"
 #include "IProcess.h"
 #include <stdlib.h>
 #include <string.h>
@@ -24,12 +23,32 @@ public:
 
         memset(&si, 0, sizeof(si));
         si.cb = sizeof(si);
+        si.lpTitle = const_cast<LPWSTR>(startInfo.windowTitle);
 
         // Set window visibility
         if (startInfo.hideWindow)
         {
             si.dwFlags |= STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_HIDE;
+        }
+        else if (startInfo.useShowWindow)
+        {
+            si.dwFlags |= STARTF_USESHOWWINDOW;
+            si.wShowWindow = startInfo.showWindow;
+        }
+
+        if (startInfo.usePosition)
+        {
+            si.dwFlags |= STARTF_USEPOSITION;
+            si.dwX = startInfo.x;
+            si.dwY = startInfo.y;
+        }
+
+        if (startInfo.useSize)
+        {
+            si.dwFlags |= STARTF_USESIZE;
+            si.dwXSize = startInfo.width;
+            si.dwYSize = startInfo.height;
         }
 
         // Set standard handles if provided
@@ -158,6 +177,23 @@ public:
         if (state->hProcess)
             ::CloseHandle(state->hProcess);
         free(state);
+    }
+
+    HANDLE DetachProcessHandle(HPROCESS process) override
+    {
+        if (!process)
+        {
+            SetLastError(ERROR_INVALID_HANDLE);
+            return NULL;
+        }
+
+        ProcessState* state = static_cast<ProcessState*>(process);
+        HANDLE hProcess = state->hProcess;
+        state->hProcess = NULL;
+        free(state);
+        if (hProcess == NULL)
+            SetLastError(ERROR_INVALID_HANDLE);
+        return hProcess;
     }
 
     DWORD GetProcessId(HPROCESS process) override

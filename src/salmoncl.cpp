@@ -5,6 +5,7 @@
 #include "precomp.h"
 
 #include "salmoncl.h"
+#include "salmon_registry_mutex_policy.h"
 #include "common/unicode/helpers.h"
 
 #define MAX_ENV_PATH 32766
@@ -30,7 +31,7 @@ HANDLE GetBugReporterRegistryMutex()
     SetSecurityDescriptorDacl(secAttr.lpSecurityDescriptor, TRUE, 0, FALSE);
     // it would be convenient to add SID to the mutex name, because processes with different SID run with a different HKCU tree
     // but for simplicity we skip that and the mutex will be truly global
-    const char* MUTEX_NAME = SAL_REG_MUTEX_GLOBAL_BUG_REPORTER_A;
+    const char* MUTEX_NAME = sally::salmon::BugReporterRegistryMutexName();
     HANDLE hMutex = NOHANDLES(CreateMutex(&secAttr, FALSE, MUTEX_NAME));
     if (hMutex == NULL) // create can already open an existing mutex, but it can fail, so we try open afterwards
         hMutex = NOHANDLES(OpenMutex(SYNCHRONIZE, FALSE, MUTEX_NAME));

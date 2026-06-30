@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "remote_ipc_names.h"
 
 // ****************************************************************************
 //
@@ -85,7 +86,9 @@ CRemoteComparator::Body()
     if (!MessageCenter.IsGood())
         return -1;
     BOOL ret;
-    HANDLE started = CreateEvent(NULL, TRUE, FALSE, StartedEventName);
+    char startedEventName[128];
+    sally::filecomp::BuildFileCompStartedEventNameForCurrentProcess(startedEventName, (int)sizeof(startedEventName));
+    HANDLE started = CreateEvent(NULL, TRUE, FALSE, startedEventName);
     SetEvent(started);
     while (1)
     {

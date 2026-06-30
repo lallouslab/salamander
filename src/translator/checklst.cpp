@@ -36,7 +36,7 @@ BOOL ProcessCheckLstLineAux(const char* overlapHeader, BOOL readDlgAndCtrlID, BO
                             int listMaxCount, const char*& p, const char* lineEnd, CCheckLstItem* item, BOOL& ret)
 {
     ret = FALSE;
-    int overlapHeaderLen = strlen(overlapHeader);
+    int overlapHeaderLen = (int)strlen(overlapHeader);
     if (lineEnd - p > overlapHeaderLen && _strnicmp(p, overlapHeader, overlapHeaderLen) == 0)
     {
         p += overlapHeaderLen;
@@ -251,7 +251,7 @@ BOOL CData::LoadCheckLst(const char* fileName)
         {
             char errbuf[MAX_PATH + 200];
             char lineText[100];
-            lstrcpyn(lineText, lineStart, min(100, (lineEnd - lineStart) + 1));
+            lstrcpyn(lineText, lineStart, min(100, (int)(lineEnd - lineStart + 1)));
             sprintf_s(errbuf, "Error reading CheckList data from file:\n"
                               "%s\n"
                               "\n"

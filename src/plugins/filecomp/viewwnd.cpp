@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "paint_helpers.h"
 #include <iterator>
 
 #undef min
@@ -217,7 +218,7 @@ CFileViewWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             RECT r;
             GetClientRect(HWindow, &r);
             SetBkColor(dc, LineColors[LC_NORMAL].BkColor);
-            ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r, NULL, 0, NULL);
+            FileCompFillRect(dc, &r);
             EndPaint(HWindow, &ps);
         }
         return 0;

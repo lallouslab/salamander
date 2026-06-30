@@ -2,9 +2,14 @@
 // SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#ifdef SALLY_PLUGCORE_STANDALONE_PRECOMP
+#include SALLY_PLUGCORE_STANDALONE_PRECOMP
+#else
 #include "precomp.h"
+#endif
 
 #include "messages.h"
+#include "messages_ipc_names.h"
 
 // ****************************************************************************
 //
@@ -17,6 +22,8 @@ CMessageCenter::CMessageCenter(const char* name, BOOL sender)
 {
     CALL_STACK_MESSAGE3("CMessageCenter::CMessageCenter(%s, %d)", name, sender);
     lstrcpy(Name = new char[lstrlen(name) + 1], name);
+    ObjectName = new char[lstrlen(name) + 130];
+    sally::plugcore::BuildMessageCenterObjectNameForCurrentProcess(ObjectName, lstrlen(name) + 130, name);
     Sender = sender;
 
     StartupMutex = NULL;
@@ -36,6 +43,8 @@ CMessageCenter::~CMessageCenter()
     Release();
     if (Name)
         delete[] Name;
+    if (ObjectName)
+        delete[] ObjectName;
 }
 
 void my_memcpy2(void* dst, const void* src, int len)
@@ -213,7 +222,7 @@ BOOL CMessageCenter::Init()
     do
     {
         // only one process may go through init
-        str = Concatenate(Name, " - Startup Mutex");
+        str = Concatenate(ObjectName, " - Startup Mutex");
         if (Sender)
         {
             // sender can activate only if the receiver is running
@@ -243,7 +252,7 @@ BOOL CMessageCenter::Init()
         }
 
         // create synchronization objects
-        str = Concatenate(Name, " - Data Mutex");
+        str = Concatenate(ObjectName, " - Data Mutex");
         DataMutex = Sender ? OpenMutex(MUTEX_ALL_ACCESS, FALSE, str) : CreateMutex(NULL, FALSE, str);
         if (!DataMutex)
         {
@@ -251,9 +260,9 @@ BOOL CMessageCenter::Init()
             break;
         }
 
-        str = Concatenate(Name, " - Buffer Full");
+        str = Concatenate(ObjectName, " - Buffer Full");
         BufferFree = Sender ? OpenEvent(EVENT_ALL_ACCESS, FALSE, str) : CreateEvent(NULL, TRUE, FALSE, str);
-        str = Concatenate(Name, " - Have Message");
+        str = Concatenate(ObjectName, " - Have Message");
         HaveMessage = Sender ? OpenEvent(EVENT_ALL_ACCESS, FALSE, str) : CreateEvent(NULL, TRUE, FALSE, str);
         if (!BufferFree || !HaveMessage)
         {
@@ -263,7 +272,7 @@ BOOL CMessageCenter::Init()
 
         // create shared memory segment
         const char* mapname = Concatenate(
-            Concatenate(Name, " - Buffer v"), Version);
+            Concatenate(ObjectName, " - Buffer v"), Version);
         FileMapping = Sender ? OpenFileMapping(FILE_MAP_WRITE, FALSE, mapname) : CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, // FIXME_X64 are we passing x86/x64-incompatible data?
                                                                                                    BufferSize, mapname);
         if (!FileMapping)

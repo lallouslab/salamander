@@ -432,7 +432,8 @@ protected:
 class CErrorReadingADSDlg : public CCommonDialog
 {
 public:
-    CErrorReadingADSDlg(HWND parent, const char* file, const char* error, const char* title = NULL);
+    CErrorReadingADSDlg(HWND parent, const char* file, const char* error,
+                        const char* title = NULL, const wchar_t* fileW = NULL);
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -440,6 +441,7 @@ protected:
     const char *File,
         *Error,
         *Title;
+    const wchar_t* FileW;
 };
 
 //
@@ -540,12 +542,14 @@ protected:
 class CConfirmADSLossDlg : public CCommonDialog
 {
 public:
-    CConfirmADSLossDlg(HWND parent, BOOL isFile, const char* name, const char* streams, BOOL isMove);
+    CConfirmADSLossDlg(HWND parent, BOOL isFile, const char* name, const char* streams,
+                       BOOL isMove, const wchar_t* nameW = NULL);
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     const char* Name;
+    const wchar_t* NameW;
     const char* Streams;
     BOOL IsFile;
     BOOL IsMove;

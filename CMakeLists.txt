@@ -524,6 +524,7 @@ add_library(salext MODULE
   "${SAL_SRC}/shellext/shellext.c"
   "${SAL_SRC}/shellext/shexinit.c"
   "${SAL_SRC}/shexreg.c"
+  "${SAL_SRC}/shexreg_ipc_names.c"
   "${SAL_SRC}/shellext/shellext.rc"
 )
 

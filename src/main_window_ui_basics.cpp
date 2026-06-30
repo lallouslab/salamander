@@ -1679,31 +1679,39 @@ void CMainWindow::AddTrayIcon(BOOL updateIcon)
 {
     CALL_STACK_MESSAGE1("CMainWindow::AddTrayIcon()");
 
-    NOTIFYICONDATA tnid;
-    tnid.cbSize = sizeof(NOTIFYICONDATA);
+    NOTIFYICONDATAW tnid;
+    memset(&tnid, 0, sizeof(tnid));
+    tnid.cbSize = sizeof(tnid);
     tnid.hWnd = HWindow;
     tnid.uID = TASKBAR_ICON_ID;
     tnid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     tnid.uCallbackMessage = WM_USER_ICON_NOTIFY;
     int resID = MainWindowIcons[Configuration.GetMainWindowIconIndex()].IconResID;
     tnid.hIcon = SalLoadIcon(HInstance, resID, IconSizes[ICONSIZE_16]);
-    lstrcpyn(tnid.szTip, MAINWINDOW_NAME, sizeof(tnid.szTip));
-    Shell_NotifyIcon(updateIcon ? NIM_MODIFY : NIM_ADD, &tnid);
+    std::wstring tipW = AnsiToWide(MAINWINDOW_NAME);
+    lstrcpynW(tnid.szTip, tipW.c_str(), sizeof(tnid.szTip) / sizeof(tnid.szTip[0]));
+    Shell_NotifyIconW(updateIcon ? NIM_MODIFY : NIM_ADD, &tnid);
     HANDLES(DestroyIcon(tnid.hIcon));
 }
 
 void CMainWindow::RemoveTrayIcon()
 {
     CALL_STACK_MESSAGE1("CMainWindow::RemoveTrayIcon()");
-    NOTIFYICONDATA tnid;
-    tnid.cbSize = sizeof(NOTIFYICONDATA);
+    NOTIFYICONDATAW tnid;
+    memset(&tnid, 0, sizeof(tnid));
+    tnid.cbSize = sizeof(tnid);
     tnid.hWnd = HWindow;
     tnid.uID = TASKBAR_ICON_ID;
     tnid.uFlags = 0;
-    Shell_NotifyIcon(NIM_DELETE, &tnid);
+    Shell_NotifyIconW(NIM_DELETE, &tnid);
 }
 
 void CMainWindow::SetTrayIconText(const char* text)
+{
+    SetTrayIconTextW(AnsiToWide(text != NULL ? text : "").c_str());
+}
+
+void CMainWindow::SetTrayIconTextW(const wchar_t* text)
 {
     CALL_STACK_MESSAGE1("CMainWindow::SetTrayIconText()");
     if (!Configuration.StatusArea)
@@ -1711,13 +1719,14 @@ void CMainWindow::SetTrayIconText(const char* text)
         TRACE_E("CMainWindow::SetTrayIconText(): !Configuration.StatusArea");
         return;
     }
-    NOTIFYICONDATA tnid;
-    tnid.cbSize = sizeof(NOTIFYICONDATA);
+    NOTIFYICONDATAW tnid;
+    memset(&tnid, 0, sizeof(tnid));
+    tnid.cbSize = sizeof(tnid);
     tnid.hWnd = HWindow;
     tnid.uID = TASKBAR_ICON_ID;
     tnid.uFlags = NIF_TIP;
-    lstrcpyn(tnid.szTip, text, sizeof(tnid.szTip));
-    Shell_NotifyIcon(NIM_MODIFY, &tnid);
+    lstrcpynW(tnid.szTip, text != NULL ? text : L"", sizeof(tnid.szTip) / sizeof(tnid.szTip[0]));
+    Shell_NotifyIconW(NIM_MODIFY, &tnid);
 }
 
 void CMainWindow::GetFormatedPathForTitle(char* path)
@@ -2043,7 +2052,7 @@ void CMainWindow::SetWindowTitle(const char* text)
     {
         ::SetWindowTextW(HWindow, textW.c_str());
         if (Configuration.StatusArea)
-            SetTrayIconText(WideToAnsi(textW).c_str());
+            SetTrayIconTextW(textW.c_str());
     }
     else if (strcmp(text, buff) != 0)
     {

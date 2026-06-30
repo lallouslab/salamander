@@ -1844,9 +1844,9 @@ void CFTPOpenedFile::Set(int myUID, const char* user, const char* host, unsigned
     lstrcpyn(User, user, USER_MAX_SIZE);
     lstrcpyn(Host, host, HOST_MAX_SIZE);
     Port = port;
-    lstrcpyn(Path, path, Path.Size());
+    lstrcpyn(Path, path, FTP_MAX_PATH);
     PathType = pathType;
-    lstrcpyn(Name, name, Name.Size());
+    lstrcpyn(Name, name);
 }
 
 BOOL CFTPOpenedFile::IsSameFile(const char* user, const char* host, unsigned short port,

@@ -21,6 +21,7 @@
 #ifdef PICTVIEW_DLL_IN_SEPARATE_PROCESS
 
 #include "PVEXEWrapper.h"
+#include "PVIPCNames.h"
 #include "PVMessage.h"
 #include "PixelAccess.h"
 #include "Thumbnailer.h"
@@ -79,7 +80,7 @@ BOOL InitPVEXEWrapper(HWND hParentWnd, LPCTSTR pPluginFolder)
 
     _tcscpy(PVWrapper.EnvelopePath, pPluginFolder);
     _tcscat(PVWrapper.EnvelopePath, _T("\\SalPVEnv.exe"));
-    _sntprintf(PVWrapper.MutexName, SizeOf(PVWrapper.MutexName), _T("PVEXE_%08X"), GetCurrentProcessId());
+    BuildPictViewEnvelopeMutexName(PVWrapper.MutexName, SizeOf(PVWrapper.MutexName), GetCurrentProcessId());
     PVWrapper.hMutex = CreateMutex(NULL, TRUE, PVWrapper.MutexName);
     _ASSERTE(GetLastError() != ERROR_ALREADY_EXISTS);
     if (!PVWrapper.hMutex)
@@ -88,7 +89,7 @@ BOOL InitPVEXEWrapper(HWND hParentWnd, LPCTSTR pPluginFolder)
     }
 
     // NOTE: the name of the exe in the Command line is not important. It just must be something.
-    _sntprintf(PVWrapper.CommandLine, SizeOf(PVWrapper.CommandLine), _T("SalPVEnv.exe %s"), PVWrapper.MutexName);
+    BuildPictViewEnvelopeCommandLine(PVWrapper.CommandLine, SizeOf(PVWrapper.CommandLine), PVWrapper.MutexName);
     if (!LoadEnvelope())
     {
         CloseHandle(PVWrapper.hMutex);

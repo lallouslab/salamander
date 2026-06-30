@@ -7,6 +7,7 @@
 #include "mainwnd.h"
 #include "tasklist.h"
 #include "plugins.h"
+#include "common/InstanceNamespace.h"
 extern "C"
 {
 #include "shexreg.h"
@@ -262,6 +263,12 @@ BOOL CTaskList::Init()
 {
     OK = FALSE;
 
+    std::string processListName = sally::instance::BuildSharedObjectNameForCurrentInstance(AS_PROCESSLIST_NAME);
+    std::string processListMutexName = sally::instance::BuildSharedObjectNameForCurrentInstance(AS_PROCESSLIST_MUTEX_NAME);
+    std::string processListEventName = sally::instance::BuildSharedObjectNameForCurrentInstance(AS_PROCESSLIST_EVENT_NAME);
+    std::string processListEventProcessedName = sally::instance::BuildSharedObjectNameForCurrentInstance(AS_PROCESSLIST_EVENT_PROCESSED_NAME);
+    std::string firstInstanceMutexBaseName = sally::instance::BuildSharedObjectNameForCurrentInstance(FIRST_SALAMANDER_MUTEX_NAME);
+
     PSID psidEveryone;
     PACL paclNewDacl;
     SECURITY_ATTRIBUTES sa;
@@ -271,32 +278,34 @@ BOOL CTaskList::Init()
     //---  first a side note: under Vista+ we create an event for communication with copy-hook (it's waited for in control-thread)
     if (WindowsVistaAndLater)
     {
-        SalShExtDoPasteEvent = NOHANDLES(CreateEvent(saPtr, TRUE, FALSE, SALSHEXT_DOPASTEEVENTNAME));
+        char doPasteEventName[256];
+        const char* shellExtDoPasteEventName = SALSHEXT_GetDoPasteEventName(doPasteEventName, _countof(doPasteEventName));
+        SalShExtDoPasteEvent = NOHANDLES(CreateEvent(saPtr, TRUE, FALSE, shellExtDoPasteEventName));
         if (SalShExtDoPasteEvent == NULL)
-            SalShExtDoPasteEvent = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, SALSHEXT_DOPASTEEVENTNAME));
+            SalShExtDoPasteEvent = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, shellExtDoPasteEventName));
         if (SalShExtDoPasteEvent == NULL)
             TRACE_E("CTaskList::Init(): unable to create event object for communicating with copy-hook shell extension!");
     }
 
     //---  try to attach to FMO-mutex - at the same time test if some Salamander is already running
-    FMOMutex = NOHANDLES(OpenMutex(SYNCHRONIZE, FALSE, AS_PROCESSLIST_MUTEX_NAME));
+    FMOMutex = NOHANDLES(OpenMutex(SYNCHRONIZE, FALSE, processListMutexName.c_str()));
     if (FMOMutex == NULL) // we're the first Salamander 3.0 or newer in the local session
     {
         //---  creation of system objects for communication, acquire FMO
-        FMOMutex = NOHANDLES(CreateMutex(saPtr, TRUE, AS_PROCESSLIST_MUTEX_NAME)); // task list is valid only for the given session, mutex belongs to local namespace
+        FMOMutex = NOHANDLES(CreateMutex(saPtr, TRUE, processListMutexName.c_str())); // task list is valid only for the given session, mutex belongs to local namespace
         if (FMOMutex == NULL)
             return FALSE; // fail
         FMO = NOHANDLES(CreateFileMapping(INVALID_HANDLE_VALUE, saPtr, PAGE_READWRITE | SEC_COMMIT,
-                                          0, sizeof(CProcessList), AS_PROCESSLIST_NAME));
+                                          0, sizeof(CProcessList), processListName.c_str()));
         if (FMO == NULL)
             return FALSE; // fail
         ProcessList = (CProcessList*)NOHANDLES(MapViewOfFile(FMO, FILE_MAP_WRITE, 0, 0, 0));
         if (ProcessList == NULL)
             return FALSE; // fail
-        Event = NOHANDLES(CreateEvent(saPtr, TRUE, FALSE, AS_PROCESSLIST_EVENT_NAME));
+        Event = NOHANDLES(CreateEvent(saPtr, TRUE, FALSE, processListEventName.c_str()));
         if (Event == NULL)
             return FALSE; // fail
-        EventProcessed = NOHANDLES(CreateEvent(saPtr, TRUE, FALSE, AS_PROCESSLIST_EVENT_PROCESSED_NAME));
+        EventProcessed = NOHANDLES(CreateEvent(saPtr, TRUE, FALSE, processListEventProcessedName.c_str()));
         if (EventProcessed == NULL)
             return FALSE; // fail
 
@@ -319,17 +328,17 @@ BOOL CTaskList::Init()
             return FALSE; // fail
 
         //---  attach to other system objects for communication
-        FMO = NOHANDLES(OpenFileMapping(FILE_MAP_WRITE, FALSE, AS_PROCESSLIST_NAME));
+        FMO = NOHANDLES(OpenFileMapping(FILE_MAP_WRITE, FALSE, processListName.c_str()));
         if (FMO == NULL)
             return FALSE; // fail
         ProcessList = (CProcessList*)NOHANDLES(MapViewOfFile(FMO, FILE_MAP_WRITE, 0, 0, 0));
         if (ProcessList == NULL)
             return FALSE; // fail
         // to be able to call SetEvent() on event, it must have EVENT_MODIFY_STATE set, for Wait* it needs SYNCHRONIZE
-        Event = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, AS_PROCESSLIST_EVENT_NAME));
+        Event = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, processListEventName.c_str()));
         if (Event == NULL)
             return FALSE; // fail
-        EventProcessed = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, AS_PROCESSLIST_EVENT_PROCESSED_NAME));
+        EventProcessed = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, processListEventProcessedName.c_str()));
         if (EventProcessed == NULL)
             return FALSE; // fail
 
@@ -366,11 +375,11 @@ BOOL CTaskList::Init()
     if (sid == NULL)
     {
         // error getting SID -- local name space, without attached SID
-        _snprintf_s(mutexName, _TRUNCATE, "%s", FIRST_SALAMANDER_MUTEX_NAME);
+        _snprintf_s(mutexName, _TRUNCATE, "%s", firstInstanceMutexBaseName.c_str());
     }
     else
     {
-        _snprintf_s(mutexName, _TRUNCATE, "Global\\%s_%s", FIRST_SALAMANDER_MUTEX_NAME, sid);
+        _snprintf_s(mutexName, _TRUNCATE, "Global\\%s_%s", firstInstanceMutexBaseName.c_str(), sid);
         LocalFree(sid);
     }
     HANDLE hMutex = NOHANDLES(CreateMutex(saPtr, FALSE, mutexName));
