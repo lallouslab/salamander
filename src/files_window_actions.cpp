@@ -3802,18 +3802,48 @@ void CFilesWindow::RefreshListBox(int suggestedXOffset,
         for (i = 0; i < Dirs->Count; i++)
         {
             CFileData* f = &Dirs->At(i);
-            AlterFileName(formatedFileName, f->Name, f->NameLen,
-                          Configuration.FileNameFormat, 0, TRUE);
-            GetTextExtentPoint32(dc, formatedFileName, f->NameLen, &act);
+            sally::unicode::NameWidthMeasurementPlan widthPlan =
+                sally::unicode::BuildNameWidthMeasurementPlan(
+                    f->Name,
+                    f->NameLen,
+                    f->Ext,
+                    f->NameW,
+                    true,
+                    Configuration.SortDirsByExt != FALSE,
+                    IsExtensionInSeparateColumn() != FALSE,
+                    sally::unicode::NameColumnViewMode::Brief);
+            if (widthPlan.UseWide)
+                GetTextExtentPoint32W(dc, f->NameW, widthPlan.NameLength, &act);
+            else
+            {
+                AlterFileName(formatedFileName, f->Name, f->NameLen,
+                              Configuration.FileNameFormat, 0, TRUE);
+                GetTextExtentPoint32(dc, formatedFileName, widthPlan.NameLength, &act);
+            }
             if (max.cx < act.cx)
                 max.cx = act.cx;
         }
         for (i = 0; i < Files->Count; i++)
         {
             CFileData* f = &Files->At(i);
-            AlterFileName(formatedFileName, f->Name, f->NameLen,
-                          Configuration.FileNameFormat, 0, FALSE);
-            GetTextExtentPoint32(dc, formatedFileName, f->NameLen, &act);
+            sally::unicode::NameWidthMeasurementPlan widthPlan =
+                sally::unicode::BuildNameWidthMeasurementPlan(
+                    f->Name,
+                    f->NameLen,
+                    f->Ext,
+                    f->NameW,
+                    false,
+                    Configuration.SortDirsByExt != FALSE,
+                    IsExtensionInSeparateColumn() != FALSE,
+                    sally::unicode::NameColumnViewMode::Brief);
+            if (widthPlan.UseWide)
+                GetTextExtentPoint32W(dc, f->NameW, widthPlan.NameLength, &act);
+            else
+            {
+                AlterFileName(formatedFileName, f->Name, f->NameLen,
+                              Configuration.FileNameFormat, 0, FALSE);
+                GetTextExtentPoint32(dc, formatedFileName, widthPlan.NameLength, &act);
+            }
             if (max.cx < act.cx)
                 max.cx = act.cx;
         }
@@ -3993,7 +4023,8 @@ void CFilesWindow::RefreshListBox(int suggestedXOffset,
                     f->NameW,
                     isDir != FALSE,
                     Configuration.SortDirsByExt != FALSE,
-                    extIsInExtColumn != FALSE);
+                    extIsInExtColumn != FALSE,
+                    sally::unicode::NameColumnViewMode::Detailed);
             if (Columns[0].FixedWidth == 0 || (autoWidthColumns & VIEW_SHOW_EXTENSION) && extIsInExtColumn)
             {
                 if (Columns[0].FixedWidth == 0)

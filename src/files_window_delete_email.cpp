@@ -1246,19 +1246,13 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                     BOOL cancel = FALSE;
                     if (!emptyScript && res2 && (type == atCopy || type == atMove))
                     {
-                        BOOL occupiedSpTooBig = script->OccupiedSpace != CQuadWord(0, 0) &&
-                                                script->BytesPerCluster != 0 && // we have disk information
-                                                script->OccupiedSpace > script->FreeSpace &&
-                                                !IsSambaDrivePath(path); // Samba returns incorrect cluster size, so we can only rely on TotalFileSize
-
-                        if (occupiedSpTooBig ||
-                            script->BytesPerCluster != 0 && // we have disk information
-                                script->TotalFileSize > script->FreeSpace)
+                        CQuadWord requiredSpace;
+                        if (ShouldWarnNotEnoughSpaceForCopyMove(script, path, &requiredSpace))
                         {
                             char buf1[50];
                             char buf2[50];
                             std::wstring msg = FormatStrW(LoadStrW(IDS_NOTENOUGHSPACE),
-                                                          AnsiToWide(NumberToStr(buf1, occupiedSpTooBig ? script->OccupiedSpace : script->TotalFileSize)).c_str(),
+                                                          AnsiToWide(NumberToStr(buf1, requiredSpace)).c_str(),
                                                           AnsiToWide(NumberToStr(buf2, script->FreeSpace)).c_str());
                             cancel = gPrompter->AskYesNo(captionW, msg.c_str()).type != PromptResult::kYes;
                         }

@@ -1327,7 +1327,7 @@ void CFTPWorker::HandleEvent(CFTPWorkerEvent event, char* reply, int replySize, 
     {
         // since we are already inside CSocketsThread::CritSect, this call
         // is also possible from CSocket::SocketCritSect (no risk of deadlock)
-        SocketsThread->PostSocketMessage(Msg, UID, WORKER_ACTIVATE, NULL); // ignore errors; at worst the user will press Stop
+        PostActivateMsg(); // ignore errors; at worst the user will press Stop
     }
     if (operStatusMaybeChanged)
         Oper->OperationStatusMaybeChanged();

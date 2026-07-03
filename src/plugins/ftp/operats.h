@@ -1393,6 +1393,9 @@ public:
     // returns a copy of CSocket::Msg (in the WorkerCritSect critical section)
     int GetCopyOfMsg();
 
+    // returns a validated cached socket post target for worker messages
+    BOOL GetPostTarget(int* msg, int* uid);
+
     // returns LogUID (in the WorkerCritSect critical section)
     int GetLogUID();
 

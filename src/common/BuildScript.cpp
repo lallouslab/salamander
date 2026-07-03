@@ -259,8 +259,8 @@ static bool AddOperation(COperations* script, COperation& op)
 }
 
 static DWORD TargetEncryptionFlag(DWORD sourceAttr,
-                                  const CBuildConfig& config,
-                                  COperations* script)
+                                   const CBuildConfig& config,
+                                   COperations* script)
 {
     if (script != NULL && !script->CopyAttrs &&
         ((sourceAttr & FILE_ATTRIBUTE_ENCRYPTED) != 0 ||
@@ -269,6 +269,22 @@ static DWORD TargetEncryptionFlag(DWORD sourceAttr,
         return OPFL_AS_ENCRYPTED;
     }
     return 0;
+}
+
+static CQuadWord ClusterRoundedSize(const CQuadWord& fileSize, DWORD bytesPerCluster)
+{
+    if (bytesPerCluster == 0 || fileSize == CQuadWord(0, 0))
+        return CQuadWord(0, 0);
+
+    const CQuadWord cluster(bytesPerCluster, 0);
+    return fileSize - ((fileSize - CQuadWord(1, 0)) % cluster) + CQuadWord(bytesPerCluster - 1, 0);
+}
+
+static bool MoveNeedsCopyAccounting(const COperation& op, const COperations* script)
+{
+    return (op.OpFlags & OPFL_AS_ENCRYPTED) != 0 ||
+           (script != NULL && script->SameRootButDiffVolume) ||
+           !op.HasSameRootPath();
 }
 
 static bool AddFileOperation(EActionType action,
@@ -353,11 +369,32 @@ static bool AddFileOperation(EActionType action,
     if (action == EActionType::Copy && op.AreSourceAndTargetSamePath())
         return false;
 
-    if (!ConfigureADSForOperation(sourceFullA, sourceFullW, FALSE, config, script, op))
+    if (action == EActionType::Move && (op.OpFlags & OPFL_AS_ENCRYPTED) != 0 &&
+        (attr & FILE_ATTRIBUTE_ENCRYPTED) != 0 &&
+        script != NULL && !script->SameRootButDiffVolume && op.HasSameRootPath())
+    {
+        op.OpFlags &= ~OPFL_AS_ENCRYPTED;
+    }
+
+    const bool copyLikeOperation = action == EActionType::Copy || MoveNeedsCopyAccounting(op, script);
+    if (copyLikeOperation &&
+        !ConfigureADSForOperation(sourceFullA, sourceFullW, FALSE, config, script, op))
+    {
         return false;
+    }
 
     script->FilesCount++;
-    script->TotalFileSize += fileSizeLoc;
+    if (copyLikeOperation)
+    {
+        script->TotalFileSize += fileSizeLoc;
+        script->OccupiedSpace += ClusterRoundedSize(fileSizeLoc, script->BytesPerCluster);
+    }
+    else
+    {
+        op.Size = MOVE_FILE_SIZE;
+        if (!script->FastMoveUsed)
+            script->FastMoveUsed = TRUE;
+    }
     return AddOperation(script, op);
 }
 

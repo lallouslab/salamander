@@ -14,6 +14,7 @@
 #include "common/widepath.h"
 #include "common/unicode/PathIdentityPolicy.h"
 #include "common/unicode/PanelPathPolicy.h"
+#include "common/unicode/helpers.h"
 
 //
 // ****************************************************************************
@@ -179,6 +180,51 @@ BOOL COperation::AreSourceAndTargetSamePath() const
     return sally::unicode::ArePathsEquivalentForCopy(SourceName, TargetName, SourceNameW, TargetNameW);
 }
 
+#ifdef SALLY_WORKER_CORE_STANDALONE
+static bool IsPathSlashW(wchar_t ch)
+{
+    return ch == L'\\' || ch == L'/';
+}
+
+static std::wstring StandaloneRootPathW(std::wstring path)
+{
+    if (path.length() >= 2 && path[1] == L':')
+        return path.substr(0, 2);
+
+    if (path.length() >= 2 && IsPathSlashW(path[0]) && IsPathSlashW(path[1]))
+    {
+        size_t serverEnd = path.find_first_of(L"\\/", 2);
+        if (serverEnd == std::wstring::npos)
+            return path;
+        size_t shareEnd = path.find_first_of(L"\\/", serverEnd + 1);
+        if (shareEnd == std::wstring::npos)
+            return path;
+        return path.substr(0, shareEnd);
+    }
+
+    size_t firstSlash = path.find_first_of(L"\\/");
+    if (firstSlash == std::wstring::npos)
+        return path;
+    return path.substr(0, firstSlash);
+}
+#endif
+
+BOOL COperation::HasSameRootPath() const
+{
+#ifdef SALLY_WORKER_CORE_STANDALONE
+    std::wstring source = HasWideSource() ? SourceNameW : AnsiToWide(SourceName);
+    std::wstring target = HasWideTarget() ? TargetNameW : AnsiToWide(TargetName);
+    if (source.empty() || target.empty())
+        return FALSE;
+    return _wcsicmp(StandaloneRootPathW(source).c_str(),
+                    StandaloneRootPathW(target).c_str()) == 0;
+#else
+    if (HasWideSource() && HasWideTarget())
+        return HasTheSameRootPathW(SourceNameW.c_str(), TargetNameW.c_str());
+    return HasTheSameRootPath(SourceName, TargetName);
+#endif
+}
+
 //
 // ****************************************************************************
 // COperations
@@ -248,4 +294,32 @@ void COperations::SetSpeedLimit(BOOL useSpeedLimit, DWORD speedLimit)
     UseSpeedLimit = useSpeedLimit;
     SpeedLimit = speedLimit;
     HANDLES(LeaveCriticalSection(&StatusCS));
+}
+
+BOOL ShouldWarnNotEnoughSpaceForCopyMove(const COperations* script,
+                                         const char* targetPath,
+                                         CQuadWord* requiredSpace)
+{
+    if (requiredSpace != NULL)
+        *requiredSpace = CQuadWord(0, 0);
+    if (script == NULL || script->BytesPerCluster == 0)
+        return FALSE;
+
+#ifdef SALLY_WORKER_CORE_STANDALONE
+    const BOOL targetIsSamba = FALSE;
+#else
+    const BOOL targetIsSamba = targetPath != NULL && IsSambaDrivePath(targetPath);
+#endif
+
+    const BOOL occupiedSpTooBig =
+        script->OccupiedSpace != CQuadWord(0, 0) &&
+        script->OccupiedSpace > script->FreeSpace &&
+        !targetIsSamba;
+    const BOOL fileSizeTooBig = script->TotalFileSize > script->FreeSpace;
+    if (!occupiedSpTooBig && !fileSizeTooBig)
+        return FALSE;
+
+    if (requiredSpace != NULL)
+        *requiredSpace = occupiedSpTooBig ? script->OccupiedSpace : script->TotalFileSize;
+    return TRUE;
 }

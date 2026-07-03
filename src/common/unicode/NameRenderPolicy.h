@@ -7,6 +7,12 @@
 
 namespace sally::unicode
 {
+enum class NameColumnViewMode
+{
+    Brief,
+    Detailed,
+};
+
 struct NameWidthMeasurementPlan
 {
     bool UseWide = false;
@@ -14,16 +20,27 @@ struct NameWidthMeasurementPlan
     int ExtensionLength = 0;
 };
 
+inline bool ShouldUseSeparateExtensionColumn(bool isDir,
+                                             bool sortDirsByExt,
+                                             bool extensionInSeparateColumn,
+                                             NameColumnViewMode viewMode)
+{
+    return viewMode == NameColumnViewMode::Detailed &&
+           extensionInSeparateColumn &&
+           (!isDir || sortDirsByExt);
+}
+
 inline int GetWideNameLengthForNameColumn(const wchar_t* nameW,
                                           bool isDir,
                                           bool sortDirsByExt,
-                                          bool extensionInSeparateColumn)
+                                          bool extensionInSeparateColumn,
+                                          NameColumnViewMode viewMode = NameColumnViewMode::Detailed)
 {
     if (nameW == NULL)
         return 0;
 
     int fullLen = (int)wcslen(nameW);
-    if (!extensionInSeparateColumn || (isDir && !sortDirsByExt))
+    if (!ShouldUseSeparateExtensionColumn(isDir, sortDirsByExt, extensionInSeparateColumn, viewMode))
         return fullLen;
 
     const wchar_t* dot = wcsrchr(nameW, L'.');
@@ -51,15 +68,17 @@ inline NameWidthMeasurementPlan BuildNameWidthMeasurementPlan(const char* nameA,
                                                               const wchar_t* nameW,
                                                               bool isDir,
                                                               bool sortDirsByExt,
-                                                              bool extensionInSeparateColumn)
+                                                              bool extensionInSeparateColumn,
+                                                              NameColumnViewMode viewMode = NameColumnViewMode::Detailed)
 {
     NameWidthMeasurementPlan plan;
     plan.UseWide = (nameW != NULL);
+    const bool splitExtension = ShouldUseSeparateExtensionColumn(isDir, sortDirsByExt, extensionInSeparateColumn, viewMode);
 
     if (plan.UseWide)
     {
-        plan.NameLength = GetWideNameLengthForNameColumn(nameW, isDir, sortDirsByExt, extensionInSeparateColumn);
-        const wchar_t* extPosW = extensionInSeparateColumn ? GetWideExtensionStart(nameW) : NULL;
+        plan.NameLength = GetWideNameLengthForNameColumn(nameW, isDir, sortDirsByExt, extensionInSeparateColumn, viewMode);
+        const wchar_t* extPosW = splitExtension ? GetWideExtensionStart(nameW) : NULL;
         plan.ExtensionLength = extPosW != NULL ? (int)wcslen(extPosW) : 0;
         return plan;
     }
@@ -68,7 +87,7 @@ inline NameWidthMeasurementPlan BuildNameWidthMeasurementPlan(const char* nameA,
         return plan;
 
     plan.NameLength = nameLenA;
-    if (extensionInSeparateColumn && extA != NULL && extA[0] != 0 && extA > nameA + 1 && (!isDir || sortDirsByExt))
+    if (splitExtension && extA != NULL && extA[0] != 0 && extA > nameA + 1)
     {
         plan.NameLength = (int)(extA - nameA - 1);
         plan.ExtensionLength = nameLenA - (int)(extA - nameA);

@@ -688,19 +688,6 @@ BOOL COperation::IsTargetNameInvalid(BOOL ignInvalidName) const
     }
 }
 
-// Checks if source and target are on the same root path - uses wide paths if both available
-BOOL COperation::HasSameRootPath() const
-{
-    if (HasWideSource() && HasWideTarget())
-    {
-        return HasTheSameRootPathW(SourceNameW.c_str(), TargetNameW.c_str());
-    }
-    else
-    {
-        return HasTheSameRootPath(SourceName, TargetName);
-    }
-}
-
 // FindFirstFile for target path - always returns wide find data
 HANDLE COperation::FindFirstTarget(WIN32_FIND_DATAW* findData) const
 {

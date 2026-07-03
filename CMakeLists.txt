@@ -19,6 +19,7 @@ if(SAL_UNDER_CI)
   set(_SAL_BUILD_DEMOPLUG_DEFAULT OFF)
 endif()
 option(SAL_BUILD_DEMOPLUG "Build DemoPlug sample plugin (includes DemoPlug FS)" ${_SAL_BUILD_DEMOPLUG_DEFAULT})
+set(SALLY_PREVIEW_REGISTRY_VERSION "" CACHE STRING "Optional preview/beta registry version suffix, e.g. 1.0.21")
 
 if(NOT WIN32)
   message(FATAL_ERROR "Sally CMake build targets Windows only.")
@@ -68,6 +69,10 @@ set(CMAKE_C_STANDARD 11)
 
 # Load common settings
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sal_common.cmake)
+
+if(NOT SALLY_PREVIEW_REGISTRY_VERSION STREQUAL "")
+  list(APPEND SAL_COMMON_DEFINES "SALLY_PREVIEW_REGISTRY_VERSION=\"${SALLY_PREVIEW_REGISTRY_VERSION}\"")
+endif()
 
 # Restore NuGet packages (WebView2 SDK, etc.)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sal_nuget.cmake)

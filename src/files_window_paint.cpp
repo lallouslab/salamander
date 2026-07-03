@@ -626,14 +626,19 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
     {
         CHighlightMasksItem* highlightMasksItem = MainWindow->HighlightMasks->AgreeMasks(f->Name, isDir ? NULL : f->Ext, f->Attr);
 
-        int nameLen = 0;
-        if ((!isDir || Configuration.SortDirsByExt) && IsExtensionInSeparateColumn() &&
-            f->Ext[0] != 0 && f->Ext > f->Name + 1) // exception for names like ".htaccess" which are shown in the Name column even though they are extensions
-        {
-            nameLen = (int)(f->Ext - f->Name - 1);
-        }
-        else
-            nameLen = f->NameLen;
+        sally::unicode::NameColumnViewMode nameColumnMode =
+            GetViewMode() == vmBrief ? sally::unicode::NameColumnViewMode::Brief : sally::unicode::NameColumnViewMode::Detailed;
+        sally::unicode::NameWidthMeasurementPlan namePlan =
+            sally::unicode::BuildNameWidthMeasurementPlan(
+                f->Name,
+                f->NameLen,
+                f->Ext,
+                f->NameW,
+                isDir != FALSE,
+                Configuration.SortDirsByExt != FALSE,
+                IsExtensionInSeparateColumn() != FALSE,
+                nameColumnMode);
+        int nameLen = namePlan.NameLength;
 
         // set the the applied font, background color and text color
         SetFontAndColors(hDC, highlightMasksItem, f, isItemFocusedOrEditMode, itemIndex);
@@ -724,20 +729,10 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
                 fileNameFormated = TRUE;
             }
 
-            // Unicode filename display support
-            BOOL useWideDisplay = f->UseWideName();
-            int nameLenW = 0;
-            if (useWideDisplay)
-            {
-                // Keep Name/Ext column splitting identical to ANSI rendering.
-                nameLenW = sally::unicode::GetWideNameLengthForNameColumn(
-                    f->NameW,
-                    isDir != FALSE,
-                    Configuration.SortDirsByExt != FALSE,
-                    IsExtensionInSeparateColumn() != FALSE);
-                // For Unicode names, we don't apply AlterFileName transformation yet
-                // (TODO: add AlterFileNameW for proper uppercase/lowercase handling)
-            }
+            // For Unicode names, we don't apply AlterFileName transformation yet
+            // (TODO: add AlterFileNameW for proper uppercase/lowercase handling)
+            BOOL useWideDisplay = namePlan.UseWide;
+            int nameLenW = useWideDisplay ? namePlan.NameLength : 0;
 
             CColumn* column = &Columns[0];
             SIZE fnSZ;

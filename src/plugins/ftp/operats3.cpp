@@ -254,6 +254,32 @@ int CFTPWorker::GetCopyOfMsg()
     return msg;
 }
 
+BOOL CFTPWorker::GetPostTarget(int* msg, int* uid)
+{
+    CALL_STACK_MESSAGE1("CFTPWorker::GetPostTarget()");
+
+    int localMsg;
+    int localUID;
+    int localID;
+    HANDLES(EnterCriticalSection(&WorkerCritSect));
+    localMsg = CopyOfMsg;
+    localUID = CopyOfUID;
+    localID = ID;
+    HANDLES(LeaveCriticalSection(&WorkerCritSect));
+
+    if (msg != NULL)
+        *msg = localMsg;
+    if (uid != NULL)
+        *uid = localUID;
+
+    if (localMsg < WM_APP_SOCKET_MIN || localMsg > WM_APP_SOCKET_MAX || localUID == -1)
+    {
+        TRACE_I("Skipping FTP worker post for invalid target: workerID=" << localID << " msg=" << localMsg << " uid=" << localUID);
+        return FALSE;
+    }
+    return TRUE;
+}
+
 void CFTPWorker::CorrectErrorDescr()
 {
 #ifdef _DEBUG
@@ -1310,6 +1336,11 @@ void CFTPWorker::PostActivateMsg()
     int msg = Msg;
     int uid = UID;
     HANDLES(LeaveCriticalSection(&SocketCritSect));
+    if (msg < WM_APP_SOCKET_MIN || msg > WM_APP_SOCKET_MAX || uid == -1)
+    {
+        TRACE_I("Skipping FTP worker activate for invalid live target: msg=" << msg << " uid=" << uid);
+        return;
+    }
     SocketsThread->PostSocketMessage(msg, uid, WORKER_ACTIVATE, NULL);
 }
 

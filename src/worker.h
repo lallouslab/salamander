@@ -601,6 +601,10 @@ BOOL RunWorkerDirect(COperations* script, IWorkerObserver& observer,
 
 void FreeScript(COperations* script);
 
+BOOL ShouldWarnNotEnoughSpaceForCopyMove(const COperations* script,
+                                         const char* targetPath,
+                                         CQuadWord* requiredSpace);
+
 //
 // File information classes and Io Status block (see NTDDK.H)
 //

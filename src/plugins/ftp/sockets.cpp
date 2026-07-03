@@ -2688,9 +2688,21 @@ void CSocketsThread::ReceiveMsgData()
     HANDLES(LeaveCriticalSection(&CritSect));
 }
 
+static BOOL IsValidPostedSocketTarget(int socketMsg, int socketUID)
+{
+    return socketMsg >= WM_APP_SOCKET_MIN && socketMsg <= WM_APP_SOCKET_MAX &&
+           socketUID != -1;
+}
+
 BOOL CSocketsThread::PostSocketMessage(int socketMsg, int socketUID, DWORD id, void* param)
 {
     CALL_STACK_MESSAGE4("CSocketsThread::PostSocketMessage(%d, %d, %u,)", socketMsg, socketUID, id);
+    if (!IsValidPostedSocketTarget(socketMsg, socketUID))
+    {
+        TRACE_I("Dropping socket post-message for invalid target: msg=" << socketMsg << " uid=" << socketUID << " id=" << id);
+        return FALSE;
+    }
+
     BOOL ret = FALSE;
     HANDLES(EnterCriticalSection(&CritSect));
     if (HWindow != NULL)
@@ -2773,17 +2785,15 @@ void CSocketsThread::ReceivePostMessage()
                         break;
                     }
                 }
-#ifdef _DEBUG
                 if (i == Sockets.Count)
                 {
                     // print a warning that the message was lost (did not reach the socket object)
                     TRACE_I("Lost post-message " << data->ID << " for UID " << data->SocketUID);
                 }
-#endif
             }
         }
         else
-            TRACE_E("Unexpected situation in CSocketsThread::ReceivePostMessage()");
+            TRACE_I("Dropping socket post-message for out-of-range target: msg=" << data->SocketMsg << " uid=" << data->SocketUID << " id=" << data->ID);
         PostMsgs.Delete(0);
         if (!PostMsgs.IsGood())
             PostMsgs.ResetState();

@@ -738,6 +738,69 @@ private:
     CBuildScriptState* Previous;
 };
 
+static std::wstring EffectiveWorkPathW(const char* pathA, const wchar_t* pathW)
+{
+    if (pathW != NULL && pathW[0] != L'\0')
+        return pathW;
+    if (pathA != NULL && pathA[0] != 0)
+        return AnsiToWide(pathA);
+    return std::wstring();
+}
+
+static void SetScriptWorkPath1(COperations* script, const char* pathA,
+                               const wchar_t* pathW, BOOL inclSubDirs)
+{
+    if (script == NULL)
+        return;
+
+    if (pathA != NULL && pathA[0] != 0)
+        script->SetWorkPath1(pathA, inclSubDirs);
+
+    std::wstring effectivePathW = EffectiveWorkPathW(pathA, pathW);
+    if (!effectivePathW.empty())
+        script->SetWorkPath1W(effectivePathW.c_str(), inclSubDirs);
+}
+
+static void SetScriptWorkPath2(COperations* script, const char* pathA,
+                               const wchar_t* pathW, BOOL inclSubDirs)
+{
+    if (script == NULL)
+        return;
+
+    if (pathA != NULL && pathA[0] != 0)
+        script->SetWorkPath2(pathA, inclSubDirs);
+
+    std::wstring effectivePathW = EffectiveWorkPathW(pathA, pathW);
+    if (!effectivePathW.empty())
+        script->SetWorkPath2W(effectivePathW.c_str(), inclSubDirs);
+}
+
+static void StampBuildScriptWorkPaths(COperations* script, CActionType type,
+                                      const char* sourcePath,
+                                      const wchar_t* sourcePathW,
+                                      const char* targetPath,
+                                      const wchar_t* targetPathW)
+{
+    if (type != atCopy && type != atMove && type != atDelete)
+        return;
+
+    SetScriptWorkPath1(script, sourcePath, sourcePathW, TRUE);
+    if (type == atCopy || type == atMove)
+        SetScriptWorkPath2(script, targetPath, targetPathW, TRUE);
+}
+
+static std::wstring CopyMoveRecordSourceDirW(CCopyMoveRecord* record,
+                                             const char* sourceDirA)
+{
+    if (record != NULL && record->FileNameW != NULL && record->FileNameW[0] != L'\0')
+    {
+        std::wstring sourceDirW = record->FileNameW;
+        if (CutDirectoryW(sourceDirW))
+            return sourceDirW;
+    }
+    return EffectiveWorkPathW(sourceDirA, NULL);
+}
+
 //
 // ****************************************************************************
 // CFilesWindow
@@ -1851,18 +1914,13 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targ
             BOOL cancel = FALSE;
             if (res)
             {
-                BOOL occupiedSpTooBig = script->OccupiedSpace != CQuadWord(0, 0) &&
-                                        script->BytesPerCluster != 0 && // we have disk information
-                                        script->OccupiedSpace > script->FreeSpace &&
-                                        !IsSambaDrivePath(targetPath); // Samba returns an invalid cluster size, so we can rely only on TotalFileSize
-                if (occupiedSpTooBig ||
-                    script->BytesPerCluster != 0 && // we have disk information
-                        script->TotalFileSize > script->FreeSpace)
+                CQuadWord requiredSpace;
+                if (ShouldWarnNotEnoughSpaceForCopyMove(script, targetPath, &requiredSpace))
                 {
                     char buf1[50];
                     char buf2[50];
                     std::wstring msg = FormatStrW(LoadStrW(IDS_NOTENOUGHSPACE),
-                                                  AnsiToWide(NumberToStr(buf1, occupiedSpTooBig ? script->OccupiedSpace : script->TotalFileSize)).c_str(),
+                                                  AnsiToWide(NumberToStr(buf1, requiredSpace)).c_str(),
                                                   AnsiToWide(NumberToStr(buf2, script->FreeSpace)).c_str());
                     cancel = gPrompter->AskYesNo(captionW, msg.c_str()).type != PromptResult::kYes;
                 }
@@ -1870,12 +1928,13 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targ
 
             // prepare a refresh for non-auto-refreshed directories
             // change in the target directory and its subdirectories
-            script->SetWorkPath1(targetPath, TRUE);
+            SetScriptWorkPath1(script, targetPath, targetPathW, TRUE);
             if (!copy) // a move operation modifies the source as well
             {
                 if (data->Count > 0)
                 {
-                    char* name = data->At(0)->FileName;
+                    CCopyMoveRecord* record = data->At(0);
+                    char* name = record != NULL ? record->FileName : NULL;
                     if (name != NULL)
                     {
                         CPathBuffer path; // Heap-allocated for long path support
@@ -1883,7 +1942,8 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targ
                         if (CutDirectory(path)) // assume a single source directory (panel operations only, not Find)
                         {
                             // change in the source directory and its subdirectories
-                            script->SetWorkPath2(path, TRUE);
+                            std::wstring pathW = CopyMoveRecordSourceDirW(record, path);
+                            SetScriptWorkPath2(script, path, pathW.c_str(), TRUE);
                         }
                     }
                 }
@@ -2180,6 +2240,8 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                 return FALSE;
             }
 
+            StampBuildScriptWorkPaths(script, type, sourcePath, sourcePathWArg,
+                                      targetPath, targetPathW);
             SetCurrentDirectoryToSystem();
             return TRUE;
         }
@@ -2297,6 +2359,9 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
     int i;
     for (i = 0; i < script->Count; i++)
         script->TotalSize += script->At(i).Size;
+    if (!onlySize)
+        StampBuildScriptWorkPaths(script, type, sourcePath, sourcePathWArg,
+                                  targetPath, targetPathW);
     return TRUE;
 }
 

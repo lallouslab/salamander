@@ -9,6 +9,7 @@
 #include "plugins.h"
 #include "pack.h"
 #include "common/IFileSystem.h"
+#include "common/PackerCommandLinePolicy.h"
 #include "common/widepath.h"
 #include "common/unicode/helpers.h"
 
@@ -412,7 +413,7 @@ BOOL PackUniversalCompress(HWND parent, const char* command, TPackErrorTable* co
     }
 
     // check if the command line is not too long
-    if (!supportLongNames && strlen(cmdLine) >= 128)
+    if (sally::pack::ShouldRejectLegacyCommandLine(supportLongNames, strlen(cmdLine), true))
     {
         char buffer[1000];
         strcpy(buffer, cmdLine);

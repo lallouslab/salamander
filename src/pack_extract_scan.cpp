@@ -13,6 +13,7 @@
 #include "pack.h"
 #include "common/ExternalToolRunner.h"
 #include "common/IFileSystem.h"
+#include "common/PackerCommandLinePolicy.h"
 #include "common/widepath.h"
 #include "common/unicode/helpers.h"
 
@@ -664,7 +665,7 @@ BOOL PackList(CFilesWindow* panel, const char* archiveFileName, CSalamanderDirec
         cmdForErrors[0] = 0;
 
     // check whether the command line is too long
-    if (!browseTable->SupportLongNames && strlen(cmdLine) >= 128)
+    if (sally::pack::ShouldRejectLegacyCommandLine(browseTable->SupportLongNames, strlen(cmdLine), false))
     {
         char buffer[1000];
         strcpy(buffer, cmdLine);
@@ -1556,7 +1557,7 @@ BOOL PackUniversalUncompress(HWND parent, const char* command, TPackErrorTable* 
     }
 
     // check if the command line is too long
-    if (!supportLongNames && strlen(cmdLine) >= 128)
+    if (sally::pack::ShouldRejectLegacyCommandLine(supportLongNames, strlen(cmdLine), true))
     {
         char buffer[1000];
         DeleteFileA(gFileSystem, tmpListNameBuf);
@@ -1850,7 +1851,7 @@ BOOL PackUnpackOneFile(CFilesWindow* panel, const char* archiveFileName,
     }
 
     // check whether the command line is too long
-    if (!browseTable->SupportLongNames && strlen(cmdLine) >= 128)
+    if (sally::pack::ShouldRejectLegacyCommandLine(browseTable->SupportLongNames, strlen(cmdLine), false))
     {
         char buffer[1000];
         RemoveTemporaryDir(tmpDirNameBuf);

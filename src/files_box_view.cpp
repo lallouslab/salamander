@@ -14,6 +14,7 @@
 #include "shellib.h"
 #include "snooper.h"
 #include "darkmode.h"
+#include "common/unicode/NameRenderPolicy.h"
 
 const char* CFILESBOX_CLASSNAME = "SalamanderItemsBox";
 
@@ -1923,31 +1924,29 @@ int CFilesBox::GetIndex(int x, int y, BOOL nearest, RECT* labelRect)
             else
                 f = &Parent->Files->At(itemIndex - Parent->Dirs->Count);
 
-            AlterFileName(formatedFileName, f->Name, -1, Configuration.FileNameFormat, 0, isDir);
-
-            const char* s = formatedFileName;
-
             int width = IconSizes[ICONSIZE_16] + 2;
 
             SIZE sz;
-            int len;
-            if ((!isDir || Configuration.SortDirsByExt) && ViewMode == vmDetailed &&
-                Parent->IsExtensionInSeparateColumn() && f->Ext[0] != 0 && f->Ext > f->Name + 1) // exception for names like ".htaccess" that display in the Name column although they are extensions
+            sally::unicode::NameColumnViewMode nameColumnMode =
+                ViewMode == vmBrief ? sally::unicode::NameColumnViewMode::Brief : sally::unicode::NameColumnViewMode::Detailed;
+            sally::unicode::NameWidthMeasurementPlan widthPlan =
+                sally::unicode::BuildNameWidthMeasurementPlan(
+                    f->Name,
+                    f->NameLen,
+                    f->Ext,
+                    f->NameW,
+                    isDir != FALSE,
+                    Configuration.SortDirsByExt != FALSE,
+                    Parent->IsExtensionInSeparateColumn() != FALSE,
+                    nameColumnMode);
+
+            if (f->Name[0] == '.' && f->Name[1] == '.' && f->Name[2] == 0)
             {
-                len = (int)(f->Ext - f->Name - 1);
-            }
-            else
-            {
-                if (*s == '.' && *(s + 1) == '.' && *(s + 2) == 0)
-                {
-                    if (ViewMode == vmBrief)
-                        width = ItemWidth - 10; // 10 - so that we are not stretched across the entire width
-                    else
-                        width = Parent->Columns[0].Width - 1;
-                    goto SKIP_MES;
-                }
+                if (ViewMode == vmBrief)
+                    width = ItemWidth - 10; // 10 - so that we are not stretched across the entire width
                 else
-                    len = f->NameLen;
+                    width = Parent->Columns[0].Width - 1;
+                goto SKIP_MES;
             }
 
             // find the real length of the text
@@ -1956,7 +1955,13 @@ int CFilesBox::GetIndex(int x, int y, BOOL nearest, RECT* labelRect)
             dc = HANDLES(GetDC(HWindow));
             hOldFont = (HFONT)SelectObject(dc, Font);
 
-            GetTextExtentPoint32(dc, s, len, &sz);
+            if (widthPlan.UseWide)
+                GetTextExtentPoint32W(dc, f->NameW, widthPlan.NameLength, &sz);
+            else
+            {
+                AlterFileName(formatedFileName, f->Name, -1, Configuration.FileNameFormat, 0, isDir);
+                GetTextExtentPoint32(dc, formatedFileName, widthPlan.NameLength, &sz);
+            }
             width += 2 + sz.cx + 3;
 
             if (ViewMode == vmDetailed && width > (int)Parent->Columns[0].Width)

@@ -128,6 +128,39 @@ inline int AskFileError(IWorkerObserver& observer,
     return observer.AskFileErrorW(title, pathA.c_str(), path.c_str(), errorText);
 }
 
+class CScopedReadonlyAttributeClear
+{
+public:
+    CScopedReadonlyAttributeClear(const std::wstring& path, DWORD attrs)
+        : Path(path),
+          OriginalAttrs(attrs),
+          Restore(false)
+    {
+        if (OriginalAttrs != INVALID_FILE_ATTRIBUTES &&
+            (OriginalAttrs & FILE_ATTRIBUTE_READONLY) != 0)
+        {
+            Restore = SetFileAttributesW(Path.c_str(),
+                                         OriginalAttrs & ~FILE_ATTRIBUTE_READONLY) != FALSE;
+        }
+    }
+
+    ~CScopedReadonlyAttributeClear()
+    {
+        if (Restore)
+            SetFileAttributesW(Path.c_str(), OriginalAttrs);
+    }
+
+    void Commit()
+    {
+        Restore = false;
+    }
+
+private:
+    std::wstring Path;
+    DWORD OriginalAttrs;
+    bool Restore;
+};
+
 inline bool IsDotDirectoryName(const wchar_t* name)
 {
     return name != nullptr &&
@@ -263,19 +296,21 @@ inline CFileOperationResult ExecuteCopyFileW(IWorkerObserver& observer,
     {
         if (!ConfirmOverwrite(observer, sourcePath, targetPath, state))
             return observer.IsCancelled() ? ErrorResult(ERROR_CANCELLED) : SuccessResult(true);
-        if ((targetAttrs & FILE_ATTRIBUTE_READONLY) != 0)
-            SetFileAttributesW(targetPath.c_str(), targetAttrs & ~FILE_ATTRIBUTE_READONLY);
     }
+    CScopedReadonlyAttributeClear targetReadonly(targetPath, targetAttrs);
 
     while (true)
     {
         if (CopyFileW(sourcePath.c_str(), targetPath.c_str(), FALSE))
+        {
+            targetReadonly.Commit();
             return SuccessResult();
+        }
 
         DWORD error = GetLastError();
         observer.WaitIfSuspended();
         if (observer.IsCancelled())
-            return ErrorResult(error);
+            return ErrorResult(ERROR_CANCELLED);
         if (state.SkipAllErrors)
             return SuccessResult(true);
 
@@ -307,9 +342,8 @@ inline CFileOperationResult ExecuteMoveFileW(IWorkerObserver& observer,
     {
         if (!ConfirmOverwrite(observer, sourcePath, targetPath, state))
             return observer.IsCancelled() ? ErrorResult(ERROR_CANCELLED) : SuccessResult(true);
-        if ((targetAttrs & FILE_ATTRIBUTE_READONLY) != 0)
-            SetFileAttributesW(targetPath.c_str(), targetAttrs & ~FILE_ATTRIBUTE_READONLY);
     }
+    CScopedReadonlyAttributeClear targetReadonly(targetPath, targetAttrs);
 
     DWORD flags = MOVEFILE_COPY_ALLOWED;
     if (targetExists)
@@ -318,12 +352,15 @@ inline CFileOperationResult ExecuteMoveFileW(IWorkerObserver& observer,
     while (true)
     {
         if (MoveFileExW(sourcePath.c_str(), targetPath.c_str(), flags))
+        {
+            targetReadonly.Commit();
             return SuccessResult();
+        }
 
         DWORD error = GetLastError();
         observer.WaitIfSuspended();
         if (observer.IsCancelled())
-            return ErrorResult(error);
+            return ErrorResult(ERROR_CANCELLED);
         if (state.SkipAllErrors)
             return SuccessResult(true);
 
@@ -349,18 +386,20 @@ inline CFileOperationResult ExecuteDeleteFileW(IWorkerObserver& observer,
                                                DWORD attrs,
                                                CFileOperationExecutionState& state)
 {
-    if ((attrs & FILE_ATTRIBUTE_READONLY) != 0)
-        SetFileAttributesW(sourcePath.c_str(), attrs & ~FILE_ATTRIBUTE_READONLY);
+    CScopedReadonlyAttributeClear sourceReadonly(sourcePath, attrs);
 
     while (true)
     {
         if (DeleteFileW(sourcePath.c_str()))
+        {
+            sourceReadonly.Commit();
             return SuccessResult();
+        }
 
         DWORD error = GetLastError();
         observer.WaitIfSuspended();
         if (observer.IsCancelled())
-            return ErrorResult(error);
+            return ErrorResult(ERROR_CANCELLED);
         if (state.SkipAllErrors)
             return SuccessResult(true);
 

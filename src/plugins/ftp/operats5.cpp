@@ -400,8 +400,8 @@ BOOL CFTPWorkersList::GetErrorDescr(int index, char* buf, int bufSize, CCertific
     {
         worker = Workers[index];
         ret = worker->GetErrorDescr(buf, bufSize, &postActivate, unverifiedCertificate);
-        uid = worker->GetCopyOfUID();
-        msg = worker->GetCopyOfMsg();
+        if (postActivate)
+            postActivate = worker->GetPostTarget(&msg, &uid);
     }
     HANDLES(LeaveCriticalSection(&WorkersListCritSect));
     if (postActivate)
@@ -420,15 +420,15 @@ void CFTPWorkersList::ActivateWorkers()
         CFTPWorker* worker = (i < Workers.Count) ? Workers[i] : NULL;
         int msg = -1;
         int uid = -1;
+        BOOL postActivate = FALSE;
         if (worker != NULL)
         {
-            uid = worker->GetCopyOfUID();
-            msg = worker->GetCopyOfMsg();
+            postActivate = worker->GetPostTarget(&msg, &uid);
         }
         HANDLES(LeaveCriticalSection(&WorkersListCritSect));
-        if (worker != NULL)
+        if (postActivate)
             SocketsThread->PostSocketMessage(msg, uid, WORKER_ACTIVATE, NULL);
-        else
+        if (worker == NULL)
             break; // end of loop
         i++;
     }
@@ -451,9 +451,7 @@ void CFTPWorkersList::PostLoginChanged(int workerID)
             if ((workerID == -1 || worker->GetID() == workerID) && // all or the one with ID 'workerID'
                 worker->GetState() == fwsConnectionError)          // only if it is in state fwsConnectionError
             {
-                uid = worker->GetCopyOfUID();
-                msg = worker->GetCopyOfMsg();
-                send = TRUE;
+                send = worker->GetPostTarget(&msg, &uid);
             }
         }
         HANDLES(LeaveCriticalSection(&WorkersListCritSect));
@@ -490,10 +488,10 @@ BOOL CFTPWorkersList::GiveWorkToSleepingConWorker(CFTPWorker* sourceWorker)
             {
                 worker->GiveWorkToSleepingConWorker(sourceWorker);
                 postActivate = TRUE;
-                sourceWorkerUID = sourceWorker->GetCopyOfUID();
-                sourceWorkerMsg = sourceWorker->GetCopyOfMsg();
-                workerUID = worker->GetCopyOfUID();
-                workerMsg = worker->GetCopyOfMsg();
+                if (!sourceWorker->GetPostTarget(&sourceWorkerMsg, &sourceWorkerUID))
+                    sourceWorkerMsg = -1;
+                if (!worker->GetPostTarget(&workerMsg, &workerUID))
+                    workerMsg = -1;
                 ret = TRUE;
                 break;
             }
@@ -502,8 +500,10 @@ BOOL CFTPWorkersList::GiveWorkToSleepingConWorker(CFTPWorker* sourceWorker)
     HANDLES(LeaveCriticalSection(&WorkersListCritSect));
     if (postActivate)
     {
-        SocketsThread->PostSocketMessage(sourceWorkerMsg, sourceWorkerUID, WORKER_ACTIVATE, NULL);
-        SocketsThread->PostSocketMessage(workerMsg, workerUID, WORKER_ACTIVATE, NULL);
+        if (sourceWorkerMsg != -1)
+            SocketsThread->PostSocketMessage(sourceWorkerMsg, sourceWorkerUID, WORKER_ACTIVATE, NULL);
+        if (workerMsg != -1)
+            SocketsThread->PostSocketMessage(workerMsg, workerUID, WORKER_ACTIVATE, NULL);
     }
     return ret;
 }
@@ -602,15 +602,16 @@ void CFTPWorkersList::PostNewWorkAvailable(BOOL onlyOneItem)
         }
         int msg = -1;
         int uid = -1;
+        BOOL postWakeup = FALSE;
         if (worker != NULL)
         {
-            msg = worker->GetCopyOfMsg();
-            uid = worker->GetCopyOfUID();
-            worker->SetReceivingWakeup(TRUE);
+            postWakeup = worker->GetPostTarget(&msg, &uid);
+            if (postWakeup)
+                worker->SetReceivingWakeup(TRUE);
         }
         HANDLES(LeaveCriticalSection(&WorkersListCritSect));
 
-        if (worker != NULL) // if there is at least one "sleeping" worker, post a "wake-up" to them
+        if (postWakeup) // if there is at least one "sleeping" worker, post a "wake-up" to them
             SocketsThread->PostSocketMessage(msg, uid, WORKER_WAKEUP, NULL);
     }
     else
@@ -641,17 +642,19 @@ void CFTPWorkersList::PostNewWorkAvailable(BOOL onlyOneItem)
                     worker = NULL;
                 int msg = -1;
                 int uid = -1;
+                BOOL postWakeup = FALSE;
                 if (worker != NULL)
                 {
-                    msg = worker->GetCopyOfMsg();
-                    uid = worker->GetCopyOfUID();
-                    worker->SetReceivingWakeup(TRUE);
+                    postWakeup = worker->GetPostTarget(&msg, &uid);
+                    if (postWakeup)
+                        worker->SetReceivingWakeup(TRUE);
                 }
                 HANDLES(LeaveCriticalSection(&WorkersListCritSect));
 
                 if (worker == NULL)
                     break; // there is no worker left in the array
-                SocketsThread->PostSocketMessage(msg, uid, WORKER_WAKEUP, NULL);
+                if (postWakeup)
+                    SocketsThread->PostSocketMessage(msg, uid, WORKER_WAKEUP, NULL);
                 i++;
             }
             if (!doSecRound)
