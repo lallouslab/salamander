@@ -5,6 +5,37 @@
 #include <string>
 #include <windows.h>
 
+namespace sally::unicode
+{
+
+// THE canonical \\?\ long-path decoration (kb/unicode Phase 0-c: the three
+// per-TU copies were unified here; property-tested by gtest_path_decoration).
+// Decorates only drive-absolute ("X:\...") and UNC ("\\server\...") paths at
+// the long-path threshold; already-prefixed, relative, and device paths pass
+// through unchanged. Core code should normally NOT call this — canonical
+// COperation paths stay undecorated and Win32FileSystem decorates internally;
+// this exists for the transitional call sites until Phase 6.
+inline bool HasLongPathPrefixW(const std::wstring& path)
+{
+    return path.compare(0, 4, L"\\\\?\\") == 0;
+}
+
+inline std::wstring MakeLongPathSafeW(const std::wstring& path)
+{
+    if (path.length() < 240 || HasLongPathPrefixW(path))
+        return path;
+    if (path.compare(0, 2, L"\\\\") == 0)
+        return L"\\\\?\\UNC\\" + path.substr(2);
+    if (path.length() >= 3 && path[1] == L':' &&
+        (path[2] == L'\\' || path[2] == L'/'))
+    {
+        return L"\\\\?\\" + path;
+    }
+    return path;
+}
+
+} // namespace sally::unicode
+
 // UTF-16 conversion helpers used during decoupling and Unicode work.
 inline std::wstring AnsiToWide(const char* s)
 {
@@ -85,6 +116,25 @@ inline bool TryWideToAnsiRoundTripExact(const std::wstring& value, std::string& 
 
     ansi = converted;
     return true;
+}
+
+// Panel directory-read contract (P7): a CFileData row keeps a wide NameW (rather
+// than NULL) exactly when the ANSI Name cannot faithfully stand in for the wide
+// name — i.e. when the CP_ACP conversion is lossy OR the name has any non-ASCII
+// codepoint. The non-ASCII arm is a strict superset of the lossy set: it guards
+// downstream AnsiToWide() under a possibly-different CP_ACP (e.g. a Korean name
+// that round-trips under CP_ACP=949 still needs the original wide form). Pure
+// decision, no allocation — the single authority for when a panel row is wide.
+inline bool PanelNameNeedsWideName(const wchar_t* wideName, bool ansiConversionLossy)
+{
+    if (ansiConversionLossy)
+        return true;
+    if (wideName == nullptr)
+        return false;
+    for (const wchar_t* wp = wideName; *wp != L'\0'; ++wp)
+        if (static_cast<unsigned>(*wp) > 0x7f)
+            return true;
+    return false;
 }
 } // namespace sally::unicode
 

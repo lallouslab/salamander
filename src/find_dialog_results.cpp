@@ -6,9 +6,12 @@
 
 #include "menu.h"
 #include "ui/IPrompter.h"
+#include "common/IFileSystem.h"
 #include "common/unicode/ComboSyncPolicy.h"
 #include "common/unicode/helpers.h"
 #include "common/find/FindDialogSeed.h"
+#include "common/find/FindResultPersistence.h"
+#include "common/find/FindRowPolicy.h"
 #include "cfgdlg.h"
 #include "mainwnd.h"
 #include "plugins.h"
@@ -257,6 +260,102 @@ static void FindDrawRectOutline(HDC hdc, const RECT* rect, COLORREF color)
     SetDCPenColor(hdc, oldColor);
     SelectObject(hdc, oldBrush);
     SelectObject(hdc, oldPen);
+}
+
+static std::wstring LoadFindResultsFilterW()
+{
+    std::wstring filter = LoadStrW(IDS_FIND_RESULTS_FILTER);
+    for (wchar_t& ch : filter)
+    {
+        if (ch == L'|')
+            ch = L'\0';
+    }
+    filter.push_back(L'\0');
+    return filter;
+}
+
+static BOOL SafeFindResultsFileDialogW(OPENFILENAMEW* ofn, BOOL save)
+{
+    BOOL ret = save ? GetSaveFileNameW(ofn) : GetOpenFileNameW(ofn);
+    if (!ret && FNERR_INVALIDFILENAME == CommDlgExtendedError())
+    {
+        std::wstring initDir;
+        const wchar_t* oldInitDir = ofn->lpstrInitialDir;
+        if (!GetMyDocumentsOrDesktopPathW(initDir))
+            initDir.clear();
+        ofn->lpstrInitialDir = initDir.empty() ? NULL : initDir.c_str();
+        if (ofn->lpstrFile != NULL && ofn->nMaxFile > 0)
+            ofn->lpstrFile[0] = L'\0';
+        ret = save ? GetSaveFileNameW(ofn) : GetOpenFileNameW(ofn);
+        ofn->lpstrInitialDir = oldInitDir;
+    }
+    DWORD dlgError = CommDlgExtendedError();
+    if (!ret && dlgError != 0)
+        TRACE_E("Cannot open Find results file dialog. CommDlgExtendedError()=" << dlgError);
+    return ret;
+}
+
+static bool FindResultsPathHasExtensionW(const std::wstring& fileName)
+{
+    size_t slash = fileName.find_last_of(L"\\/");
+    size_t dot = fileName.find_last_of(L'.');
+    return dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash);
+}
+
+static bool ConfirmFindResultsOverwriteIfNeeded(const std::wstring& fileName, bool extensionAppended)
+{
+    if (!extensionAppended)
+        return true;
+
+    IFileSystem* fs = gFileSystem != NULL ? gFileSystem : GetWin32FileSystem();
+    if (!fs->FileExists(fileName.c_str()))
+        return true;
+
+    if (gPrompter == NULL)
+        return MessageBoxW(NULL, fileName.c_str(), LoadStrW(IDS_QUESTION),
+                           MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES;
+    return gPrompter->ConfirmOverwrite(fileName.c_str(), NULL).type == PromptResult::kYes;
+}
+
+static bool BrowseFindResultsFileNameW(HWND owner, BOOL save, std::wstring& fileName,
+                                       sally::find::FindResultsFormat& format)
+{
+    std::vector<wchar_t> fileBuffer(32768, L'\0');
+    std::wstring filter = LoadFindResultsFilterW();
+
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = owner;
+    ofn.lpstrFilter = filter.c_str();
+    ofn.lpstrFile = fileBuffer.data();
+    ofn.nMaxFile = (DWORD)fileBuffer.size();
+    ofn.nFilterIndex = 1;
+    ofn.lpstrTitle = LoadStrW(save ? IDS_FIND_RESULTS_SAVE_TITLE : IDS_FIND_RESULTS_LOAD_TITLE);
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+    if (save)
+        ofn.Flags |= OFN_OVERWRITEPROMPT;
+    else
+        ofn.Flags |= OFN_FILEMUSTEXIST;
+
+    if (!SafeFindResultsFileDialogW(&ofn, save))
+        return false;
+
+    fileName = fileBuffer.data();
+    if (!sally::find::TryFindResultsFormatFromPathOrFilter(fileName, ofn.nFilterIndex, &format))
+    {
+        if (gPrompter != NULL)
+            gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), LoadStrW(IDS_FIND_RESULTS_UNSUPPORTED));
+        return false;
+    }
+
+    if (save)
+    {
+        bool hadExtension = FindResultsPathHasExtensionW(fileName);
+        sally::find::AppendFindResultsDefaultExtension(fileName, format);
+        if (!ConfirmFindResultsOverwriteIfNeeded(fileName, !hadExtension))
+            return false;
+    }
+    return true;
 }
 
 static void FindDrawComboArrow(HDC hdc, const RECT* rect, COLORREF color)
@@ -1350,10 +1449,10 @@ CFoundFilesListView::GetSelectedListSize()
         if (index != -1)
         {
             CFoundFilesData* ptr = Data[index];
-            int pathLen = lstrlen(ptr->Path.c_str());
-            if (ptr->Path.c_str()[pathLen - 1] != '\\')
-                pathLen++; // if the path does not contain a backslash, reserve space for it
-            int nameLen = lstrlen(ptr->Name.c_str());
+            int pathLen = (int)ptr->PathW.length();
+            if (pathLen == 0 || ptr->PathW.back() != L'\\')
+                pathLen++; // if the path does not end with a backslash, reserve space for it
+            int nameLen = (int)ptr->NameW.length();
             size += pathLen + nameLen + 1; // reserve space for the terminator
         }
     } while (index != -1);
@@ -1365,7 +1464,7 @@ CFoundFilesListView::GetSelectedListSize()
     return size;
 }
 
-BOOL CFoundFilesListView::GetSelectedList(char* list, DWORD maxSize)
+BOOL CFoundFilesListView::GetSelectedList(wchar_t* list, DWORD maxSize)
 {
     DWORD size = 0;
     int index = -1;
@@ -1375,27 +1474,28 @@ BOOL CFoundFilesListView::GetSelectedList(char* list, DWORD maxSize)
         if (index != -1)
         {
             CFoundFilesData* ptr = Data[index];
-            int pathLen = lstrlen(ptr->Path.c_str());
-            if (ptr->Path.c_str()[pathLen - 1] != '\\')
-                size++; // if the path does not contain a backslash, reserve space for it
+            int pathLen = (int)ptr->PathW.length();
+            BOOL needsSlash = pathLen == 0 || ptr->PathW.back() != L'\\';
+            if (needsSlash)
+                size++; // if the path does not end with a backslash, reserve space for it
             size += pathLen;
             if (size > maxSize)
             {
                 TRACE_E("Buffer is too short");
                 return FALSE;
             }
-            memmove(list, ptr->Path.c_str(), pathLen);
+            memmove(list, ptr->PathW.c_str(), pathLen * sizeof(wchar_t));
             list += pathLen;
-            if (ptr->Path.c_str()[pathLen - 1] != '\\')
-                *list++ = '\\';
-            int nameLen = lstrlen(ptr->Name.c_str());
+            if (needsSlash)
+                *list++ = L'\\';
+            int nameLen = (int)ptr->NameW.length();
             size += nameLen + 1; // reserve space for the terminator
             if (size > maxSize)
             {
                 TRACE_E("Buffer is too short");
                 return FALSE;
             }
-            memmove(list, ptr->Name.c_str(), nameLen + 1);
+            memmove(list, ptr->NameW.c_str(), (nameLen + 1) * sizeof(wchar_t));
             list += nameLen + 1;
         }
     } while (index != -1);
@@ -1406,8 +1506,8 @@ BOOL CFoundFilesListView::GetSelectedList(char* list, DWORD maxSize)
             TRACE_E("Buffer is too short");
             return FALSE;
         }
-        *list++ = '\0';
-        *list++ = '\0';
+        *list++ = L'\0';
+        *list++ = L'\0';
     }
     else
     {
@@ -1416,7 +1516,7 @@ BOOL CFoundFilesListView::GetSelectedList(char* list, DWORD maxSize)
             TRACE_E("Buffer is too short");
             return FALSE;
         }
-        *list++ = '\0';
+        *list++ = L'\0';
     }
     return TRUE;
 }
@@ -1613,6 +1713,19 @@ void CFoundFilesListView::SetDifferentByGroup()
             lastData->Different = different;
         }
     }
+}
+
+void CFoundFilesListView::ClearDuplicateState()
+{
+    HANDLES(EnterCriticalSection(&DataCriticalSection));
+    int i;
+    for (i = 0; i < Data.Count; i++)
+    {
+        CFoundFilesData* data = Data[i];
+        data->Group = 0;
+        data->Different = 0;
+    }
+    HANDLES(LeaveCriticalSection(&DataCriticalSection));
 }
 
 void CFoundFilesListView::QuickSort(int left, int right, int sortBy)
@@ -2157,7 +2270,9 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                                 if (i != -1)
                                 {
                                     index = i;
-                                    if (!Data[index]->IsDir) // we only search for files
+                                    if (!Data[index]->IsDir && // we only search for files
+                                        // the result goes out as an ANSI path — lossy rows are not enumerable
+                                        sally::find::RowActionableViaAnsi(Data[index]->PathW, Data[index]->NameW))
                                     {
                                         if (!onlyAssociatedExtensions || masks.AgreeMasks(Data[index]->Name.c_str(), NULL))
                                         {
@@ -2171,7 +2286,9 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                             }
                             else
                             {
-                                if (!Data[index]->IsDir)
+                                if (!Data[index]->IsDir &&
+                                    // the result goes out as an ANSI path — lossy rows are not enumerable
+                                    sally::find::RowActionableViaAnsi(Data[index]->PathW, Data[index]->NameW))
                                 {
                                     if (!onlyAssociatedExtensions || masks.AgreeMasks(Data[index]->Name.c_str(), NULL))
                                     {
@@ -2201,6 +2318,8 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         {
                             index--;
                             if (!Data[index]->IsDir &&
+                                // the result goes out as an ANSI path — lossy rows are not enumerable
+                                sally::find::RowActionableViaAnsi(Data[index]->PathW, Data[index]->NameW) &&
                                 (!preferSelected ||
                                  (ListView_GetItemState(HWindow, index, LVIS_SELECTED) & LVIS_SELECTED)))
                             {
@@ -2844,6 +2963,14 @@ void CFindDialog::Transfer(CTransferInfo& ti)
         {
             LookInTextW = LookInUnicodeInput.GetText();
             CopyWideLookInToAnsiMirror(LookInTextW, Data.LookInText);
+            // Persist the wide twin into the DTO only when it can't round-trip
+            // CP_ACP, so presets saved from Data carry the real Unicode path
+            // (kb/unicode P0-a). ASCII paths leave Data.LookInTextW empty.
+            std::string ansiProbe;
+            Data.LookInTextW =
+                sally::unicode::TryWideToAnsiRoundTripExact(LookInTextW, ansiProbe)
+                    ? std::wstring()
+                    : LookInTextW;
             if (ti.IsGood() && Data.LookInText[0] != 0)
                 AddValueToStdHistoryValues(FindLookInHistory, FIND_LOOKIN_HISTORY_SIZE,
                                            Data.LookInText.Get(), FALSE);
@@ -2857,7 +2984,10 @@ void CFindDialog::Transfer(CTransferInfo& ti)
         // not outlive its authoritative window: drop it on the way out so
         // any unguarded future reader cannot pick up a stale seed.
         if (ti.Type == ttDataFromWindow)
+        {
             LookInTextW.clear();
+            Data.LookInTextW.clear();
+        }
     }
 
     ti.CheckBox(IDC_FIND_INCLUDE_SUBDIR, Data.SubDirectories);
@@ -2913,9 +3043,29 @@ void CFindDialog::LoadControls(int index)
         }
     }
     else
-        LookInTextW.clear();
+    {
+        // The preset supplies the "Look in" value. Adopt its wide twin when the
+        // preset carried one (a Unicode path that could not round-trip CP_ACP);
+        // otherwise the ANSI mirror is authoritative (kb/unicode P0-a).
+        LookInTextW = Data.LookInTextW;
+    }
     if (Data.GrepText[0] == 0)
         GetDlgItemText(HWindow, IDC_FIND_CONTAINING, Data.GrepText, GREP_TEXT_LEN);
+
+    // If the (preset or kept) wide value cannot round-trip CP_ACP, the ANSI
+    // combo would render it as '?'. Make the Unicode edit control live BEFORE
+    // Transfer so ttDataToWindow plants the real wide text (same enable path as
+    // the construction-time seed override).
+    if (!LookInTextW.empty() && !LookInUnicodeInput.IsEnabled())
+    {
+        std::string ansiProbe;
+        if (!sally::unicode::TryWideToAnsiRoundTripExact(LookInTextW, ansiProbe))
+        {
+            if (LookInUnicodeInput.EnableForCombo(HWindow, IDC_FIND_LOOKIN, LookInTextW,
+                                                  NULL, 0, Data.LookInText.Size(), -1))
+                ApplyFindComboSkin(LookInUnicodeInput.GetControlHandle());
+        }
+    }
 
     TransferData(ttDataToWindow);
 
@@ -3482,6 +3632,155 @@ void CFindDialog::UpdateListViewItems()
     }
 }
 
+void CFindDialog::OnSaveResults()
+{
+    if (SearchInProgress || FoundFilesListView == NULL)
+        return;
+
+    int count = FoundFilesListView->GetCount();
+    if (count <= 0)
+        return;
+
+    std::vector<sally::find::FindResultRecord> records;
+    records.reserve((size_t)count);
+    int i;
+    for (i = 0; i < count; i++)
+    {
+        CFoundFilesData* data = FoundFilesListView->At(i);
+        if (data == NULL)
+            continue;
+
+        sally::find::FindResultRecord record;
+        record.Path = !data->PathW.empty() ? data->PathW : AnsiToWide(data->Path.c_str());
+        record.Name = !data->NameW.empty() ? data->NameW : AnsiToWide(data->Name.c_str());
+        record.Size = data->Size.Value;
+        record.LastWrite = data->LastWrite;
+        record.Attr = data->Attr;
+        record.IsDir = data->IsDir != 0;
+        records.push_back(record);
+    }
+
+    std::wstring fileName;
+    sally::find::FindResultsFormat format = sally::find::FindResultsFormat::Csv;
+    if (!BrowseFindResultsFileNameW(HWindow, TRUE, fileName, format))
+        return;
+
+    std::wstring error;
+    if (!sally::find::SaveFindResultsFile(fileName, format, records, &error))
+    {
+        std::wstring msg = FormatStrW(LoadStrW(IDS_FIND_RESULTS_SAVE_ERROR), error.c_str());
+        if (gPrompter != NULL)
+            gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
+        else
+            MessageBoxW(HWindow, msg.c_str(), LoadStrW(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
+    }
+}
+
+void CFindDialog::OnLoadResults()
+{
+    if (SearchInProgress || FoundFilesListView == NULL)
+        return;
+
+    std::wstring fileName;
+    sally::find::FindResultsFormat format = sally::find::FindResultsFormat::Csv;
+    if (!BrowseFindResultsFileNameW(HWindow, FALSE, fileName, format))
+        return;
+
+    std::vector<sally::find::FindResultRecord> records;
+    size_t skippedRows = 0;
+    std::wstring error;
+    if (!sally::find::LoadFindResultsFile(fileName, format, records, &skippedRows, &error))
+    {
+        std::wstring msg = FormatStrW(LoadStrW(IDS_FIND_RESULTS_LOAD_ERROR), error.c_str());
+        if (gPrompter != NULL)
+            gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), msg.c_str());
+        else
+            MessageBoxW(HWindow, msg.c_str(), LoadStrW(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
+        return;
+    }
+
+    if (records.empty())
+    {
+        if (gPrompter != NULL)
+            gPrompter->ShowInfo(LoadStrW(IDS_INFOTITLE), LoadStrW(IDS_FIND_RESULTS_LOAD_EMPTY));
+        return;
+    }
+
+    PromptResult replaceResult = {};
+    if (gPrompter != NULL)
+        replaceResult = gPrompter->AskYesNoCancel(LoadStrW(IDS_QUESTION), LoadStrW(IDS_FIND_RESULTS_LOAD_MODE));
+    else
+    {
+        int msgResult = MessageBoxW(HWindow, LoadStrW(IDS_FIND_RESULTS_LOAD_MODE), LoadStrW(IDS_QUESTION),
+                                    MB_YESNOCANCEL | MB_ICONQUESTION);
+        replaceResult.type = msgResult == IDYES ? PromptResult::kYes : (msgResult == IDNO ? PromptResult::kNo : PromptResult::kCancel);
+    }
+    if (replaceResult.type == PromptResult::kCancel)
+        return;
+
+    BOOL replace = replaceResult.type == PromptResult::kYes;
+    int oldCount = FoundFilesListView->GetCount();
+    if (replace)
+    {
+        ListView_SetItemCount(FoundFilesListView->HWindow, 0);
+        FoundFilesListView->DestroyMembers();
+        FoundFilesListView->DestroyDataForRefine();
+        Log.Clean();
+        GrepData.FoundVisibleCount = 0;
+    }
+    else
+        FoundFilesListView->ClearDuplicateState();
+
+    GrepData.FindDuplicates = FALSE;
+    GrepData.FindDupFlags = 0;
+    GrepData.Refine = 0;
+
+    EnumFileNamesChangeSourceUID(FoundFilesListView->HWindow, &(FoundFilesListView->EnumFileNamesSourceUID));
+
+    for (const sally::find::FindResultRecord& record : records)
+    {
+        CFoundFilesData* item = new CFoundFilesData;
+        std::string pathA = WideToAnsi(record.Path);
+        std::string nameA = WideToAnsi(record.Name);
+        CQuadWord size;
+        size.SetUI64(record.Size);
+        item->Set(pathA.c_str(), nameA.c_str(), record.Path.c_str(), record.Name.c_str(),
+                  size, record.Attr, &record.LastWrite, record.IsDir ? TRUE : FALSE);
+        FoundFilesListView->Add(item);
+        if (!FoundFilesListView->IsGood())
+        {
+            TRACE_E(LOW_MEMORY);
+            FoundFilesListView->ResetState();
+            UpdateListViewItems();
+            if (gPrompter != NULL)
+                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), AnsiToWide(LOW_MEMORY).c_str());
+            return;
+        }
+    }
+
+    FoundFilesListView->ClearDuplicateState();
+    if (!replace && oldCount == 0)
+        GrepData.FoundVisibleCount = 0;
+    UpdateListViewItems();
+    UpdateStatusText();
+
+    if (skippedRows > 0 && gPrompter != NULL)
+    {
+        std::wstring msg = FormatStrW(LoadStrW(IDS_FIND_RESULTS_LOAD_REPORT),
+                                      (unsigned)records.size(), (unsigned)skippedRows);
+        gPrompter->ShowInfo(LoadStrW(IDS_INFOTITLE), msg.c_str());
+    }
+}
+
+BOOL CFindDialog::EnsureRowActionableViaAnsi(const CFoundFilesData* data)
+{
+    if (sally::find::RowActionableViaAnsi(data->PathW, data->NameW))
+        return TRUE;
+    if (gPrompter != NULL)
+        gPrompter->ShowInfo(LoadStrW(IDS_INFOTITLE), LoadStrW(IDS_FIND_RESULTS_ANSI_ONLY));
+    return FALSE;
+}
+
 void CFindDialog::OnFocusFile()
 {
     CALL_STACK_MESSAGE1("CFindDialog::FocusButton()");
@@ -3500,6 +3799,8 @@ void CFindDialog::OnFocusFile()
         }
     }
     CFoundFilesData* data = FoundFilesListView->At(index);
+    if (!EnsureRowActionableViaAnsi(data))
+        return;
     SendMessage(MainWindow->GetActivePanel()->HWindow, WM_USER_FOCUSFILE, (WPARAM)data->Name.c_str(), (LPARAM)data->Path.c_str());
 }
 
@@ -3514,6 +3815,8 @@ BOOL CFindDialog::GetFocusedFile(char* buffer, int bufferLen, int* viewedIndex)
 
     CFoundFilesData* data = FoundFilesListView->At(index);
     if (data->IsDir)
+        return FALSE;
+    if (!EnsureRowActionableViaAnsi(data))
         return FALSE;
     CPathBuffer longName; // Heap-allocated for long path support
     int len = (int)data->Path.size();
@@ -3691,6 +3994,16 @@ void CFindDialog::OnUserMenu()
     DWORD selectedCount = ListView_GetSelectedCount(FoundFilesListView->HWindow);
     if (selectedCount < 1)
         return;
+
+    // user menu commands receive the rows' ANSI names as arguments
+    // (ListOfSelNames, CompareName1/2, GetNextItemFromFind) — refuse lossy rows
+    int guardItem = -1;
+    for (DWORD gi = 0; gi < selectedCount; gi++)
+    {
+        guardItem = ListView_GetNextItem(FoundFilesListView->HWindow, guardItem, LVNI_SELECTED);
+        if (guardItem != -1 && !EnsureRowActionableViaAnsi(FoundFilesListView->At(guardItem)))
+            return;
+    }
 
     UserMenuIconBkgndReader.BeginUserMenuIconsInUse();
     CMenuPopup menu;
@@ -4337,6 +4650,8 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 popup->EnableItem(CM_FIND_DELETE, FALSE, lvFocused && selectedCount > 0);
                 popup->EnableItem(CM_FIND_USERMENU, FALSE, lvFocused && selectedCount > 0);
                 popup->EnableItem(CM_FIND_PROPERTIES, FALSE, lvFocused && selectedCount > 0);
+                popup->EnableItem(CM_FIND_SAVE_RESULTS, FALSE, !SearchInProgress && totalCount > 0);
+                popup->EnableItem(CM_FIND_LOAD_RESULTS, FALSE, !SearchInProgress);
                 break;
             }
 
@@ -4935,6 +5250,18 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
         case CM_FIND_HIDE_DUP:
         {
             OnHideDuplicateNames();
+            return TRUE;
+        }
+
+        case CM_FIND_SAVE_RESULTS:
+        {
+            OnSaveResults();
+            return TRUE;
+        }
+
+        case CM_FIND_LOAD_RESULTS:
+        {
+            OnLoadResults();
             return TRUE;
         }
 

@@ -24,6 +24,7 @@
 #include "common/IEnvironment.h"
 #include "common/widepath.h"
 
+#include "common/AdsPolicy.h"
 #include "common/BuildScript.h"
 #include "common/CBuildScriptState.h"
 #include "common/CSelectionSnapshot.h"
@@ -108,24 +109,9 @@ BOOL IsSnapshotBuilderDefaultMask(const char* mask)
     return mask == NULL || strcmp(mask, "*.*") == 0;
 }
 
-bool HasLongPathPrefixW(const std::wstring& path)
-{
-    return path.compare(0, 4, L"\\\\?\\") == 0;
-}
-
-std::wstring MakeLongPathSafeW(const std::wstring& path)
-{
-    if (path.length() < 240 || HasLongPathPrefixW(path))
-        return path;
-    if (path.compare(0, 2, L"\\\\") == 0)
-        return L"\\\\?\\UNC\\" + path.substr(2);
-    if (path.length() >= 3 && path[1] == L':' &&
-        (path[2] == L'\\' || path[2] == L'/'))
-    {
-        return L"\\\\?\\" + path;
-    }
-    return path;
-}
+// \\?\ decoration unified in common/unicode/helpers.h (Phase 0-c).
+using sally::unicode::HasLongPathPrefixW;
+using sally::unicode::MakeLongPathSafeW;
 
 std::wstring MaskNameW(const std::wstring& name, const char* mask)
 {
@@ -324,45 +310,14 @@ BOOL DirectoryTreeNeedsLegacyADS(const std::wstring& sourcePathW, BOOL targetSup
     return err != ERROR_NO_MORE_FILES;
 }
 
-BOOL ShouldReportADSProbeError(const char* sourcePath, DWORD adsWinError, BOOL sourcePathIsNet)
-{
-    if (adsWinError == NO_ERROR)
-        return FALSE;
+// ShouldReportADSProbeError + NormalizeADSReadErrorResponse moved to
+// common/AdsPolicy.h (pure policy, shared with private tests).
 
-    if (adsWinError == ERROR_INVALID_FUNCTION &&
-        sourcePath != NULL && StrNICmp(sourcePath, "\\\\tsclient\\", 11) == 0)
-    {
-        return FALSE;
-    }
+} // namespace
 
-    if ((adsWinError == ERROR_INVALID_PARAMETER || adsWinError == ERROR_NO_MORE_ITEMS) &&
-        sourcePathIsNet)
-    {
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-int NormalizeADSReadErrorResponse(int res, BOOL* ignoreAll)
-{
-    switch (res)
-    {
-    case IDRETRY:
-    case IDCANCEL:
-    case IDB_IGNORE:
-        return res;
-
-    case IDB_IGNOREALL:
-        if (ignoreAll != NULL)
-            *ignoreAll = TRUE;
-        return IDB_IGNORE;
-
-    default:
-        return IDB_IGNORE;
-    }
-}
-
+// Public routing-gate predicate (declared in fileswnd.h): TRUE when a snapshot
+// selection carries ADS the snapshot builder cannot yet handle and must stay
+// on the legacy builder.
 BOOL SnapshotSelectionNeedsLegacyADS(CActionType type, BOOL sourceSupADS,
                                      BOOL targetSupADS,
                                      const CSelectionSnapshot& snapshot,
@@ -405,6 +360,9 @@ BOOL SnapshotSelectionNeedsLegacyADS(CActionType type, BOOL sourceSupADS,
 
     return FALSE;
 }
+
+namespace
+{
 
 BOOL CanBuildFirstTrancheFromSnapshot(BOOL isDiskPanel, CActionType type,
                                       char* targetPath, char* mask,
@@ -679,30 +637,10 @@ BOOL CanBuildMain2FromSnapshot(BOOL isDiskPanel,
 }
 } // namespace
 
-#ifdef SALLY_PRIVATE_TESTS
-namespace sally::test
-{
-BOOL ShouldReportADSProbeErrorForTest(const char* sourcePath, DWORD adsWinError, BOOL sourcePathIsNet)
-{
-    return ShouldReportADSProbeError(sourcePath, adsWinError, sourcePathIsNet);
-}
-
-int NormalizeADSReadErrorResponseForTest(int res, BOOL* ignoreAll)
-{
-    return NormalizeADSReadErrorResponse(res, ignoreAll);
-}
-
-BOOL SnapshotSelectionNeedsLegacyADSForTest(CActionType type, BOOL sourceSupADS,
-                                            BOOL targetSupADS,
-                                            const CSelectionSnapshot& snapshot,
-                                            const char* sourcePath,
-                                            const wchar_t* sourcePathW)
-{
-    return SnapshotSelectionNeedsLegacyADS(type, sourceSupADS, targetSupADS,
-                                           snapshot, sourcePath, sourcePathW);
-}
-} // namespace sally::test
-#endif
+// The former SALLY_PRIVATE_TESTS sally::test forwarders were promoted:
+// ShouldReportADSProbeError / NormalizeADSReadErrorResponse live in
+// common/AdsPolicy.h; SnapshotSelectionNeedsLegacyADS is a public predicate
+// declared in fileswnd.h.
 
 // Transient state for BuildScriptMain/Dir/File. The legacy builder is recursive,
 // so route all existing bsState references through a per-call active state.

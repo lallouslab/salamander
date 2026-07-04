@@ -220,6 +220,11 @@ public:
 
     CPathBuffer NamedText;
     CPathBuffer LookInText;
+    // Wide twin of LookInText. Non-empty only when the saved "Look in" path
+    // does not round-trip CP_ACP exactly (kb/unicode P0-a); LookInText then
+    // holds the lossy ANSI mirror for legacy readers. Persisted as
+    // "Look In (Unicode)" REG_SZ next to the ANSI value.
+    std::wstring LookInTextW;
     char GrepText[GREP_TEXT_LEN];
 
 public:
@@ -595,6 +600,7 @@ public:
     void QuickSortDuplicates(int left, int right, BOOL byName);
     int CompareDuplicatesFunc(CFoundFilesData* f1, CFoundFilesData* f2, BOOL byName);
     void SetDifferentByGroup(); // sets the Different bit based on Group so that the Different bit alternates at group boundaries
+    void ClearDuplicateState();
 
     // interface for Data
     CFoundFilesData* At(int index);
@@ -612,11 +618,13 @@ public:
     int GetDataForRefineCount();
     CFoundFilesData* GetDataForRefine(int index);
 
-    DWORD GetSelectedListSize();                     // returns how many bytes are needed to store all selected
-                                                     // items as "c:\\bla\\bla.txt\0c:\\bla\\bla2.txt\0\0"
-                                                     // if no item is selected, returns 2 (two terminators)
-    BOOL GetSelectedList(char* list, DWORD maxSize); // fills the list according to GetSelectedListSize
-                                                     // without exceeding maxSize
+    DWORD GetSelectedListSize();                        // returns how many WCHARs are needed to store all selected
+                                                        // items as L"c:\\bla\\bla.txt\0c:\\bla\\bla2.txt\0\0"
+                                                        // if no item is selected, returns 2 (two terminators)
+    BOOL GetSelectedList(wchar_t* list, DWORD maxSize); // fills the list according to GetSelectedListSize
+                                                        // without exceeding maxSize (in WCHARs); built from the
+                                                        // wide names so lossy ANSI mirrors ('?' is a wildcard to
+                                                        // SHFileOperation!) never reach shell operations
 
     // scans all selected files and directories and removes those that no longer exist
     // if 'forceRemove' variable is TRUE, selected items are removed without needing checks
@@ -812,6 +820,12 @@ public:
     const char* GetPath(int index);
     void UpdateInternalViewerData();
 
+    // Guard for commands that still consume the row's lossy ANSI mirrors
+    // (focus/open/view/edit): refuses rows whose wide names do not round-trip
+    // CP_ACP (sally::find::RowActionableViaAnsi) and tells the user why.
+    // Remove together with the P0-b wide routing of these commands.
+    BOOL EnsureRowActionableViaAnsi(const CFoundFilesData* data);
+
     BOOL IsSearchInProgress() { return SearchInProgress; }
 
     void OnEnterIdle();
@@ -864,6 +878,8 @@ protected:
     void OnEditFileWith();
     void OnHideSelection();
     void OnHideDuplicateNames();
+    void OnSaveResults();
+    void OnLoadResults();
     void OnDelete(BOOL toRecycle);
     void OnSelectAll();
     void OnInvertSelection();

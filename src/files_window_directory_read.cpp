@@ -560,25 +560,10 @@ BOOL CFilesWindow::ReadDirectory(HWND parent, BOOL isRefresh)
                 file.NameLen = len;
 
                 //--- wide name (for Unicode filenames not representable in ANSI)
-                // Allocate NameW whenever the original wide name contains any
-                // non-ASCII codepoint. The CP_ACP lossy detector above is a
-                // necessary but not sufficient trigger: under e.g. CP_ACP=949
-                // (Korean) a Korean filename round-trips and detection says
-                // "not lossy", yet downstream consumers that later AnsiToWide()
-                // through a possibly-different CP_ACP still need the original
-                // wide form. Strict superset of prior behavior (lossy rows
-                // still get NameW); only added cost is one DupStr per non-ASCII
-                // row that previously had NameW=NULL.
-                BOOL hasNonAscii = FALSE;
-                for (const wchar_t* wp = fileDataW.cFileName; *wp; ++wp)
-                {
-                    if ((unsigned)*wp > 0x7f)
-                    {
-                        hasNonAscii = TRUE;
-                        break;
-                    }
-                }
-                if (nameConversionLossy || hasNonAscii)
+                // Single authority for the wide-row decision: keep NameW iff the
+                // ANSI conversion was lossy OR the name has any non-ASCII char
+                // (see sally::unicode::PanelNameNeedsWideName for the rationale).
+                if (sally::unicode::PanelNameNeedsWideName(fileDataW.cFileName, nameConversionLossy != FALSE))
                     file.NameW = DupStr(fileDataW.cFileName);
                 else
                     file.NameW = NULL;  // Reset from previous iteration

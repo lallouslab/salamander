@@ -8,7 +8,11 @@
 //
 //****************************************************************************
 
+#ifdef SALLY_WORKER_CORE_STANDALONE
+#include "common/WorkerCoreStandalone.h"
+#else
 #include "precomp.h"
+#endif
 
 #include <windows.h>
 #include <stdlib.h>

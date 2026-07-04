@@ -91,16 +91,8 @@ static std::wstring BuildOperationNameW(std::wstring widePath, const std::wstrin
         widePath += wideFileName;
     }
 
-    if (widePath.length() >= SAL_LONG_PATH_THRESHOLD &&
-        widePath.compare(0, 4, L"\\\\?\\") != 0)
-    {
-        if (widePath.length() >= 2 && widePath[0] == L'\\' && widePath[1] == L'\\')
-            widePath = L"\\\\?\\UNC\\" + widePath.substr(2);
-        else
-            widePath = L"\\\\?\\" + widePath;
-    }
-
-    return widePath;
+    // \\?\ decoration unified in common/unicode/helpers.h (Phase 0-c).
+    return sally::unicode::MakeLongPathSafeW(widePath);
 }
 
 void COperations::ReanchorWideSourcePaths(const char* anchorAnsi, const wchar_t* anchorWide)

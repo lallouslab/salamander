@@ -27,6 +27,7 @@ sal_add_plugin(NAME ftp
     "${SAL_PLUGINS}/ftp/ftp2.cpp"
     "${SAL_PLUGINS}/ftp/ftp3.cpp"
     "${SAL_PLUGINS}/ftp/ftp4.cpp"
+    "${SAL_PLUGINS}/ftp/ftp_diskwork_core.cpp"
     "${SAL_PLUGINS}/ftp/ftputils.cpp"
     "${SAL_PLUGINS}/ftp/menu.cpp"
     "${SAL_PLUGINS}/ftp/operats1.cpp"

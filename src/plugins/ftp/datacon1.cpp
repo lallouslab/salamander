@@ -436,7 +436,7 @@ CDataConnectionSocket::CDataConnectionSocket(BOOL flushData, CFTPProxyForDataCon
     DecomprErrorOccured = FALSE;
     //DecomprMissingStreamEnd = FlushData && CompressData != 0;
 
-    memset(&DiskWork, 0, sizeof(DiskWork));
+    DiskWork.Reset();
 }
 
 CDataConnectionSocket::~CDataConnectionSocket()
@@ -691,21 +691,13 @@ void CDataConnectionSocket::DirectFlushData()
                     if (DiskWorkIsUsed)
                         TRACE_E("Unexpected situation in CDataConnectionSocket::DirectFlushData(): DiskWorkIsUsed may not be TRUE here!");
 
-                    DiskWork.SocketMsg = Msg;
-                    DiskWork.SocketUID = UID;
-                    DiskWork.MsgID = DATACON_DISKWORKWRITEFINISHED;
-                    DiskWork.Type = fdwtCreateAndWriteFile;
-                    lstrcpyn(DiskWork.Name, TgtDiskFileName, DiskWork.Name.Size());
-                    DiskWork.WinError = NO_ERROR;
-                    DiskWork.State = sqisNone;
                     if (DiskWork.OpenedFile != NULL)
                         TRACE_E("CDataConnectionSocket::DirectFlushData(): DiskWork.OpenedFile is not NULL!");
-                    DiskWork.OpenedFile = NULL;
                     if (DiskWork.FlushDataBuffer != NULL)
                         TRACE_E("CDataConnectionSocket::DirectFlushData(): DiskWork.FlushDataBuffer must be NULL!");
-                    DiskWork.FlushDataBuffer = flushBuffer;
-                    DiskWork.ValidBytesInFlushDataBuffer = validBytesInFlushBuffer;
-                    DiskWork.WorkFile = TgtDiskFile;
+                    FTPPrepareCreateAndWriteFileDiskWork(DiskWork, Msg, UID, DATACON_DISKWORKWRITEFINISHED,
+                                                         TgtDiskFileName, TgtDiskFile, flushBuffer,
+                                                         validBytesInFlushBuffer);
                     if (FTPDiskThread->AddWork(&DiskWork))
                         DiskWorkIsUsed = TRUE;
                     else // unable to flush the data, cannot continue with the download

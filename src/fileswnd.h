@@ -26,6 +26,17 @@ enum CActionType
     atConvert           // convert not including subdirectories
 };
 
+// Snapshot-builder routing-gate predicate (defined in files_window_copy_move.cpp):
+// TRUE when a snapshot selection carries ADS the snapshot builder cannot yet
+// handle and must fall back to the legacy builder. Public so the private tests
+// exercise the real gate (kb/unicode/TODO.md T4-a).
+struct CSelectionSnapshot;
+BOOL SnapshotSelectionNeedsLegacyADS(CActionType type, BOOL sourceSupADS,
+                                     BOOL targetSupADS,
+                                     const CSelectionSnapshot& snapshot,
+                                     const char* sourcePath,
+                                     const wchar_t* sourcePathW);
+
 enum CPluginFSActionType
 {
     fsatCopy,

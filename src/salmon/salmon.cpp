@@ -25,8 +25,13 @@ class C__StrCriticalSection
 public:
     CRITICAL_SECTION cs;
 
-    C__StrCriticalSection() { HANDLES(InitializeCriticalSection(&cs)); }
-    ~C__StrCriticalSection() { HANDLES(DeleteCriticalSection(&cs)); }
+    // Raw (un-HANDLES'd) init: these objects are constructed via
+    // #pragma init_seg(lib) BEFORE __MSInit sets up HANDLES tracking, so wrapping
+    // the ctor/dtor in HANDLES() dereferences uninitialized state → AV. The
+    // runtime Enter/Leave below run after init and stay HANDLES-tracked.
+    // (Same latent bug fixed in sally_strings_waitwindow.cpp during ARC 1.)
+    C__StrCriticalSection() { ::InitializeCriticalSection(&cs); }
+    ~C__StrCriticalSection() { ::DeleteCriticalSection(&cs); }
 };
 
 // ensure the critical section is constructed in time

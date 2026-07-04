@@ -17,6 +17,9 @@
 
 #include "worker.h"
 #include "common/BuildScript.h"
+#include "common/IFileEnumerator.h"
+#include "common/IFileSystem.h"
+#include "common/PathDisplayUtils.h"
 #include "common/SnapshotOperationPlanner.h"
 #include "common/unicode/helpers.h"
 
@@ -53,29 +56,44 @@ static char* DupAnsiString(const char* text)
     return buf;
 }
 
+// Root of a wide path for same-disk comparison: "X:" for drive paths,
+// "\\server\share" for UNC, else empty (never matches).
+static std::wstring PathRootW(const std::wstring& path)
+{
+    if (path.size() >= 2 && path[1] == L':')
+        return std::wstring(1, (wchar_t)towlower(path[0])) + L":";
+    if (path.size() >= 2 && path[0] == L'\\' && path[1] == L'\\')
+    {
+        size_t p = path.find(L'\\', 2);       // end of server
+        if (p != std::wstring::npos)
+            p = path.find(L'\\', p + 1);      // end of share
+        std::wstring root = (p == std::wstring::npos) ? path : path.substr(0, p);
+        for (wchar_t& c : root)
+            c = (wchar_t)towlower(c);
+        return root;
+    }
+    return std::wstring();
+}
+
+static bool SameRootPathW(const std::wstring& a, const std::wstring& b)
+{
+    std::wstring ra = PathRootW(a);
+    return !ra.empty() && ra == PathRootW(b);
+}
+
+static bool FastMoveTargetDirExists(const std::wstring& targetDirW)
+{
+    IFileSystem* fs = gFileSystem != nullptr ? gFileSystem : GetWin32FileSystem();
+    return fs != nullptr && fs->DirectoryExists(targetDirW.c_str());
+}
+
 static bool HasTrailingSlashW(const std::wstring& path)
 {
     return !path.empty() && (path.back() == L'\\' || path.back() == L'/');
 }
 
-static bool HasLongPathPrefixW(const std::wstring& path)
-{
-    return path.compare(0, 4, L"\\\\?\\") == 0;
-}
-
-static std::wstring MakeLongPathSafeW(const std::wstring& path)
-{
-    if (path.length() < 240 || HasLongPathPrefixW(path))
-        return path;
-    if (path.compare(0, 2, L"\\\\") == 0)
-        return L"\\\\?\\UNC\\" + path.substr(2);
-    if (path.length() >= 3 && path[1] == L':' &&
-        (path[2] == L'\\' || path[2] == L'/'))
-    {
-        return L"\\\\?\\" + path;
-    }
-    return path;
-}
+// \\?\ decoration unified in common/unicode/helpers.h (Phase 0-c).
+using sally::unicode::MakeLongPathSafeW;
 
 static bool IsDotDirectory(const wchar_t* name)
 {
@@ -155,7 +173,17 @@ static bool ConfigureADSForOperation(const std::string& sourceA,
     if (!ads.HasADS)
         return true;
     if (!config.EnableADS || !config.TargetSupportsADS)
-        return false;
+    {
+        // The target cannot hold the streams. Without a prompt callback, reject
+        // to legacy; with one, ask — proceeding drops the streams (P5).
+        if (config.AdsLossPromptCallback == nullptr)
+            return false;
+        CBuildAdsLossPromptResult r = config.AdsLossPromptCallback(
+            sourceA.c_str(), sourceW.c_str(), config.AdsLossPromptContext);
+        if (r != CBuildAdsLossPromptResult::Proceed)
+            return false;
+        return true; // op built WITHOUT OPFL_COPY_ADS — streams intentionally lost
+    }
 
     op.OpFlags |= OPFL_COPY_ADS;
     op.Size += ads.Size;
@@ -167,14 +195,24 @@ static bool ConfigureADSForOperation(const std::string& sourceA,
     return true;
 }
 
-static bool SourceHasADSOrProbeError(const std::string& sourceA,
-                                     const std::wstring& sourceW,
-                                     BOOL isDir,
-                                     const CBuildConfig& config,
-                                     COperations* script)
+// Feasibility (no prompt): does the ADS situation force a reject of the snapshot
+// path? Preserves the exact legacy gate when no callback is set; only pure ADS
+// loss (not a probe error) becomes feasible when an AdsLossPromptCallback exists
+// — the actual prompt then fires in the build pass (ConfigureADSForOperation).
+static bool ADSForcesReject(const std::string& sourceA,
+                            const std::wstring& sourceW,
+                            BOOL isDir,
+                            const CBuildConfig& config,
+                            COperations* script)
 {
     ADSProbeResult ads = ProbeSourceADS(sourceA, sourceW, isDir, config, script);
-    return ads.HasADS || ads.HasProbeError;
+    const bool legacyReject = (ads.HasADS || ads.HasProbeError) &&
+                              (!config.EnableADS || !config.TargetSupportsADS);
+    if (!legacyReject)
+        return false;
+    if (config.AdsLossPromptCallback != nullptr && ads.HasADS && !ads.HasProbeError)
+        return false; // ADS loss is authorizable via the prompt
+    return true;
 }
 
 struct DirectoryEntry
@@ -210,40 +248,48 @@ static bool FilterAcceptsFile(const CBuildConfig& config,
 static bool EnumerateDirectoryEntries(const std::wstring& dirW,
                                       std::vector<DirectoryEntry>& entries)
 {
-    std::wstring searchW = dirW;
-    if (!HasTrailingSlashW(searchW))
-        searchW.push_back(L'\\');
-    searchW.push_back(L'*');
-    searchW = MakeLongPathSafeW(searchW);
+    // Interface-mediated (Axis D): the enumerator adds the "\*" pattern and the
+    // \\?\ long-path decoration internally, so this loop stays Win32-free and
+    // is drivable by a MockFileEnumerator in tests.
+    IFileEnumerator* fenum =
+        gFileEnumerator != nullptr ? gFileEnumerator : GetWin32FileEnumerator();
+    if (fenum == nullptr)
+        return false;
 
-    WIN32_FIND_DATAW data = {};
-    HANDLE find = FindFirstFileW(searchW.c_str(), &data);
-    if (find == INVALID_HANDLE_VALUE)
+    HENUM h = fenum->StartEnum(dirW.c_str(), nullptr);
+    if (h == INVALID_HENUM)
     {
+        // ERROR_PATH_NOT_FOUND means the directory itself is gone — that must
+        // fail the build (emitting ops for a vanished source would create an
+        // empty target and fail later in the worker), not read as "empty".
         DWORD err = GetLastError();
         return err == ERROR_FILE_NOT_FOUND || err == ERROR_NO_MORE_FILES;
     }
 
-    do
+    FileEnumEntry fe;
+    for (;;)
     {
-        if (data.cFileName[0] == L'\0' || IsDotDirectory(data.cFileName))
+        EnumResult r = fenum->NextFile(h, fe);
+        if (r.noMoreFiles)
+            break;
+        if (!r.success)
+        {
+            fenum->EndEnum(h);
+            return false;
+        }
+        if (fe.name.empty() || IsDotDirectory(fe.name.c_str()))
             continue;
 
         DirectoryEntry entry = {};
-        entry.NameW = data.cFileName;
+        entry.NameW = fe.name;
         entry.NameA = WideToAnsi(entry.NameW);
-        entry.Attr = data.dwFileAttributes;
-        entry.Size = (((unsigned __int64)data.nFileSizeHigh) << 32) |
-                     data.nFileSizeLow;
-        entry.LastWrite = data.ftLastWriteTime;
-        entry.IsDir = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        entry.Attr = fe.attributes;
+        entry.Size = fe.size;
+        entry.LastWrite = fe.lastWriteTime;
+        entry.IsDir = fe.IsDirectory();
         entries.push_back(entry);
-    } while (FindNextFileW(find, &data));
-
-    DWORD err = GetLastError();
-    FindClose(find);
-    if (err != ERROR_NO_MORE_FILES)
-        return false;
+    }
+    fenum->EndEnum(h);
 
     std::sort(entries.begin(), entries.end(),
               [](const DirectoryEntry& left, const DirectoryEntry& right) {
@@ -306,6 +352,60 @@ static bool AddFileOperation(EActionType action,
 
     if (!FilterAcceptsFile(config, itemNameA, itemNameW, attr, size, lastWrite))
         return true;
+
+    if (action == EActionType::ChangeCase)
+    {
+        // Change-case is a rename: the target leaf is the source leaf with
+        // AlterFileNameW applied (P5). Same-name results are a no-op skip.
+        const std::wstring alteredW =
+            AlterFileNameW(itemNameW.c_str(), config.ChangeCaseFormat,
+                           config.ChangeCaseChange, false);
+        if (alteredW.empty() || alteredW == itemNameW)
+            return true; // no rename needed — not an error
+        const std::string alteredA = WideToAnsi(alteredW);
+
+        op.Opcode = ocMoveFile;
+        op.OpFlags = 0;
+        op.Size = MOVE_FILE_SIZE;
+        op.Attr = attr;
+        op.SourceName = AllocFullPath(sourceParentA.c_str(), itemNameA.c_str());
+        if (op.SourceName == NULL)
+            return false;
+        op.TargetName = AllocFullPath(sourceParentA.c_str(), alteredA.c_str());
+        if (op.TargetName == NULL)
+        {
+            free(op.SourceName);
+            op.SourceName = NULL;
+            return false;
+        }
+        op.SetSourceNameW(sourceParentW, itemNameW);
+        op.SetTargetNameW(sourceParentW, alteredW);
+        if (!script->FastMoveUsed)
+            script->FastMoveUsed = TRUE;
+        script->FilesCount++;
+        return AddOperation(script, op);
+    }
+
+    if (action == EActionType::ChangeAttrs)
+    {
+        // ocChangeAttrs repurposes TargetName as the computed NEW attributes
+        // (not a path) — matching the legacy builder (copy_move.cpp:2855/3941).
+        op.Opcode = ocChangeAttrs;
+        op.OpFlags = 0;
+        op.Attr = attr;
+        CQuadWord fileSize((DWORD)(size & 0xFFFFFFFF), (DWORD)(size >> 32));
+        op.Size = (config.ChangeAttrsCompression || config.ChangeAttrsEncryption)
+                      ? (fileSize >= COMPRESS_ENCRYPT_MIN_FILE_SIZE ? fileSize : COMPRESS_ENCRYPT_MIN_FILE_SIZE)
+                      : CHATTRS_FILE_SIZE;
+        op.SourceName = AllocFullPath(sourceParentA.c_str(), itemNameA.c_str());
+        if (op.SourceName == NULL)
+            return false;
+        op.SetSourceNameW(sourceParentW, itemNameW);
+        op.TargetName = (char*)(DWORD_PTR)((attr & config.ChangeAttrsAnd) | config.ChangeAttrsOr);
+        op.OwnsTargetName = false; // TargetName stores attributes, not a pointer
+        script->FilesCount++;
+        return AddOperation(script, op);
+    }
 
     if (action == EActionType::Delete)
     {
@@ -517,6 +617,33 @@ static bool AddCreateDirSkipLabel(COperations* script,
     return AddOperation(script, op);
 }
 
+// A reparse-point directory delete is absorbable as a single link removal (no
+// recursion into the target) when EnableReparseDelete is set (P5).
+static bool IsReparseDeleteLink(EActionType action, DWORD attr, const CBuildConfig& config)
+{
+    return action == EActionType::Delete &&
+           (attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0 &&
+           config.EnableReparseDelete != FALSE;
+}
+
+// Emits a single ocDeleteDirLink op removing the junction/symlink itself —
+// matching the legacy builder (copy_move.cpp:2519). NEVER recurses.
+static bool EmitDeleteDirLinkOp(const std::string& fullA, const std::wstring& fullW,
+                                DWORD attr, COperations* script)
+{
+    COperation op;
+    op.Opcode = ocDeleteDirLink;
+    op.OpFlags = 0;
+    op.Size = DELETE_DIRLINK_SIZE;
+    op.Attr = attr;
+    op.SourceName = DupAnsiString(fullA.c_str());
+    if (op.SourceName == nullptr)
+        return false;
+    op.SetSourceNameW(fullW, std::wstring());
+    op.TargetName = nullptr;
+    return AddOperation(script, op);
+}
+
 static bool BuildDirectoryTree(EActionType action,
                                const std::string& sourceParentA,
                                const std::wstring& sourceParentW,
@@ -548,8 +675,24 @@ static bool BuildDirectoryTree(EActionType action,
         return false;
     }
 
-    if (HasUnsupportedAttributes(attr) ||
-        NeedsSystemHiddenDeletePrompt(config, attr))
+    if (HasUnsupportedAttributes(attr))
+    {
+        // Reparse-point directory: delete the LINK only (never recurse) when
+        // absorption is enabled; otherwise reject to legacy.
+        if (IsReparseDeleteLink(action, attr, config))
+        {
+            emittedAny = true;
+            movedAll = true;
+            return EmitDeleteDirLinkOp(dirPlan.SourcePathA, dirPlan.SourcePathW, attr, script);
+        }
+        return false;
+    }
+    // System/hidden dir delete: handleable only for delete via the prompt
+    // callback (P4); otherwise reject to legacy. The actual prompt fires below,
+    // once the dir name is available.
+    const bool needsSHPrompt = NeedsSystemHiddenDeletePrompt(config, attr);
+    if (needsSHPrompt &&
+        (action != EActionType::Delete || config.DeletePromptCallback == nullptr))
     {
         return false;
     }
@@ -559,22 +702,196 @@ static bool BuildDirectoryTree(EActionType action,
     const std::string targetDirA = dirPlan.HasTarget() ? dirPlan.TargetPathA : opplan::JoinPathA(targetParentA, targetNameA);
     const std::wstring targetDirW = dirPlan.HasTarget() ? dirPlan.TargetPathW : opplan::JoinPathW(targetParentW, targetNameW);
 
+    if (needsSHPrompt) // action==Delete && callback present
+    {
+        CBuildDeletePromptResult r = config.DeletePromptCallback(
+            CBuildDeletePromptKind::SystemHiddenDir, sourceDirA.c_str(), sourceDirW.c_str(),
+            config.DeletePromptContext);
+        if (r == CBuildDeletePromptResult::Cancel)
+            return false;
+        if (r == CBuildDeletePromptResult::Skip)
+        {
+            movedAll = false;
+            emittedAny = false;
+            return true;
+        }
+    }
+
     if ((action == EActionType::Copy || action == EActionType::Move) &&
-        SourceHasADSOrProbeError(sourceDirA, sourceDirW, TRUE, config, script) &&
-        (!config.EnableADS || !config.TargetSupportsADS))
+        ADSForcesReject(sourceDirA, sourceDirW, TRUE, config, script))
     {
         return false;
+    }
+
+    // Fast directory move (P3): a same-root disk move of a whole directory into
+    // a not-yet-existing target is a single ocMoveDir rename — matching the
+    // legacy builder (copy_move.cpp:2569-2613). Opt-in via EnableFastDirMove so
+    // the production gate is unchanged until parity/soak.
+    if (action == EActionType::Move && config.EnableFastDirMove &&
+        config.NetwareFastDirMove && script != nullptr &&
+        !script->CopySecurity &&
+        (script->CopyAttrs || !config.TargetPathIsEncrypted) &&
+        !config.EnableFilters && !config.SkipEmptyDirs &&
+        !script->SameRootButDiffVolume &&
+        SameRootPathW(sourceDirW, targetDirW) &&
+        !FastMoveTargetDirExists(targetDirW))
+    {
+        COperation op = {};
+        op.Opcode = ocMoveDir;
+        op.OpFlags = OPFL_IGNORE_INVALID_NAME;
+        op.Size = MOVE_DIR_SIZE;
+        op.Attr = attr;
+        op.SourceName = DupAnsiString(sourceDirA.c_str());
+        if (op.SourceName == nullptr)
+            return false;
+        op.TargetName = DupAnsiString(targetDirA.c_str());
+        if (op.TargetName == nullptr)
+        {
+            free(op.SourceName);
+            op.SourceName = nullptr;
+            return false;
+        }
+        op.SetSourceNameW(sourceDirW, std::wstring());
+        op.SetTargetNameW(targetDirW, std::wstring());
+        if (!script->FastMoveUsed)
+            script->FastMoveUsed = TRUE;
+        emittedAny = true;
+        movedAll = true;
+        return AddOperation(script, op);
     }
 
     std::vector<DirectoryEntry> entries;
     if (!EnumerateDirectoryEntries(sourceDirW, entries))
         return false;
 
+    // ChangeAttrs / ChangeCase directory (P5). ChangeAttrs applies the dir's own
+    // attribute change then (if SubDirs) recurses. ChangeCase renames contents
+    // FIRST and the directory itself LAST (inner-before-outer, matching legacy
+    // copy_move.cpp:3137). Both recurse through the same child loop.
+    if (action == EActionType::ChangeAttrs || action == EActionType::ChangeCase)
+    {
+        script->DirsCount++;
+        const bool recurse = (action == EActionType::ChangeAttrs) ? (config.ChangeAttrsSubDirs != FALSE)
+                                                                  : (config.ChangeCaseSubDirs != FALSE);
+
+        // ChangeAttrs: the directory's own op comes first.
+        if (action == EActionType::ChangeAttrs)
+        {
+            COperation dop;
+            dop.Opcode = ocChangeAttrs;
+            dop.OpFlags = 0;
+            dop.Attr = attr;
+            dop.Size = CHATTRS_FILE_SIZE;
+            dop.SourceName = DupAnsiString(sourceDirA.c_str());
+            if (dop.SourceName == nullptr)
+                return false;
+            dop.SetSourceNameW(sourceDirW, std::wstring());
+            dop.TargetName = (char*)(DWORD_PTR)((attr & config.ChangeAttrsAnd) | config.ChangeAttrsOr);
+            dop.OwnsTargetName = false;
+            if (!AddOperation(script, dop))
+                return false;
+            emittedAny = true;
+        }
+
+        if (recurse)
+        {
+            for (const DirectoryEntry& entry : entries)
+            {
+                if (HasUnsupportedAttributes(entry.Attr))
+                    return false;
+                opplan::CPlannedSnapshotItem childPlan;
+                if (!opplan::TryPlanChildItem(action,
+                                              sourceDirA, sourceDirW,
+                                              targetDirA, targetDirW,
+                                              entry.NameA, entry.NameW,
+                                              entry.NameA, entry.NameW,
+                                              entry.IsDir, entry.Size,
+                                              entry.Attr, entry.LastWrite,
+                                              childPlan))
+                    return false;
+
+                if (childPlan.IsDir)
+                {
+                    bool childEmitted = false;
+                    bool childMovedAll = true;
+                    if (!BuildDirectoryTree(action,
+                                            childPlan.SourceParentA, childPlan.SourceParentW,
+                                            childPlan.TargetParentA, childPlan.TargetParentW,
+                                            childPlan.ItemNameA, childPlan.ItemNameW,
+                                            childPlan.TargetNameA, childPlan.TargetNameW,
+                                            childPlan.Attr, childPlan.LastWrite,
+                                            config, script, childEmitted, childMovedAll))
+                        return false;
+                    emittedAny = emittedAny || childEmitted;
+                }
+                else
+                {
+                    if (!AddPlannedFileOperation(childPlan, config, script))
+                        return false;
+                    emittedAny = true;
+                }
+            }
+        }
+
+        // ChangeCase: the directory's own rename comes LAST (after contents).
+        if (action == EActionType::ChangeCase)
+        {
+            const std::wstring alteredW =
+                AlterFileNameW(dirPlan.ItemNameW.c_str(), config.ChangeCaseFormat,
+                               config.ChangeCaseChange, true);
+            if (!alteredW.empty() && alteredW != dirPlan.ItemNameW)
+            {
+                const std::string alteredA = WideToAnsi(alteredW);
+                COperation dop;
+                dop.Opcode = ocMoveDir;
+                dop.OpFlags = 0;
+                dop.Size = MOVE_DIR_SIZE;
+                dop.Attr = attr;
+                dop.SourceName = DupAnsiString(sourceDirA.c_str());
+                if (dop.SourceName == nullptr)
+                    return false;
+                dop.TargetName = AllocFullPath(dirPlan.SourceParentA.c_str(), alteredA.c_str());
+                if (dop.TargetName == nullptr)
+                {
+                    free(dop.SourceName);
+                    dop.SourceName = nullptr;
+                    return false;
+                }
+                dop.SetSourceNameW(sourceDirW, std::wstring());
+                dop.SetTargetNameW(dirPlan.SourceParentW, alteredW);
+                if (!script->FastMoveUsed)
+                    script->FastMoveUsed = TRUE;
+                if (!AddOperation(script, dop))
+                    return false;
+            }
+            emittedAny = true;
+        }
+
+        movedAll = true;
+        return true;
+    }
+
     if (action == EActionType::Delete &&
         config.ConfirmDeleteNonEmptyDir &&
         !entries.empty())
     {
-        return false;
+        // P4: without a prompt callback the builder rejects this (legacy owns
+        // the prompt). With one, ask and honor the answer.
+        if (config.DeletePromptCallback == nullptr)
+            return false;
+        CBuildDeletePromptResult r = config.DeletePromptCallback(
+            CBuildDeletePromptKind::NonEmptyDir, sourceDirA.c_str(), sourceDirW.c_str(),
+            config.DeletePromptContext);
+        if (r == CBuildDeletePromptResult::Cancel)
+            return false;
+        if (r == CBuildDeletePromptResult::Skip)
+        {
+            // Do not delete this directory (nor let the parent remove itself).
+            movedAll = false;
+            emittedAny = false;
+            return true;
+        }
+        // Proceed: fall through and build the delete ops.
     }
 
     script->DirsCount++;
@@ -608,7 +925,12 @@ static bool BuildDirectoryTree(EActionType action,
             return false;
         }
 
-        if (HasUnsupportedAttributes(entry.Attr))
+        // Reparse children reject as usual, EXCEPT an absorbable reparse delete:
+        // a junction child flows to BuildDirectoryTree (which emits a link op and
+        // does NOT recurse), a reparse-file child to a normal link-removing
+        // ocDeleteFile below.
+        if (HasUnsupportedAttributes(entry.Attr) &&
+            !IsReparseDeleteLink(action, entry.Attr, config))
             return false;
 
         if (childPlan.IsDir)
@@ -664,7 +986,7 @@ static bool BuildDirectoryTree(EActionType action,
             return false;
     }
 
-    if ((action == EActionType::Move && movedAll) || action == EActionType::Delete)
+    if ((action == EActionType::Move || action == EActionType::Delete) && movedAll)
     {
         if (!AddDirectoryDeleteOperation(dirPlan.SourceParentA, dirPlan.SourceParentW,
                                          dirPlan.ItemNameA, dirPlan.ItemNameW, attr, script))
@@ -708,8 +1030,19 @@ static bool ValidateDirectoryTree(EActionType action,
         return false;
     }
 
-    if (HasUnsupportedAttributes(attr) ||
-        NeedsSystemHiddenDeletePrompt(config, attr))
+    if (HasUnsupportedAttributes(attr))
+    {
+        // An absorbable reparse-point delete is feasible as a single link
+        // removal — feasibility must return here WITHOUT enumerating (never open
+        // the junction / touch the link target).
+        if (IsReparseDeleteLink(action, attr, config))
+            return true;
+        return false;
+    }
+    // Feasibility only (no prompt): a system/hidden dir delete is handleable
+    // iff a prompt callback exists (P4); otherwise reject to legacy.
+    if (NeedsSystemHiddenDeletePrompt(config, attr) &&
+        (action != EActionType::Delete || config.DeletePromptCallback == nullptr))
     {
         return false;
     }
@@ -719,8 +1052,7 @@ static bool ValidateDirectoryTree(EActionType action,
     const std::string targetDirA = dirPlan.HasTarget() ? dirPlan.TargetPathA : opplan::JoinPathA(targetParentA, targetNameA);
     const std::wstring targetDirW = dirPlan.HasTarget() ? dirPlan.TargetPathW : opplan::JoinPathW(targetParentW, targetNameW);
     if ((action == EActionType::Copy || action == EActionType::Move) &&
-        SourceHasADSOrProbeError(sourceDirA, sourceDirW, TRUE, config, nullptr) &&
-        (!config.EnableADS || !config.TargetSupportsADS))
+        ADSForcesReject(sourceDirA, sourceDirW, TRUE, config, nullptr))
     {
         return false;
     }
@@ -729,9 +1061,13 @@ static bool ValidateDirectoryTree(EActionType action,
     if (!EnumerateDirectoryEntries(sourceDirW, entries))
         return false;
 
+    // Feasibility only — do NOT prompt here (BuildDirectoryTree does the actual
+    // prompt during emission). A non-empty delete is handleable iff a prompt
+    // callback exists; otherwise reject to legacy (P4).
     if (action == EActionType::Delete &&
         config.ConfirmDeleteNonEmptyDir &&
-        !entries.empty())
+        !entries.empty() &&
+        config.DeletePromptCallback == nullptr)
     {
         return false;
     }
@@ -751,7 +1087,8 @@ static bool ValidateDirectoryTree(EActionType action,
             return false;
         }
 
-        if (HasUnsupportedAttributes(entry.Attr))
+        if (HasUnsupportedAttributes(entry.Attr) &&
+            !IsReparseDeleteLink(action, entry.Attr, config))
             return false;
 
         if (childPlan.IsDir)
@@ -768,8 +1105,7 @@ static bool ValidateDirectoryTree(EActionType action,
         }
         else if (action == EActionType::Copy || action == EActionType::Move)
         {
-            if (SourceHasADSOrProbeError(childPlan.SourcePathA, childPlan.SourcePathW, FALSE, config, nullptr) &&
-                (!config.EnableADS || !config.TargetSupportsADS))
+            if (ADSForcesReject(childPlan.SourcePathA, childPlan.SourcePathW, FALSE, config, nullptr))
                 return false;
         }
     }
@@ -789,6 +1125,24 @@ static bool ValidateFirstTrancheSnapshot(const CSelectionSnapshot& snapshot,
     case EActionType::Delete:
     case EActionType::Convert:
     case EActionType::RecursiveConvert:
+        if (sourcePathA.empty() || sourcePathW.empty())
+            return false;
+        break;
+
+    case EActionType::ChangeAttrs:
+        // P5 (opt-in): default OFF routes to legacy. Directories require the
+        // recursive-directory surface (checked per item below).
+        if (!config.EnableChangeAttrs)
+            return false;
+        if (sourcePathA.empty() || sourcePathW.empty())
+            return false;
+        break;
+
+    case EActionType::ChangeCase:
+        // P5 (opt-in): default OFF routes to legacy. Directories require the
+        // recursive-directory surface (checked per item below).
+        if (!config.EnableChangeCase)
+            return false;
         if (sourcePathA.empty() || sourcePathW.empty())
             return false;
         break;
@@ -822,7 +1176,8 @@ static bool ValidateFirstTrancheSnapshot(const CSelectionSnapshot& snapshot,
         if (!plan.IsDir)
             continue;
 
-        if (item.IsDir && HasUnsupportedAttributes(item))
+        if (item.IsDir && HasUnsupportedAttributes(item) &&
+            !IsReparseDeleteLink(snapshot.Action, item.Attr, config))
             return false;
 
         if (item.IsDir &&
@@ -895,17 +1250,35 @@ BOOL BuildScriptFromSnapshot(
     if (config.ClearReadOnly)
         script->ClearReadonlyMask = ~FILE_ATTRIBUTE_READONLY;
 
+    // ChangeAttrs (P5): mirror the snapshot's attr masks into a working config
+    // so AddFileOperation can compute the new attributes.
+    CBuildConfig runConfig = config;
+    if (snapshot.Action == EActionType::ChangeAttrs)
+    {
+        runConfig.ChangeAttrsAnd = snapshot.AttrsData.AttrAnd;
+        runConfig.ChangeAttrsOr = snapshot.AttrsData.AttrOr;
+        runConfig.ChangeAttrsCompression = snapshot.AttrsData.ChangeCompression;
+        runConfig.ChangeAttrsEncryption = snapshot.AttrsData.ChangeEncryption;
+        runConfig.ChangeAttrsSubDirs = snapshot.AttrsData.SubDirs;
+    }
+    if (snapshot.Action == EActionType::ChangeCase)
+    {
+        runConfig.ChangeCaseFormat = snapshot.ChangeCaseData.FileNameFormat;
+        runConfig.ChangeCaseChange = snapshot.ChangeCaseData.Change;
+        runConfig.ChangeCaseSubDirs = snapshot.ChangeCaseData.SubDirs;
+    }
+
     // Process each item in the snapshot
     for (size_t i = 0; i < snapshot.Items.size(); i++)
     {
         const CSnapshotItem& item = snapshot.Items[i];
         opplan::CPlannedSnapshotItem plan;
-        if (!opplan::TryPlanSnapshotItem(snapshot, config, item, plan))
+        if (!opplan::TryPlanSnapshotItem(snapshot, runConfig, item, plan))
             return FALSE;
 
         if (!plan.IsDir)
         {
-            if (!AddPlannedFileOperation(plan, config, script))
+            if (!AddPlannedFileOperation(plan, runConfig, script))
             {
                 return FALSE;
             }
@@ -920,7 +1293,7 @@ BOOL BuildScriptFromSnapshot(
                                 plan.ItemNameA, plan.ItemNameW,
                                 plan.TargetNameA, plan.TargetNameW,
                                 item.Attr, item.LastWrite,
-                                config, script, emittedAny, movedAll))
+                                runConfig, script, emittedAny, movedAll))
         {
             return FALSE;
         }

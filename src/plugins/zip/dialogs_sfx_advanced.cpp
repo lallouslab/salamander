@@ -1042,7 +1042,6 @@ BOOL CAdvancedSEDialog::OnImport()
                 buffer[file->Size] = 0;
                 CSfxSettings settings;
 
-                memset(&settings, 0, sizeof(CSfxSettings));
                 settings.Flags = SE_SHOWSUMARY;
                 if (DefLanguage)
                     lstrcpy(settings.SfxFile, DefLanguage->FileName);

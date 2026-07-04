@@ -29,6 +29,10 @@ enum class PlannedOperationKind
     MoveDirectory,
     DeleteDirectory,
     ConvertDirectory,
+    ChangeAttrsFile,      // P5
+    ChangeAttrsDirectory, // P5
+    ChangeCaseFile,       // P5
+    ChangeCaseDirectory,  // P5
 };
 
 struct CPlannedSnapshotItem
@@ -179,6 +183,10 @@ inline PlannedOperationKind PlannedKindFor(EActionType action, bool isDir)
         return isDir ? PlannedOperationKind::MoveDirectory : PlannedOperationKind::MoveFile;
     if (action == EActionType::Convert || action == EActionType::RecursiveConvert)
         return isDir ? PlannedOperationKind::ConvertDirectory : PlannedOperationKind::ConvertFile;
+    if (action == EActionType::ChangeAttrs)
+        return isDir ? PlannedOperationKind::ChangeAttrsDirectory : PlannedOperationKind::ChangeAttrsFile;
+    if (action == EActionType::ChangeCase)
+        return isDir ? PlannedOperationKind::ChangeCaseDirectory : PlannedOperationKind::ChangeCaseFile;
     return isDir ? PlannedOperationKind::DeleteDirectory : PlannedOperationKind::DeleteFile;
 }
 
@@ -202,7 +210,9 @@ inline bool TryPlanChildItem(EActionType action,
         action != EActionType::Move &&
         action != EActionType::Delete &&
         action != EActionType::Convert &&
-        action != EActionType::RecursiveConvert)
+        action != EActionType::RecursiveConvert &&
+        action != EActionType::ChangeAttrs && // P5
+        action != EActionType::ChangeCase)    // P5
     {
         return false;
     }
@@ -256,7 +266,9 @@ inline bool TryPlanSnapshotItem(const CSelectionSnapshot& snapshot,
         snapshot.Action != EActionType::Move &&
         snapshot.Action != EActionType::Delete &&
         snapshot.Action != EActionType::Convert &&
-        snapshot.Action != EActionType::RecursiveConvert)
+        snapshot.Action != EActionType::RecursiveConvert &&
+        snapshot.Action != EActionType::ChangeAttrs && // P5 (file-only)
+        snapshot.Action != EActionType::ChangeCase)    // P5 (file-only)
     {
         return false;
     }

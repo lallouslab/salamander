@@ -34,6 +34,13 @@ struct EnumResult
     static EnumResult Error(DWORD err) { return {false, false, err}; }
 };
 
+// Named alternate data stream returned by stream enumeration.
+struct StreamEnumEntry
+{
+    std::wstring name;  // Stream name incl. ":name:$DATA" as reported by the OS
+    uint64_t size;
+};
+
 // Opaque handle for enumeration sessions
 typedef void* HENUM;
 #define INVALID_HENUM nullptr
@@ -58,15 +65,47 @@ public:
     // Close enumeration handle
     virtual void EndEnum(HENUM handle) = 0;
 
-    // Convenience: Check if path contains wildcard pattern
+    // Enumerate the named alternate data streams (ADS) of a file or directory.
+    // path: full path to the file/dir. Returns INVALID_HENUM on error
+    // (GetLastError()); ERROR_HANDLE_EOF / ERROR_CALL_NOT_IMPLEMENTED mean "no
+    // ADS support / none present" and callers should treat that as an empty set.
+    // The default implementation returns INVALID_HENUM (no ADS) so mocks that
+    // don't care about streams need not override it.
+    virtual HENUM StartStreamEnum(const wchar_t* path)
+    {
+        (void)path;
+        SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+        return INVALID_HENUM;
+    }
+
+    // Get next ADS entry. Returns EnumResult::Done() when no more streams.
+    virtual EnumResult NextStream(HENUM handle, StreamEnumEntry& entry)
+    {
+        (void)handle;
+        (void)entry;
+        return EnumResult::Done();
+    }
+
+    // Close a stream-enumeration handle.
+    virtual void EndStreamEnum(HENUM handle) { (void)handle; }
+
+    // Convenience: Check if the final path component contains a wildcard
+    // pattern. Only the part after the last backslash counts — a directory
+    // component can never legally hold a wildcard, and scanning the whole
+    // string would misread the '?' in a \\?\ long-path prefix as a pattern.
     static bool HasPattern(const wchar_t* path)
     {
         if (!path) return false;
-        while (*path)
+        const wchar_t* component = path;
+        for (const wchar_t* p = path; *p; p++)
         {
-            if (*path == L'*' || *path == L'?')
+            if (*p == L'\\' || *p == L'/')
+                component = p + 1;
+        }
+        for (const wchar_t* p = component; *p; p++)
+        {
+            if (*p == L'*' || *p == L'?')
                 return true;
-            path++;
         }
         return false;
     }

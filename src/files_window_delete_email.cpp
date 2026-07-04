@@ -61,27 +61,7 @@ BOOL PathContainsValidComponents(char* path, BOOL cutPath)
     return TRUE;
 }
 
-// Wide version - checks if path contains components ending with space or dot
-// Returns FALSE if invalid component found (and optionally truncates at that point)
-BOOL PathContainsValidComponentsW(const wchar_t* path)
-{
-    const wchar_t* s = path;
-    while (*s != 0)
-    {
-        const wchar_t* slash = wcschr(s, L'\\');
-        if (slash == NULL)
-            s += wcslen(s);
-        else
-            s = slash;
-        if (s > path && (*(s - 1) <= L' ' || *(s - 1) == L'.'))
-        {
-            return FALSE;
-        }
-        if (slash != NULL)
-            s++;
-    }
-    return TRUE;
-}
+// PathContainsValidComponentsW moved to common/PathDisplayUtils.cpp (shared with private tests).
 
 BOOL CFilesWindow::DeleteThroughRecycleBin(int* selection, int selCount, CFileData* oneFile)
 {

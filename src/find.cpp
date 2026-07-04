@@ -7,6 +7,7 @@
 #include "cfgdlg.h"
 #include "find.h"
 #include "md5.h"
+#include "common/IRegistry.h"
 #include "common/unicode/helpers.h"
 #include "common/widepath.h"
 
@@ -32,6 +33,9 @@ const char* FINDOPTIONSITEM_FILETYPEMODE_REG = "FileTypeMode";
 const char* FINDOPTIONSITEM_AUTOLOAD_REG = "AutoLoad";
 const char* FINDOPTIONSITEM_NAMED_REG = "Named";
 const char* FINDOPTIONSITEM_LOOKIN_REG = "LookIn";
+// Wide twin of LookIn, written via gRegistry (REG_SZ Unicode) only when the
+// path does not round-trip CP_ACP (kb/unicode P0-a).
+const wchar_t* FINDOPTIONSITEM_LOOKINW_REG = L"LookInW";
 const char* FINDOPTIONSITEM_GREP_REG = "Grep";
 
 const char* FINDIGNOREITEM_PATH_REG = "Path";
@@ -161,6 +165,7 @@ CFindOptionsItem::operator=(const CFindOptionsItem& s)
 
     lstrcpy(NamedText, s.NamedText);
     lstrcpy(LookInText, s.LookInText);
+    LookInTextW = s.LookInTextW;
     lstrcpy(GrepText, s.GrepText);
 
     return *this;
@@ -198,6 +203,8 @@ BOOL CFindOptionsItem::Save(HKEY hKey)
         SetValue(hKey, FINDOPTIONSITEM_NAMED_REG, REG_SZ, NamedText, -1);
     if (strcmp(LookInText, def.LookInText) != 0)
         SetValue(hKey, FINDOPTIONSITEM_LOOKIN_REG, REG_SZ, LookInText, -1);
+    if (!LookInTextW.empty())
+        gRegistry->SetString(hKey, FINDOPTIONSITEM_LOOKINW_REG, LookInTextW.c_str());
     if (strcmp(GrepText, def.GrepText) != 0)
         SetValue(hKey, FINDOPTIONSITEM_GREP_REG, REG_SZ, GrepText, -1);
 
@@ -220,6 +227,8 @@ BOOL CFindOptionsItem::Load(HKEY hKey, DWORD cfgVersion)
     GetValue(hKey, FINDOPTIONSITEM_AUTOLOAD_REG, REG_DWORD, &AutoLoad, sizeof(DWORD));
     GetValue(hKey, FINDOPTIONSITEM_NAMED_REG, REG_SZ, NamedText, NamedText.Size());
     GetValue(hKey, FINDOPTIONSITEM_LOOKIN_REG, REG_SZ, LookInText, LookInText.Size());
+    LookInTextW.clear();
+    gRegistry->GetString(hKey, FINDOPTIONSITEM_LOOKINW_REG, LookInTextW);
     GetValue(hKey, FINDOPTIONSITEM_GREP_REG, REG_SZ, GrepText, GREP_TEXT_LEN);
 
     if (cfgVersion <= 13)

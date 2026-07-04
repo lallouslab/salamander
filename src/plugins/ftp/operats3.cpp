@@ -76,7 +76,7 @@ CFTPWorker::CFTPWorker(CFTPOperation* oper, CFTPQueue* queue, const char* host,
     IPRequestUID = 0;
     NextInitCmd = 0;
 
-    memset(&DiskWork, 0, sizeof(DiskWork));
+    DiskWork.Reset();
     DiskWorkIsUsed = FALSE;
 
     ReceivingWakeup = FALSE;

@@ -1,7 +1,12 @@
 ﻿// SPDX-FileCopyrightText: 2026 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#ifdef SALLY_WORKER_CORE_STANDALONE
+#include "common/WorkerCoreStandalone.h"
+#else
 #include "precomp.h"
+#endif
+
 #include "fsutil.h"
 #include "IFileSystem.h"
 #include "IPathService.h"

@@ -301,7 +301,8 @@ const char* SkipRoot(const char* path);
 // 'cutDir' returns pointer to the last directory (the cut part)
 // replacement for PathRemoveFileSpec
 BOOL CutDirectory(char* path, char** cutDir = NULL);
-bool CutDirectoryW(std::wstring& path, std::wstring* cutDir = nullptr);
+// CutDirectoryW + SalPath*W wide helpers live in common/SalPathWide.h (shared
+// with the private tests); included below next to the other SalPath declarations.
 
 // Joins 'path' and 'name' into 'path', ensures joining with backslash, 'path' is buffer of at least 'pathSize' chars
 // returns TRUE if 'name' fits after 'path'; if 'path' or 'name' is empty,
@@ -311,17 +312,7 @@ BOOL SalPathAppend(char* path, const char* name, int pathSize);
 // If 'path' doesn't end with backslash yet, adds it at end of 'path'; 'path' is buffer of at least 'pathSize'
 // chars; returns TRUE if backslash fits after 'path'; if 'path' is empty, backslash is not added
 BOOL SalPathAddBackslash(char* path, int pathSize);
-void SalPathAppendW(std::wstring& path, const wchar_t* name);
-BOOL SalPathAppendW(wchar_t* path, const wchar_t* name, int pathSize);
-void SalPathAddBackslashW(std::wstring& path);
-BOOL SalPathAddBackslashW(wchar_t* path, int pathSize);
-void SalPathRemoveBackslashW(std::wstring& path);
-void SalPathRemoveBackslashW(wchar_t* path);
-void SalPathStripPathW(std::wstring& path);
-const wchar_t* SalPathFindFileNameW(const wchar_t* path);
-void SalPathRemoveExtensionW(std::wstring& path);
-bool SalPathAddExtensionW(std::wstring& path, const wchar_t* extension);
-bool SalPathRenameExtensionW(std::wstring& path, const wchar_t* extension);
+#include "common/SalPathWide.h" // SalPath*W + CutDirectoryW wide helpers
 
 // If 'path' ends with backslash, removes it
 void SalPathRemoveBackslash(char* path);
@@ -387,13 +378,9 @@ BOOL SalGetFullName(char* name, int* errTextID = NULL, const char* curDir = NULL
                     char* nextFocus = NULL, BOOL* callNethood = NULL, int nameBufSize = MAX_PATH,
                     BOOL allowRelPathWithSpaces = FALSE);
 
-// Wide version of SalGetFullName — resolves relative/partial paths to absolute.
-// Works with std::wstring for native long path support.
-// 'name' is modified in-place to the resolved absolute path.
-// Returns TRUE on success, FALSE on error (errTextID set to IDS_* error code).
-BOOL SalGetFullNameW(std::wstring& name, int* errTextID = NULL, const wchar_t* curDir = NULL,
-                     std::wstring* nextFocus = NULL, BOOL* callNethood = NULL,
-                     BOOL allowRelPathWithSpaces = FALSE);
+// Wide version of SalGetFullName + SalRemovePointsFromPath live in
+// common/SalGetFullName.h (shared with the private tests).
+#include "common/SalGetFullName.h"
 
 // Tries to access path 'path' (normal or UNC), runs in a secondary thread, so it allows
 // interruption with ESC key (after some time shows a message about ESC)

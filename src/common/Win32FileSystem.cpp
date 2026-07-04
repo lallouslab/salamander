@@ -1,7 +1,12 @@
 ﻿// SPDX-FileCopyrightText: 2026 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#ifdef SALLY_WORKER_CORE_STANDALONE
+#include "common/WorkerCoreStandalone.h"
+#else
 #include "precomp.h"
+#endif
+
 #include "IFileSystem.h"
 #include "IPathService.h"
 #include "fsutil.h"
@@ -291,10 +296,11 @@ public:
             return FileResult::Error(LastErrorOr(ERROR_INVALID_PARAMETER));
         if (::CreateDirectoryW(lp.Get(), NULL))
             return FileResult::Ok();
-        DWORD err = GetLastError();
-        if (err == ERROR_ALREADY_EXISTS)
-            return FileResult::Ok();  // Directory already exists is OK
-        return FileResult::Error(err);
+        // Keep raw Win32 semantics: an existing directory is reported as
+        // Error(ERROR_ALREADY_EXISTS). SalLPCreateDirectory callers distinguish
+        // it via GetLastError(), and CreateDirectoryFlow must not record an
+        // existing directory as "first created" (rollback would delete it).
+        return FileResult::Error(GetLastError());
     }
 
     FileResult RemoveDirectory(const wchar_t* path) override
@@ -370,6 +376,194 @@ public:
     {
         if (h != INVALID_HANDLE_VALUE && h != NULL)
             ::CloseHandle(h);
+    }
+
+    // --- P2-a handle I/O ops ---------------------------------------------
+
+    FileResult ReadFromHandle(HANDLE h, void* buffer, DWORD toRead, DWORD* read) override
+    {
+        DWORD got = 0;
+        if (!::ReadFile(h, buffer, toRead, &got, NULL))
+            return FileResult::Error(::GetLastError());
+        if (read)
+            *read = got;
+        return FileResult::Ok();
+    }
+
+    FileResult WriteToHandle(HANDLE h, const void* buffer, DWORD toWrite, DWORD* written) override
+    {
+        DWORD put = 0;
+        if (!::WriteFile(h, buffer, toWrite, &put, NULL))
+            return FileResult::Error(::GetLastError());
+        if (written)
+            *written = put;
+        return FileResult::Ok();
+    }
+
+    FileResult SeekHandle(HANDLE h, int64_t distance, DWORD moveMethod, uint64_t* newPos) override
+    {
+        LARGE_INTEGER li;
+        li.QuadPart = distance;
+        LARGE_INTEGER out;
+        if (!::SetFilePointerEx(h, li, &out, moveMethod))
+            return FileResult::Error(::GetLastError());
+        if (newPos)
+            *newPos = (uint64_t)out.QuadPart;
+        return FileResult::Ok();
+    }
+
+    FileResult SetHandleFileTime(HANDLE h, const FILETIME* creation,
+                                 const FILETIME* lastAccess, const FILETIME* lastWrite) override
+    {
+        if (!::SetFileTime(h, creation, lastAccess, lastWrite))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    FileResult GetHandleFileSize(HANDLE h, uint64_t* size) override
+    {
+        LARGE_INTEGER li;
+        if (!::GetFileSizeEx(h, &li))
+            return FileResult::Error(::GetLastError());
+        if (size)
+            *size = (uint64_t)li.QuadPart;
+        return FileResult::Ok();
+    }
+
+    FileResult FlushHandle(HANDLE h) override
+    {
+        if (!::FlushFileBuffers(h))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    FileResult SetHandleEnd(HANDLE h) override
+    {
+        if (!::SetEndOfFile(h))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    // --- P2-a semantic attributes ----------------------------------------
+
+    FileResult SetHandleCompression(HANDLE h, bool compress) override
+    {
+        USHORT state = compress ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
+        DWORD bytes = 0;
+        if (!::DeviceIoControl(h, FSCTL_SET_COMPRESSION, &state, sizeof(state),
+                               NULL, 0, &bytes, NULL))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    FileResult SetHandleSparse(HANDLE h, bool sparse) override
+    {
+        FILE_SET_SPARSE_BUFFER buf;
+        buf.SetSparse = sparse ? TRUE : FALSE;
+        DWORD bytes = 0;
+        if (!::DeviceIoControl(h, FSCTL_SET_SPARSE, &buf, sizeof(buf),
+                               NULL, 0, &bytes, NULL))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    FileResult EncryptPath(const wchar_t* path) override
+    {
+        LongPath lp(path);
+        // EncryptFileW does not accept the \\?\ prefix reliably; use raw path.
+        if (!::EncryptFileW(path))
+            return FileResult::Error(::GetLastError());
+        (void)lp;
+        return FileResult::Ok();
+    }
+
+    FileResult DecryptPath(const wchar_t* path) override
+    {
+        if (!::DecryptFileW(path, 0))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    // --- P2-a security blob ----------------------------------------------
+
+    FileResult GetPathSecurity(const wchar_t* path, std::vector<BYTE>& sd) override
+    {
+        LongPath lp(path);
+        const SECURITY_INFORMATION si = OWNER_SECURITY_INFORMATION |
+                                        GROUP_SECURITY_INFORMATION |
+                                        DACL_SECURITY_INFORMATION;
+        DWORD needed = 0;
+        ::GetFileSecurityW(lp.Get(), si, NULL, 0, &needed);
+        DWORD err = ::GetLastError();
+        if (needed == 0)
+            return FileResult::Error(err != ERROR_SUCCESS ? err : ERROR_ACCESS_DENIED);
+        sd.assign(needed, 0);
+        if (!::GetFileSecurityW(lp.Get(), si, (PSECURITY_DESCRIPTOR)sd.data(), needed, &needed))
+        {
+            sd.clear();
+            return FileResult::Error(::GetLastError());
+        }
+        return FileResult::Ok();
+    }
+
+    FileResult SetPathSecurity(const wchar_t* path, const BYTE* sd, size_t len) override
+    {
+        if (sd == NULL || len == 0)
+            return FileResult::Error(ERROR_INVALID_PARAMETER);
+        LongPath lp(path);
+        const SECURITY_INFORMATION si = DACL_SECURITY_INFORMATION;
+        if (!::SetFileSecurityW(lp.Get(), si, (PSECURITY_DESCRIPTOR)const_cast<BYTE*>(sd)))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    // --- P2-a move + volume ----------------------------------------------
+
+    FileResult MoveFileWithFlags(const wchar_t* source, const wchar_t* target, MoveFlags flags) override
+    {
+        LongPath s(source);
+        LongPath t(target);
+        DWORD win = 0;
+        if (HasFlag(flags, MoveFlags::ReplaceExisting)) win |= MOVEFILE_REPLACE_EXISTING;
+        if (HasFlag(flags, MoveFlags::CopyAllowed))     win |= MOVEFILE_COPY_ALLOWED;
+        if (HasFlag(flags, MoveFlags::WriteThrough))    win |= MOVEFILE_WRITE_THROUGH;
+        if (!::MoveFileExW(s.Get(), t.Get(), win))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    FileResult GetDiskFree(const wchar_t* path, uint64_t* freeForCaller, uint64_t* totalBytes) override
+    {
+        LongPath lp(path);
+        ULARGE_INTEGER freeAvail = {}, total = {}, freeTotal = {};
+        if (!::GetDiskFreeSpaceExW(lp.Get(), &freeAvail, &total, &freeTotal))
+            return FileResult::Error(::GetLastError());
+        if (freeForCaller) *freeForCaller = freeAvail.QuadPart;
+        if (totalBytes)    *totalBytes = total.QuadPart;
+        return FileResult::Ok();
+    }
+
+    FileResult QueryVolumeCapabilities(const wchar_t* path, VolumeCapabilities& caps) override
+    {
+        // GetVolumeInformation needs the volume root; derive it from the path.
+        wchar_t root[MAX_PATH] = {};
+        if (!::GetVolumePathNameW(path, root, MAX_PATH))
+            return FileResult::Error(::GetLastError());
+
+        wchar_t fsName[MAX_PATH] = {};
+        DWORD flags = 0, maxComp = 0, serial = 0;
+        if (!::GetVolumeInformationW(root, NULL, 0, &serial, &maxComp, &flags,
+                                     fsName, MAX_PATH))
+            return FileResult::Error(::GetLastError());
+        caps.fileSystemName = fsName;
+        caps.flags = flags;
+
+        DWORD sectorsPerCluster = 0, bytesPerSector = 0, freeClusters = 0, totalClusters = 0;
+        caps.bytesPerCluster = 0;
+        if (::GetDiskFreeSpaceW(root, &sectorsPerCluster, &bytesPerSector,
+                                &freeClusters, &totalClusters))
+            caps.bytesPerCluster = sectorsPerCluster * bytesPerSector;
+        return FileResult::Ok();
     }
 };
 

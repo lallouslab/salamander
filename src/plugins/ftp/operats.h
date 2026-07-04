@@ -841,6 +841,8 @@ struct CFTPDiskWork
     BOOL CanDeleteEmptyFile;                       // TRUE if an empty file can be deleted (used when canceling/on item error to decide whether to delete a zero-size file)
     TIndirectArray<CDiskListingItem>* DiskListing; // if not NULL (only when Type == fdwtListDir), this is an allocated listing
 
+    CFTPDiskWork();
+    void Reset();
     void CopyFrom(CFTPDiskWork* work); // copies values from 'work' into 'this'
 };
 

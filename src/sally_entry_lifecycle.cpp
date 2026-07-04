@@ -117,7 +117,9 @@ extern "C"
 #include "execute.h"
 #include "drivelst.h"
 
+#ifndef SALLY_E2E_HOST
 #pragma comment(linker, "/ENTRY:MyEntryPoint") // we want our own application entry point
+#endif
 
 #pragma comment(lib, "uxtheme.lib")
 
@@ -1619,59 +1621,7 @@ BOOL CutDirectory(char* path, char** cutDir)
     return TRUE;
 }
 
-// Wide version - cuts last directory from path
-// Returns false if path cannot be shortened (e.g., "C:\" or "\server\share")
-// If cutDir is provided, it receives the cut directory name
-bool CutDirectoryW(std::wstring& path, std::wstring* cutDir)
-{
-    if (path.empty())
-    {
-        if (cutDir)
-            cutDir->clear();
-        return false;
-    }
-
-    // Remove trailing backslash for processing
-    size_t len = path.length();
-    if (len > 0 && path[len - 1] == L'\\')
-        len--;
-
-    // Find last backslash
-    size_t lastBS = path.rfind(L'\\', len - 1);
-    if (lastBS == std::wstring::npos)
-    {
-        if (cutDir)
-            cutDir->clear();
-        return false;  // No backslash found
-    }
-
-    // Find second-to-last backslash
-    size_t prevBS = (lastBS > 0) ? path.rfind(L'\\', lastBS - 1) : std::wstring::npos;
-
-    // Check for root path cases
-    if (prevBS == std::wstring::npos)
-    {
-        // "C:\somedir" case - cut to "C:\"
-        if (cutDir)
-            *cutDir = path.substr(lastBS + 1, len - lastBS - 1);
-        path.resize(lastBS + 1);  // Keep the backslash: "C:\"
-        return true;
-    }
-
-    // Check for UNC root "\server\share"
-    if (path.length() >= 2 && path[0] == L'\\' && path[1] == L'\\' && prevBS <= 2)
-    {
-        if (cutDir)
-            cutDir->clear();
-        return false;  // Cannot shorten UNC root
-    }
-
-    // Normal case: "C:\dir1\dir2" -> "C:\dir1"
-    if (cutDir)
-        *cutDir = path.substr(lastBS + 1, len - lastBS - 1);
-    path.resize(lastBS);
-    return true;
-}
+// CutDirectoryW moved to common/SalPathWide.cpp (shared with private tests).
 
 // ****************************************************************************
 

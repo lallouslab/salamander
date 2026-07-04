@@ -834,45 +834,6 @@ CDiskListingItem::CDiskListingItem(const char* name, BOOL isDir, const CQuadWord
 // CFTPDiskThread
 //
 
-void CFTPDiskWork::CopyFrom(CFTPDiskWork* work)
-{
-    SocketMsg = work->SocketMsg;
-    SocketUID = work->SocketUID;
-    MsgID = work->MsgID;
-
-    Type = work->Type;
-
-    lstrcpyn(Path, work->Path, Path.Size());
-    lstrcpyn(Name, work->Name, Name.Size());
-
-    ForceAction = work->ForceAction;
-    AlreadyRenamedName = work->AlreadyRenamedName;
-
-    CannotCreateDir = work->CannotCreateDir;
-    DirAlreadyExists = work->DirAlreadyExists;
-    CannotCreateFile = work->CannotCreateFile;
-    FileAlreadyExists = work->FileAlreadyExists;
-    RetryOnCreatedFile = work->RetryOnCreatedFile;
-    RetryOnResumedFile = work->RetryOnResumedFile;
-
-    CheckFromOffset = work->CheckFromOffset;
-    WriteOrReadFromOffset = work->WriteOrReadFromOffset;
-    FlushDataBuffer = work->FlushDataBuffer;
-    ValidBytesInFlushDataBuffer = work->ValidBytesInFlushDataBuffer;
-    EOLsInFlushDataBuffer = work->EOLsInFlushDataBuffer;
-    WorkFile = work->WorkFile;
-
-    ProblemID = work->ProblemID;
-    WinError = work->WinError;
-    State = work->State;
-    NewTgtName = work->NewTgtName;
-    OpenedFile = work->OpenedFile;
-    FileSize = work->FileSize;
-    CanOverwrite = work->CanOverwrite;
-    CanDeleteEmptyFile = work->CanDeleteEmptyFile;
-    DiskListing = work->DiskListing;
-}
-
 CFTPDiskThread::CFTPDiskThread() : CThread("FTP Disk Thread"), Work(20, 50, dtNoDelete), FilesToClose(20, 50)
 {
     HANDLES(InitializeCriticalSection(&DiskCritSect));
@@ -1977,49 +1938,6 @@ void DoCheckOrWriteToFile(CFTPDiskWork& localWork, BOOL& needCopyBack)
     }
 }
 
-void DoCreateAndWriteFile(CFTPDiskWork& localWork, BOOL& needCopyBack, BOOL& workDone)
-{
-    HANDLE file = NULL;
-    if (localWork.WorkFile == NULL) // the file has not been created yet
-    {
-        SetFileAttributes(localWork.Name, FILE_ATTRIBUTE_NORMAL); // to allow overwriting a read-only file as well
-        HANDLE f = HANDLES_Q(CreateFile(localWork.Name, GENERIC_WRITE,
-                                        FILE_SHARE_READ, NULL,
-                                        CREATE_ALWAYS,
-                                        FILE_FLAG_SEQUENTIAL_SCAN,
-                                        NULL));
-        if (f != INVALID_HANDLE_VALUE)
-        {
-            file = f;
-            localWork.OpenedFile = f;
-            workDone = TRUE;     // if cancelled, close the file handle and delete the file
-            needCopyBack = TRUE; // return the handle of the created file
-        }
-        else // error while creating the file
-        {
-            localWork.State = sqisFailed;
-            localWork.WinError = GetLastError();
-            needCopyBack = TRUE; // return the error
-        }
-    }
-    else
-        file = localWork.WorkFile; // write only
-
-    if (file != NULL && localWork.ValidBytesInFlushDataBuffer > 0) // write to the file
-    {
-        DWORD writtenBytes;
-        if (!WriteFile(file, localWork.FlushDataBuffer, localWork.ValidBytesInFlushDataBuffer,
-                       &writtenBytes, NULL) ||
-            writtenBytes != (DWORD)localWork.ValidBytesInFlushDataBuffer)
-        {
-            localWork.State = sqisFailed;
-            localWork.WinError = GetLastError();
-            needCopyBack = TRUE; // return the error
-        }
-        // else;  // successfully written, we are successfully done
-    }
-}
-
 void DoListDirectory(CFTPDiskWork& localWork, BOOL& needCopyBack)
 {
     CPathBuffer srcPath;
@@ -2509,7 +2427,7 @@ CFTPDiskThread::Body()
 
                 case fdwtCreateAndWriteFile:
                 {
-                    DoCreateAndWriteFile(localWork, needCopyBack, workDone);
+                    FTPExecuteCreateAndWriteFileDiskWork(localWork, needCopyBack, workDone);
                     break;
                 }
 

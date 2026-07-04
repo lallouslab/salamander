@@ -107,6 +107,12 @@ public:
     virtual ShellResult GetSpecialFolderPath(int csidl,
                                              std::wstring& path,
                                              bool create = false) = 0;
+
+    // Move files/dirs to the Recycle Bin (P2-a). Silent (no shell UI/confirm);
+    // the caller owns confirmation. Default fails with CALL_NOT_IMPLEMENTED so
+    // mocks need not override.
+    virtual ShellResult MoveToRecycleBin(const std::vector<std::wstring>& paths)
+    { (void)paths; return ShellResult::Error(ERROR_CALL_NOT_IMPLEMENTED); }
 };
 
 // Global shell interface - default is Win32 implementation

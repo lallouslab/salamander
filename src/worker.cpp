@@ -462,256 +462,168 @@ void CProgressSpeedMeter::BytesReceived(DWORD count, DWORD time, DWORD maxPacket
 //
 
 // Opens source file for reading - uses SourceNameW if available
+// P2-b: the COperation file helpers are wide-only through gFileSystem. Every
+// producer supplies wide names (PopulateWidePathsFromAnsi guarantees it on Add);
+// the rare ANSI-mirror-only case is converted here so there is ONE interface
+// path and no SalLP*/SalCreateFile* ANSI branch. Hot paths stay zero-alloc: the
+// scratch wstring is only touched when a real wide name is absent.
+static const wchar_t* EffWide(bool hasWide, const std::wstring& w, const char* a,
+                              std::wstring& scratch)
+{
+    if (hasWide)
+        return w.c_str();
+    scratch = AnsiToWide(a);
+    return scratch.c_str();
+}
+
 HANDLE COperation::OpenSourceFile(DWORD flags) const
 {
-    if (HasWideSource())
-    {
-        IFileSystem* fileSystem = GetWorkerFileSystem();
-        HANDLE h = fileSystem->CreateFile(
-            SourceNameW.c_str(),
-            GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            NULL,
-            OPEN_EXISTING,
-            flags,
-            NULL);
-        // Add handle tracking for debug builds
-        DWORD err = GetLastError();
-        HANDLES_ADD_EX(__otQuiet, h != INVALID_HANDLE_VALUE, __htFile, __hoCreateFile, h, err, TRUE);
-        return h;
-    }
-    else
-    {
-        return SalCreateFileH(
-            SourceName,
-            GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            NULL,
-            OPEN_EXISTING,
-            flags,
-            NULL);
-    }
+    std::wstring scratch;
+    const wchar_t* nameW = EffWide(HasWideSource(), SourceNameW, SourceName, scratch);
+    HANDLE h = GetWorkerFileSystem()->CreateFile(
+        nameW, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+        OPEN_EXISTING, flags, NULL);
+    DWORD err = GetLastError();
+    HANDLES_ADD_EX(__otQuiet, h != INVALID_HANDLE_VALUE, __htFile, __hoCreateFile, h, err, TRUE);
+    return h;
 }
 
-// Opens target file for writing - uses TargetNameW if available
+// Opens target file for writing.
 HANDLE COperation::OpenTargetFile(DWORD access, DWORD shareMode, DWORD disposition, DWORD flags) const
 {
-    if (HasWideTarget())
-    {
-        IFileSystem* fileSystem = GetWorkerFileSystem();
-        HANDLE h = fileSystem->CreateFile(
-            TargetNameW.c_str(),
-            access,
-            shareMode,
-            NULL,
-            disposition,
-            flags,
-            NULL);
-        // Add handle tracking for debug builds
-        DWORD err = GetLastError();
-        HANDLES_ADD_EX(__otQuiet, h != INVALID_HANDLE_VALUE, __htFile, __hoCreateFile, h, err, TRUE);
-        return h;
-    }
-    else
-    {
-        return SalCreateFileH(
-            TargetName,
-            access,
-            shareMode,
-            NULL,
-            disposition,
-            flags,
-            NULL);
-    }
+    std::wstring scratch;
+    const wchar_t* nameW = EffWide(HasWideTarget(), TargetNameW, TargetName, scratch);
+    HANDLE h = GetWorkerFileSystem()->CreateFile(
+        nameW, access, shareMode, NULL, disposition, flags, NULL);
+    DWORD err = GetLastError();
+    HANDLES_ADD_EX(__otQuiet, h != INVALID_HANDLE_VALUE, __htFile, __hoCreateFile, h, err, TRUE);
+    return h;
 }
 
-// Creates target file with encryption handling - uses TargetNameW if available
-// This is a wide-path aware version of SalCreateFileEx
+// Creates target file with encryption handling.
 // NOTE: Does NOT add handle tracking - caller is responsible for HANDLES_ADD_EX
 HANDLE COperation::CreateTargetFileEx(DWORD desiredAccess, DWORD shareMode, DWORD flagsAndAttributes, BOOL* encryptionNotSupported) const
 {
-    if (HasWideTarget())
+    std::wstring scratch;
+    const wchar_t* nameW = EffWide(HasWideTarget(), TargetNameW, TargetName, scratch);
+    IFileSystem* fileSystem = GetWorkerFileSystem();
+    HANDLE out = fileSystem->CreateFile(nameW, desiredAccess, shareMode, NULL,
+                                        CREATE_NEW, flagsAndAttributes, NULL);
+    if (out == INVALID_HANDLE_VALUE && encryptionNotSupported != NULL &&
+        (flagsAndAttributes & FILE_ATTRIBUTE_ENCRYPTED))
     {
-        IFileSystem* fileSystem = GetWorkerFileSystem();
-        // Use wide path directly - bypass ANSI conversion that loses Unicode chars
-        HANDLE out = fileSystem->CreateFile(TargetNameW.c_str(), desiredAccess, shareMode, NULL,
-                                            CREATE_NEW, flagsAndAttributes, NULL);
-        if (out == INVALID_HANDLE_VALUE && encryptionNotSupported != NULL &&
-            (flagsAndAttributes & FILE_ATTRIBUTE_ENCRYPTED))
+        // Test whether encryption is what the volume refused.
+        HANDLE testOut = fileSystem->CreateFile(nameW, desiredAccess, shareMode, NULL,
+                                                CREATE_NEW, (flagsAndAttributes & ~(FILE_ATTRIBUTE_ENCRYPTED | FILE_ATTRIBUTE_READONLY)), NULL);
+        if (testOut != INVALID_HANDLE_VALUE)
         {
-            // Test if encryption is not supported
-            HANDLE testOut = fileSystem->CreateFile(TargetNameW.c_str(), desiredAccess, shareMode, NULL,
-                                                    CREATE_NEW, (flagsAndAttributes & ~(FILE_ATTRIBUTE_ENCRYPTED | FILE_ATTRIBUTE_READONLY)), NULL);
-            if (testOut != INVALID_HANDLE_VALUE)
-            {
-                *encryptionNotSupported = TRUE;
-                fileSystem->CloseHandle(testOut);
-                fileSystem->DeleteFile(TargetNameW.c_str());
-            }
+            *encryptionNotSupported = TRUE;
+            fileSystem->CloseHandle(testOut);
+            fileSystem->DeleteFile(nameW);
         }
-        return out;
     }
-    else
-    {
-        // Use existing ANSI path function
-        return SalCreateFileEx(TargetName, desiredAccess, shareMode, flagsAndAttributes, encryptionNotSupported);
-    }
+    return out;
 }
 
-// Deletes target file - uses TargetNameW if available
+// Deletes target file.
 BOOL COperation::DeleteTargetFile() const
 {
-    if (HasWideTarget())
-    {
-        return GetWorkerFileSystem()->DeleteFile(TargetNameW.c_str()).success;
-    }
-    else
-    {
-        return SalLPDeleteFile(TargetName);
-    }
+    std::wstring scratch;
+    return GetWorkerFileSystem()->DeleteFile(
+        EffWide(HasWideTarget(), TargetNameW, TargetName, scratch)).success;
 }
 
-// Sets target file attributes - uses TargetNameW if available
+// Sets target file attributes.
 BOOL COperation::SetTargetAttributes(DWORD attrs) const
 {
-    if (HasWideTarget())
-    {
-        return GetWorkerFileSystem()->SetFileAttributes(TargetNameW.c_str(), attrs).success;
-    }
-    else
-    {
-        return SalLPSetFileAttributes(TargetName, attrs);
-    }
+    std::wstring scratch;
+    return GetWorkerFileSystem()->SetFileAttributes(
+        EffWide(HasWideTarget(), TargetNameW, TargetName, scratch), attrs).success;
 }
 
-// Gets target file attributes - uses TargetNameW if available
+// Gets target file attributes.
 DWORD COperation::GetTargetAttributes() const
 {
-    if (HasWideTarget())
-    {
-        return GetWorkerFileSystem()->GetFileAttributes(TargetNameW.c_str());
-    }
-    else
-    {
-        return SalLPGetFileAttributes(TargetName);
-    }
+    std::wstring scratch;
+    return GetWorkerFileSystem()->GetFileAttributes(
+        EffWide(HasWideTarget(), TargetNameW, TargetName, scratch));
 }
 
-// Deletes source file - uses SourceNameW if available
+// Deletes source file.
 BOOL COperation::DeleteSourceFile() const
 {
-    if (HasWideSource())
-    {
-        return GetWorkerFileSystem()->DeleteFile(SourceNameW.c_str()).success;
-    }
-    else
-    {
-        return SalLPDeleteFile(SourceName);
-    }
+    std::wstring scratch;
+    return GetWorkerFileSystem()->DeleteFile(
+        EffWide(HasWideSource(), SourceNameW, SourceName, scratch)).success;
 }
 
-// Sets source file attributes - uses SourceNameW if available
+// Sets source file attributes.
 BOOL COperation::SetSourceAttributes(DWORD attrs) const
 {
-    if (HasWideSource())
-    {
-        return GetWorkerFileSystem()->SetFileAttributes(SourceNameW.c_str(), attrs).success;
-    }
-    else
-    {
-        return SalLPSetFileAttributes(SourceName, attrs);
-    }
+    std::wstring scratch;
+    return GetWorkerFileSystem()->SetFileAttributes(
+        EffWide(HasWideSource(), SourceNameW, SourceName, scratch), attrs).success;
 }
 
-// Gets source file attributes - uses SourceNameW if available
+// Gets source file attributes.
 DWORD COperation::GetSourceAttributes() const
 {
-    if (HasWideSource())
-    {
-        return GetWorkerFileSystem()->GetFileAttributes(SourceNameW.c_str());
-    }
-    else
-    {
-        return SalLPGetFileAttributes(SourceName);
-    }
+    std::wstring scratch;
+    return GetWorkerFileSystem()->GetFileAttributes(
+        EffWide(HasWideSource(), SourceNameW, SourceName, scratch));
 }
 
-// Clears read-only attribute on target file - uses TargetNameW if available
+// Clears read-only attribute on target file. ClearReadOnlyAttrW is a pure wide
+// helper (get+clear attrs); no interface method needed.
 BOOL COperation::ClearTargetReadOnly(DWORD attr) const
 {
-    if (HasWideTarget())
-    {
-        return ClearReadOnlyAttrW(TargetNameW.c_str(), attr);
-    }
-    else
-    {
-        return ClearReadOnlyAttr(TargetName, attr);
-    }
+    std::wstring scratch;
+    return ClearReadOnlyAttrW(EffWide(HasWideTarget(), TargetNameW, TargetName, scratch), attr);
 }
 
-// Clears read-only attribute on source file - uses SourceNameW if available
+// Clears read-only attribute on source file.
 BOOL COperation::ClearSourceReadOnly(DWORD attr) const
 {
-    if (HasWideSource())
-    {
-        return ClearReadOnlyAttrW(SourceNameW.c_str(), attr);
-    }
-    else
-    {
-        return ClearReadOnlyAttr(SourceName, attr);
-    }
+    std::wstring scratch;
+    return ClearReadOnlyAttrW(EffWide(HasWideSource(), SourceNameW, SourceName, scratch), attr);
 }
 
-// Checks if source file name is invalid (ends with space/dot) - uses SourceNameW if available
+// Checks if source file name is invalid (ends with space/dot).
 BOOL COperation::IsSourceNameInvalid(BOOL ignInvalidName) const
 {
-    if (HasWideSource())
-    {
-        return FileNameIsInvalidW(SourceNameW.c_str(), TRUE, ignInvalidName);
-    }
-    else
-    {
-        return FileNameIsInvalid(SourceName, TRUE, ignInvalidName);
-    }
+    std::wstring scratch;
+    return FileNameIsInvalidW(EffWide(HasWideSource(), SourceNameW, SourceName, scratch),
+                              TRUE, ignInvalidName);
 }
 
-// Checks if target file name is invalid (ends with space/dot) - uses TargetNameW if available
+// Checks if target file name is invalid (ends with space/dot).
 BOOL COperation::IsTargetNameInvalid(BOOL ignInvalidName) const
 {
-    if (HasWideTarget())
-    {
-        return FileNameIsInvalidW(TargetNameW.c_str(), TRUE, ignInvalidName);
-    }
-    else
-    {
-        return FileNameIsInvalid(TargetName, TRUE, ignInvalidName);
-    }
+    std::wstring scratch;
+    return FileNameIsInvalidW(EffWide(HasWideTarget(), TargetNameW, TargetName, scratch),
+                              TRUE, ignInvalidName);
 }
 
-// FindFirstFile for target path - always returns wide find data
+// FindFirstFile for target path - always returns wide find data.
 HANDLE COperation::FindFirstTarget(WIN32_FIND_DATAW* findData) const
 {
-    if (HasWideTarget())
-    {
-        IFileSystem* fileSystem = GetWorkerFileSystem();
-        return fileSystem != NULL ? fileSystem->FindFirstFile(TargetNameW.c_str(), findData)
-                                  : INVALID_HANDLE_VALUE;
-    }
-    else
-        return SalFindFirstFileHW(TargetName, findData);
+    IFileSystem* fileSystem = GetWorkerFileSystem();
+    if (fileSystem == NULL)
+        return INVALID_HANDLE_VALUE;
+    std::wstring scratch;
+    return fileSystem->FindFirstFile(
+        EffWide(HasWideTarget(), TargetNameW, TargetName, scratch), findData);
 }
 
-// FindFirstFile for source path - always returns wide find data
+// FindFirstFile for source path - always returns wide find data.
 HANDLE COperation::FindFirstSource(WIN32_FIND_DATAW* findData) const
 {
-    if (HasWideSource())
-    {
-        IFileSystem* fileSystem = GetWorkerFileSystem();
-        return fileSystem != NULL ? fileSystem->FindFirstFile(SourceNameW.c_str(), findData)
-                                  : INVALID_HANDLE_VALUE;
-    }
-    else
-        return SalFindFirstFileHW(SourceName, findData);
+    IFileSystem* fileSystem = GetWorkerFileSystem();
+    if (fileSystem == NULL)
+        return INVALID_HANDLE_VALUE;
+    std::wstring scratch;
+    return fileSystem->FindFirstFile(
+        EffWide(HasWideSource(), SourceNameW, SourceName, scratch), findData);
 }
 
 // Wraps CreateFileW + DeviceIoControl(FSCTL_SET_COMPRESSION) for platform abstraction.
@@ -3578,7 +3490,8 @@ void DoCopyFileLoopOrig(HANDLE& in, HANDLE& out, void* buffer, int& limitBufferS
 
             int ret;
             ret = IDCANCEL;
-            ret = observer.AskFileErrorById(IDS_ERRORREADINGFILE, op->SourceName, err);
+            ret = observer.AskFileErrorByIdW(IDS_ERRORREADINGFILE, op->SourceName,
+                                             op->SourceNameW.c_str(), err);
             switch (ret)
             {
             case IDRETRY:
@@ -4155,7 +4068,8 @@ BOOL CCopy_Context::HandleReadingErr(int blkIndex, DWORD err, BOOL* copyError, B
         }
         else
         {
-            ret = Observer->AskFileErrorById(IDS_ERRORREADINGFILE, Op->SourceName, err);
+            ret = Observer->AskFileErrorByIdW(IDS_ERRORREADINGFILE, Op->SourceName,
+                                              Op->SourceNameW.c_str(), err);
         }
         CancelOpPhase2(blkIndex);
         BOOL errAgain = FALSE;
@@ -4276,7 +4190,8 @@ BOOL CCopy_Context::HandleWritingErr(int blkIndex, DWORD err, BOOL* copyError, B
         }
 
         int ret = IDCANCEL;
-        ret = Observer->AskFileErrorById(IDS_ERRORWRITINGFILE, Op->TargetName, err);
+        ret = Observer->AskFileErrorByIdW(IDS_ERRORWRITINGFILE, Op->TargetName,
+                                          Op->TargetNameW.c_str(), err);
         CancelOpPhase2(blkIndex);
         BOOL errAgain = FALSE;
         switch (ret)
@@ -6296,7 +6211,8 @@ BOOL DoMoveFile(COperation* op, IWorkerObserver& observer, void* buffer,
                         return TRUE;
 
                     int ret = IDCANCEL;
-                    ret = observer.AskFileErrorById(IDS_ERRORDELETINGFILE, op->SourceName, err);
+                    ret = observer.AskFileErrorByIdW(IDS_ERRORDELETINGFILE, op->SourceName,
+                                                     op->SourceNameW.c_str(), err);
                     switch (ret)
                     {
                     case IDRETRY:
@@ -6477,7 +6393,8 @@ BOOL DoDeleteFile(IWorkerObserver& observer, char* name, const CQuadWord& size, 
 
             int ret;
             ret = IDCANCEL;
-            ret = observer.AskFileErrorById(IDS_ERRORDELETINGFILE, name, err);
+            ret = observer.AskFileErrorByIdW(IDS_ERRORDELETINGFILE, name,
+                                             effectiveDeleteNameW.c_str(), err);
             switch (ret)
             {
             case IDRETRY:
@@ -6610,6 +6527,9 @@ BOOL DoCreateDir(IWorkerObserver& observer, char* name, DWORD attr,
 
     skip = FALSE;
     alreadyExisted = FALSE;
+    // Wide name for user-facing error reporting (P1): real wide when supplied,
+    // else the ANSI mirror widened.
+    const std::wstring effectiveCreateNameW = !nameW.empty() ? nameW : AnsiToWide(name);
     CQuadWord lastTransferredFileSize;
     script->GetTFS(&lastTransferredFileSize);
 
@@ -6866,7 +6786,8 @@ BOOL DoCreateDir(IWorkerObserver& observer, char* name, DWORD attr,
                     goto SKIP_CREATE_ERROR;
 
                 int ret = IDCANCEL;
-                ret = observer.AskFileErrorByIds(IDS_ERRORCREATINGDIR, name, IDS_NAMEALREADYUSED);
+                ret = observer.AskFileErrorByIdsW(IDS_ERRORCREATINGDIR, name,
+                                                  effectiveCreateNameW.c_str(), IDS_NAMEALREADYUSED);
                 switch (ret)
                 {
                 case IDRETRY:
@@ -6892,7 +6813,8 @@ BOOL DoCreateDir(IWorkerObserver& observer, char* name, DWORD attr,
 
             int ret;
             ret = IDCANCEL;
-            ret = observer.AskFileErrorById(IDS_ERRORCREATINGDIR, name, err);
+            ret = observer.AskFileErrorByIdW(IDS_ERRORCREATINGDIR, name,
+                                             effectiveCreateNameW.c_str(), err);
             switch (ret)
             {
             case IDRETRY:
@@ -6926,6 +6848,9 @@ BOOL DoDeleteDir(IWorkerObserver& observer, char* name, const CQuadWord& size, C
     // and RemoveDirectory trim the spaces/dots and operate on a different path
     std::wstring nameRmDirW = MakeCopyWithBackslashIfNeededW(
         !nameW.empty() ? nameW.c_str() : AnsiToWide(name).c_str());
+
+    // Wide name for user-facing error reporting (P1).
+    const std::wstring effectiveDeleteDirW = !nameW.empty() ? nameW : AnsiToWide(name);
 
     while (1)
     {
@@ -6994,7 +6919,8 @@ BOOL DoDeleteDir(IWorkerObserver& observer, char* name, const CQuadWord& size, C
             {
                 int ret;
                 ret = IDCANCEL;
-                ret = observer.AskFileErrorById(IDS_ERRORDELETINGDIR, name, err);
+                ret = observer.AskFileErrorByIdW(IDS_ERRORDELETINGDIR, name,
+                                                 effectiveDeleteDirW.c_str(), err);
                 switch (ret)
                 {
                 case IDRETRY:
@@ -7183,6 +7109,9 @@ BOOL DoDeleteDirLink(IWorkerObserver& observer, char* name, const CQuadWord& siz
     std::wstring nameDelLinkW = MakeCopyWithBackslashIfNeededW(
         !nameW.empty() ? nameW.c_str() : AnsiToWide(name).c_str());
 
+    // Wide name for user-facing error reporting (P1).
+    const std::wstring effectiveDeleteDirW = !nameW.empty() ? nameW : AnsiToWide(name);
+
     while (1)
     {
         DWORD err;
@@ -7207,7 +7136,8 @@ BOOL DoDeleteDirLink(IWorkerObserver& observer, char* name, const CQuadWord& siz
 
             int ret;
             ret = IDCANCEL;
-            ret = observer.AskFileErrorById(IDS_ERRORDELETINGDIRLINK, name, err);
+            ret = observer.AskFileErrorByIdW(IDS_ERRORDELETINGDIRLINK, name,
+                                             effectiveDeleteDirW.c_str(), err);
             switch (ret)
             {
             case IDRETRY:
@@ -7517,7 +7447,8 @@ CONVERT_AGAIN:
                                     goto SKIP_CONVERT;
 
                                 int ret = IDCANCEL;
-                                ret = observer.AskFileErrorById(IDS_ERRORREADINGFILE, name, err);
+                                ret = observer.AskFileErrorByIdW(IDS_ERRORREADINGFILE, name,
+                                                                 effectiveNameW.c_str(), err);
                                 switch (ret)
                                 {
                                 case IDRETRY:
@@ -7603,7 +7534,8 @@ CONVERT_AGAIN:
 
                                 int ret;
                                 ret = IDCANCEL;
-                                ret = observer.AskFileErrorById(IDS_ERROROVERWRITINGFILE, name, err);
+                                ret = observer.AskFileErrorByIdW(IDS_ERROROVERWRITINGFILE, name,
+                                                                 effectiveNameW.c_str(), err);
                                 switch (ret)
                                 {
                                 case IDRETRY:
@@ -7705,7 +7637,8 @@ CONVERT_AGAIN:
 
             int ret;
             ret = IDCANCEL;
-            ret = observer.AskFileErrorById(IDS_ERROROPENINGFILE, name, err);
+            ret = observer.AskFileErrorByIdW(IDS_ERROROPENINGFILE, name,
+                                             effectiveNameW.c_str(), err);
             switch (ret)
             {
             case IDRETRY:
@@ -7741,6 +7674,8 @@ BOOL DoChangeAttrs(IWorkerObserver& observer, char* name, const CQuadWord& size,
     // on a different path
     std::wstring nameSetAttrsW = MakeCopyWithBackslashIfNeededW(
         !nameW.empty() ? nameW.c_str() : AnsiToWide(name).c_str());
+    // Wide name for user-facing error reporting (P1).
+    const std::wstring effectiveAttrsNameW = !nameW.empty() ? nameW : AnsiToWide(name);
     // Compute wide path for compress/encrypt/decrypt operations (use original nameW,
     // not the backslash-fixed version, since those functions do their own fixup)
     std::wstring effectiveNameW = !nameW.empty() ? nameW : AnsiToWide(name);
@@ -7866,7 +7801,7 @@ BOOL DoChangeAttrs(IWorkerObserver& observer, char* name, const CQuadWord& size,
 
             int ret;
             ret = IDCANCEL;
-            ret = observer.AskFileErrorById(errTitleId, name, error);
+            ret = observer.AskFileErrorByIdW(errTitleId, name, effectiveAttrsNameW.c_str(), error);
             switch (ret)
             {
             case IDRETRY:

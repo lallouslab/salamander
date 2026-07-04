@@ -424,6 +424,8 @@
 #define CM_FIND_DUPLICATES       2292
 #define CM_FIND_IGNORE           2293
 #define CM_FIND_FULLROWSEL       2294
+#define CM_FIND_SAVE_RESULTS     2295
+#define CM_FIND_LOAD_RESULTS     2296
 
 #define CM_ACTIVEHOTPATH_MIN     2400    // goto hot path X (rezervace pro HOT_PATHS_COUNT)
 #define CM_ACTIVEHOTPATH_MAX     2429

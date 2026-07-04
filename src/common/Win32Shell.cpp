@@ -1,7 +1,12 @@
 ﻿// SPDX-FileCopyrightText: 2026 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#ifdef SALLY_WORKER_CORE_STANDALONE
+#include "common/WorkerCoreStandalone.h"
+#else
 #include "precomp.h"
+#endif
+
 #include "IShell.h"
 #include <shlobj.h>
 #include <stdlib.h>
@@ -116,6 +121,35 @@ public:
             return ShellResult::Error(hr);
 
         path = buffer;
+        return ShellResult::Ok();
+    }
+
+    ShellResult MoveToRecycleBin(const std::vector<std::wstring>& paths) override
+    {
+        if (paths.empty())
+            return ShellResult::Ok();
+
+        // Build the double-null-terminated pFrom list.
+        std::wstring from;
+        for (const std::wstring& p : paths)
+        {
+            from.append(p);
+            from.push_back(L'\0');
+        }
+        from.push_back(L'\0');
+
+        SHFILEOPSTRUCTW op;
+        memset(&op, 0, sizeof(op));
+        op.wFunc = FO_DELETE;
+        op.pFrom = from.c_str();
+        op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT |
+                    FOF_NOCONFIRMMKDIR;
+
+        int result = SHFileOperationW(&op);
+        if (result != 0)
+            return ShellResult::Error(result);
+        if (op.fAnyOperationsAborted)
+            return ShellResult::Error(ERROR_CANCELLED);
         return ShellResult::Ok();
     }
 };

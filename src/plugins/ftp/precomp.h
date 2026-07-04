@@ -52,4 +52,5 @@
 #include "ctrlcon.h"
 #include "parser.h"
 #include "operats.h"
+#include "ftp_diskwork_core.h"
 #include "datacon.h"

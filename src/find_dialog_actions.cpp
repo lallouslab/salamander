@@ -177,7 +177,7 @@ void CFindDialog::OnDelete(BOOL toRecycle)
     if (listSize <= 2)
         return;
 
-    char* list = (char*)malloc(listSize);
+    wchar_t* list = (wchar_t*)malloc(listSize * sizeof(wchar_t));
     if (list == NULL)
     {
         TRACE_E(LOW_MEMORY);
@@ -202,8 +202,11 @@ void CFindDialog::OnDelete(BOOL toRecycle)
                             lastItem->Size, lastItem->Attr, &lastItem->LastWrite, lastItem->IsDir);
     }
 
+    // wide list + wide shell delete: the ANSI mirrors of Unicode names carry
+    // '?' replacements, which the shell treats as wildcards — the wide names
+    // are the only safe delete targets
     CShellExecuteWnd shellExecuteWnd;
-    SHFILEOPSTRUCT fo;
+    SHFILEOPSTRUCTW fo;
     fo.hwnd = shellExecuteWnd.Create(HWindow, "SEW: CFindDialog::OnDelete toRecycle=%d", toRecycle);
     fo.wFunc = FO_DELETE;
     fo.pFrom = list;
@@ -211,10 +214,10 @@ void CFindDialog::OnDelete(BOOL toRecycle)
     fo.fFlags = toRecycle ? FOF_ALLOWUNDO : 0;
     fo.fAnyOperationsAborted = FALSE;
     fo.hNameMappings = NULL;
-    fo.lpszProgressTitle = "";
+    fo.lpszProgressTitle = L"";
     // perform the deletion itself - incredibly easy, unfortunately it sometimes crashes ;-)
     CALL_STACK_MESSAGE1("CFindDialog::OnDelete::SHFileOperation");
-    SHFileOperation(&fo);
+    SHFileOperationW(&fo);
     free(list);
 
     // update the list
@@ -747,7 +750,13 @@ void CFindManageDialog::LoadControls()
     else
         item = (CFindOptionsItem*)CurrenOptionsItem;
     SetDlgItemText(HWindow, IDC_FFS_NAMED, item->NamedText);
-    SetDlgItemText(HWindow, IDC_FFS_LOOKIN, item->LookInText);
+    // Standard child edit controls are Unicode-capable regardless of the
+    // dialog's class, so SetDlgItemTextW renders a saved Unicode "Look in"
+    // path correctly instead of '?' (kb/unicode P0-a).
+    if (!item->LookInTextW.empty())
+        SetDlgItemTextW(HWindow, IDC_FFS_LOOKIN, item->LookInTextW.c_str());
+    else
+        SetDlgItemText(HWindow, IDC_FFS_LOOKIN, item->LookInText);
     SetDlgItemText(HWindow, IDC_FFS_SUBDIRS, item->SubDirectories ? LoadStr(IDS_INFODLGYES) : LoadStr(IDS_INFODLGNO));
     SetDlgItemText(HWindow, IDC_FFS_CONTAINING, item->GrepText);
     char buff[200];
@@ -1281,6 +1290,10 @@ BOOL CFindDialog::GetCommonPrefixPath(char* buffer, int bufferMax, int& commonPr
         if (index != -1)
         {
             CFoundFilesData* file = FoundFilesListView->At(index);
+            // every caller feeds the ANSI result into shell PIDL resolution
+            // (drag, context menu, cut/copy, properties) — refuse lossy rows
+            if (!EnsureRowActionableViaAnsi(file))
+                return FALSE;
             if (path[0] == 0)
             {
                 lstrcpy(path, file->Path.c_str()); // in the first step we only copy the path
@@ -1643,6 +1656,8 @@ void CFindDialog::OnOpen(BOOL onlyFocused)
         if (index != -1)
         {
             CFoundFilesData* file = FoundFilesListView->At(index);
+            if (!EnsureRowActionableViaAnsi(file))
+                continue;
             BOOL setWait = (GetCursor() != LoadCursor(NULL, IDC_WAIT)); // already waiting?
             HCURSOR oldCur;
             if (setWait)
