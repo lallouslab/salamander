@@ -2,9 +2,12 @@
 
 [![Release](https://img.shields.io/github/v/release/0xeb/sally)](https://github.com/0xeb/sally/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/0xeb/sally/pr-cmake.yml?label=build)](https://github.com/0xeb/sally/actions)
+[![Stars](https://img.shields.io/github/stars/0xeb/sally?style=social)](https://github.com/0xeb/sally/stargazers)
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 
-Sally is a fast, actively maintained dual-panel file manager for Windows. It preserves the classic [Open Salamander](https://github.com/OpenSalamander/salamander) workflow and extends it for modern Windows: Unicode-first file operations, long path support, dark mode, native ARM64 builds, WebView2 viewing, release automation, and maintained language packs.
+Sally is a fast, keyboard-first dual-panel file manager for Windows power users. It keeps the classic [Open Salamander](https://github.com/OpenSalamander/salamander) workflow alive and moves it forward for current machines: Unicode and long paths, dark mode, native ARM64, modern viewing, active plugin packaging, Wine compatibility, maintained language packs, and a real release pipeline.
+
+**Download:** [latest release](https://github.com/0xeb/sally/releases/latest) | **Star:** [help Sally get discovered](https://github.com/0xeb/sally) | **Support:** [PayPal](https://paypal.me/EliasBachaalany) or [Buy Me a Coffee](https://buymeacoffee.com/0xeb)
 
 <p align="center">
   <img src="doc/images/sally-dark-unicode-long-path.png" alt="Sally in dark mode showing Unicode filenames and a long path" width="900">
@@ -12,51 +15,107 @@ Sally is a fast, actively maintained dual-panel file manager for Windows. It pre
 
 ## Why Sally
 
-Open Salamander became loved because it made serious file work feel fast: two panels, keyboard-first commands, rich viewers, archives, plugins, and a dense Win32 UI that stays out of the way. Sally keeps that feel, but moves the project forward where the original codebase had started to show its age.
+Open Salamander became loved because it made serious file work feel direct: two panels, fast keyboard commands, rich viewers, archive handling, plugins, and a compact Win32 UI that stays out of the way. Sally preserves that muscle memory while removing the places where the original codebase was showing its age.
 
-- **Modern Windows path handling**: Unicode and long path work across copy, move, delete, rename, drag/drop, panel state, directory history, Find, viewers, editors, startup paths, and network/UNC navigation.
-- **Classic speed, current polish**: dark mode for the core UI and bundled first-party plugins, with `Light`, `Dark`, and `System` theme modes.
-- **Native builds**: x64, x86, and ARM64 packages, including Windows on ARM support.
-- **Better built-in viewing**: WebView2-based Markdown viewing replaces the legacy Internet Explorer control, and BOM-marked Unicode text files open correctly in Auto/Text mode.
-- **Real release pipeline**: GitHub release packages include runtime zips, symbols, language packs, and a translator workspace.
-- **Localization is alive**: 10 maintained UI languages ship across supported platforms.
+- **Built for real file names**: Unicode and Windows long paths work through copy, move, delete, rename, drag/drop, panel state, directory history, Find, viewers, editors, startup paths, and network/UNC navigation.
+- **Classic workflow, current polish**: the dense dual-panel interface remains, now with `Light`, `Dark`, and `System` theme modes across the core UI and first-party plugins.
+- **Small project, fast movement**: user reports have turned into fixes for ARM64 FTP, Unicode context menus, viewer edge cases, Windows 11 automation changes, network long paths, release packaging, and language packs.
+- **Open and actively shipped**: runtime zips, symbols, translator workspaces, and x64/x86/ARM64 builds are published through GitHub Releases.
+- **AI-assisted development velocity**: AI helps grind through modernization work, tests, translations, and release plumbing while the project stays open source and user-driven.
 
-## Highlights
+## Feature Highlights
 
-### Unicode And Long Paths
+### File Operations That Respect Modern Paths
 
-Sally's biggest modernization effort is path correctness. Recent releases moved more of the file manager onto wide Windows APIs and hardened places where lossy ANSI conversions used to leak through.
+Sally's biggest modernization effort is path correctness. A file manager is only trustworthy if it acts on the exact file you selected, even when that name is long, non-ASCII, on a network share, or outside the active Windows code page.
 
-- File operations support Unicode filenames and Windows long paths up to 32,767 characters.
-- Panel paths, directory history, Find dialog seed paths, snooper refresh, F4 edit, Alt+F3 external view, drag/drop, shell paste, and status updates preserve Unicode paths.
-- Non-ASCII install paths are supported for startup, language loading, `config.reg`, and crash reporter launch.
-- Network and UNC path checks remain cancellable so unreachable saved paths do not hang startup.
+- Unicode filenames and Windows long paths up to 32,767 characters.
+- Wide-path handling across copy, move, delete, rename, create directory, quick rename, F4 edit, Alt+F3 external view, drag/drop, shell paste, directory history, and panel refresh.
+- Safer Find result actions: loaded result files are validated, re-statted, and guarded against lossy ANSI fallbacks before destructive or shell-backed operations.
+- Long UNC and WSL-style network paths are handled in more viewer and file-operation paths.
+- Non-ASCII install paths work for startup, language loading, `config.reg`, and crash reporter launch.
+- Cancellable network/UNC path checks prevent unreachable saved paths from hanging startup.
+- Ongoing hardening covers ADS streams, reparse points, recursive delete prompts, same-volume moves, and Unicode worker error reporting.
 
-### Dark Mode
+### Fast Find And Safer Results
 
-Sally includes early dark-mode support for the core UI and bundled first-party plugins.
+Find is not just a dialog; it is part of the file-operation surface.
+
+- Save and load Find results.
+- Preserve Unicode `Look in` roots in saved presets.
+- Filter results by all items, files, or folders.
+- Keep full Unicode status paths internally before display ellipsizing.
+- Refuse unsafe ANSI-backed actions when a Unicode row cannot round-trip cleanly.
+
+### Dark Mode That Keeps The Classic UI
+
+Sally adds early dark-mode support without turning the app into a different product.
 
 - Configure it under `Options` > `Configuration...` > `Appearance` > `Theme` > `Mode`.
 - Choose `Light`, `Dark`, or `System` to follow the Windows app theme.
 - Windows High Contrast remains authoritative and disables custom dark painting.
+- Recent releases polished common dialogs, Find controls, About, size results, file panels, and bundled plugin surfaces.
 
-### Viewers And Plugins
+### Modern Viewing
 
-- WebView2 renders Markdown instead of the old Internet Explorer WebBrowser control.
+The viewer stack has moved away from legacy Internet Explorer-era assumptions.
+
+- WebView2-based Web Viewer replaces the old IE WebBrowser control.
+- Markdown renders with images and GitHub-style CSS support.
+- Web Viewer can handle HTML, Markdown, XML, SVG, PNG, and related preview workflows.
 - BOM-marked UTF-8, UTF-16LE, and UTF-16BE text files open decoded in Auto/Text mode while Hex mode still shows raw bytes.
+- Viewer fixes cover final-line navigation, decoded row clipping, Unicode windows, prompt ownership, and WebView2 process cleanup.
+
+### Bundled Plugins
+
+Current Sally builds package a broad first-party plugin set instead of leaving users to assemble the basics.
+
+- Archive and package tools: 7-Zip, ZIP, TAR, UnRAR, UnISO, UnARJ, UnCAB, UnCHM, UnLHA, UnMIME, UnOLE2, PAK, Split & Combine.
+- File and system tools: FTP Client, File Comparator, Checksum, DiskMap, Registry Editor, Renamer, PE Viewer, Database Viewer, Network, Portable Devices, Windows Mobile.
+- Viewer and automation tools: Web Viewer, Multimedia Viewer, Automation, Check Version.
+- Plugin packaging now generates `plugins.ver`, resolves side-by-side plugin dependencies from plugin DLL directories, and auto-discovers newly shipped plugins for existing users.
 - Legacy Altap Salamander 4.0 plugins are loaded only after user consent.
-- Plugin dependency loading resolves side-by-side dependencies from the plugin DLL directory.
 
-### Builds, Releases, And Translation
+### Platforms, Releases, And Compatibility
 
-- Modern CMake builds cover Sally, bundled plugins, trace server, translator, shell extension, and release packaging.
-- GitHub Actions publish x64, x86, ARM64, symbols, language packs, and translator workspace artifacts.
-- The release updater checks GitHub Releases over HTTPS.
-- Included languages: Chinese (Simplified), Czech, Dutch, French, German, Hungarian, Romanian, Russian, Slovak, and Spanish.
+Sally is not a one-off binary drop. The release machinery is part of the product.
+
+- Runtime zips for x64, x86, and ARM64, including Windows on ARM.
+- Separate debug-symbol zips for crash dump investigation.
+- Translator workspace artifacts for localization contributors.
+- GitHub release updater over HTTPS through the Check Version plugin.
+- Wine compatibility work makes Sally run under Wine 10.0 by avoiding hard dependency on `imageres.dll` and falling back to `shell32.dll` resources where needed.
+- Modern CMake build covers Sally, bundled plugins, trace server, translator, shell extension, helper tools, language files, and release population.
+- Clang-CL/xwin toolchains support Windows x64 and ARM64 cross-compilation with the MSVC ABI.
+
+### Localization Is Alive
+
+Sally ships 10 maintained UI languages across supported release packages:
+
+Chinese (Simplified), Czech, Dutch, French, German, Hungarian, Romanian, Russian, Slovak, and Spanish.
+
+The localization pipeline includes committed `.slt` archives, generated Translator workspaces, headless validation/export support, and release artifacts that make translation work possible without hidden legacy assets.
 
 ## Downloads
 
-Pre-built binaries for x64, x86, and ARM64 are available on the [Releases](https://github.com/0xeb/sally/releases) page. For each current release, pick the runtime zip for your CPU architecture. Symbols and the translator workspace are optional downloads for debugging and localization work.
+Pre-built binaries are available on the [Releases](https://github.com/0xeb/sally/releases) page.
+
+- Pick `Sally-<version>-x64.zip` for most modern Intel/AMD Windows systems.
+- Pick `Sally-<version>-ARM64.zip` for native Windows on ARM.
+- Pick `Sally-<version>-x86.zip` for 32-bit systems.
+- Download `Sally-<version>-pdb.zip` only if you need symbols for debugging.
+- Download `Sally-<version>-translator-workspace.zip` if you want to help with language packs.
+
+## Support Sally
+
+If Sally saves you time, please [star the repository](https://github.com/0xeb/sally). Stars matter for discovery, especially for a small Windows desktop project that is doing a lot of unglamorous modernization work.
+
+Financial support helps pay for the AI-assisted development workflow and keeps more time and tokens flowing into Sally:
+
+- [Support via PayPal](https://paypal.me/EliasBachaalany)
+- [Support via Buy Me a Coffee](https://buymeacoffee.com/0xeb)
+
+Bug reports, focused testing, translation help, and careful feature requests are also valuable. Sally has moved fastest when users reported exact workflows and came back to verify the fix.
 
 ## Building
 
@@ -85,6 +144,8 @@ When you run Sally from `build/out`, rebuild and repopulate that exact configura
 Contributions are welcome. See the [Developer Guide](doc/DEV.md) for repository structure, build targets, and internals.
 
 If you want to help with UI translations and language packs, see the [Localization Guide](doc/LOCALIZATION.md).
+
+Good issue reports include the Sally version, architecture, exact path or filename shape when relevant, steps to reproduce, and whether the bug happens with the latest release.
 
 ## About
 
