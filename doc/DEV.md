@@ -20,7 +20,6 @@
 \src\salspawn    Process spawning helper
 \src\sfx7zip     Self-extractor based on 7-Zip
 \src\shellext    Shell extension DLL
-\src\tests       Unit tests
 \src\translator  Translate Sally UI to other languages
 \src\tserver     Trace Server to display info and error messages
 \tools           Minor utilities
@@ -39,7 +38,7 @@ A few Altap Salamander 4.0 plugins are either not included or cannot be compiled
 
 ## Code Style
 
-All source code uses UTF-8-BOM encoding and is formatted with `clang-format`. Refer to the `\tools\normalize.ps1` script for more information.
+Source and project files use UTF-8 text with CRLF line endings in the Windows working tree and are formatted with `clang-format`. Refer to the `\tools\normalize.ps1` script for more information.
 
 ## Developer Tool Targets
 

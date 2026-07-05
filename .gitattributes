@@ -4,6 +4,41 @@
 
 * text=auto
 
+# Sally is a Windows-first codebase. Keep normal text files as CRLF in the
+# working tree while Git stores normalized LF in the index.
+*.bat        text eol=crlf
+*.c          text eol=crlf
+*.cc         text eol=crlf
+*.cmd        text eol=crlf
+*.cmake      text eol=crlf
+*.config     text eol=crlf
+*.cpp        text eol=crlf
+*.cs         text eol=crlf
+*.filters    text eol=crlf
+*.h          text eol=crlf
+*.hpp        text eol=crlf
+*.htm        text eol=crlf
+*.html       text eol=crlf
+*.json       text eol=crlf
+*.md         text eol=crlf
+*.props      text eol=crlf
+*.ps1        text eol=crlf
+*.py         text eol=crlf
+*.rc         text eol=crlf
+*.rc2        text eol=crlf
+*.rh         text eol=crlf
+*.sln        text eol=crlf
+*.slt        text eol=crlf
+*.txt        text eol=crlf
+*.vcxitems   text eol=crlf
+*.vcxproj    text eol=crlf
+*.wixproj    text eol=crlf
+*.yaml       text eol=crlf
+*.yml        text eol=crlf
+.editorconfig text eol=crlf
+.gitattributes text eol=crlf
+CMakeLists.txt text eol=crlf
+
 # Explicitly declare text files you want to always be normalized and converted
 # to LF endings on checkout.
 *.sh         text eol=lf
