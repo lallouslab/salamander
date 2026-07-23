@@ -4,7 +4,7 @@
 
 find_package(Git QUIET)
 
-set(SALLY_LOCAL_DEV_VERSION "1.0.22" CACHE STRING "Sally local development version base")
+set(SALLY_LOCAL_DEV_VERSION "1.0.23" CACHE STRING "Sally local development version base")
 
 if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     # Get the latest tag
