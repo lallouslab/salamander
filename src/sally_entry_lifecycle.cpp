@@ -40,6 +40,32 @@
 #include "color.h"
 #include "toolbar.h"
 #include "darkmode.h"
+#include "salext_cleanup.h"
+#include "common/IFileSystem.h"
+
+// Issue #82: shell-extension DLLs from OLD Sally/Salamander installs stay loaded/locked by
+// Explorer after an upgrade, keeping their install folders undeletable. The CLSID-family sweep
+// lives in salext_cleanup.cpp so it can run headlessly against fake interfaces; this wrapper
+// only converts the ANSI path, supplies the OS-abstraction interfaces, and traces the outcome.
+static void CleanupStaleShellExtensions(const char* currentSalextPathA)
+{
+    wchar_t currentPath[2 * MAX_PATH];
+    MultiByteToWideChar(CP_ACP, 0, currentSalextPathA != NULL ? currentSalextPathA : "", -1,
+                        currentPath, (int)(sizeof(currentPath) / sizeof(currentPath[0])));
+    currentPath[(sizeof(currentPath) / sizeof(currentPath[0])) - 1] = 0;
+
+    IRegistry* registry = gRegistry != NULL ? gRegistry : GetWin32Registry();
+    IFileSystem* fs = gFileSystem != NULL ? gFileSystem : GetWin32FileSystem();
+
+    SalextCleanupStats stats = ReclaimStaleSalextRegistrations(currentPath, registry, fs);
+
+    if (stats.stale > 0)
+        TRACE_I("CleanupStaleShellExtensions(): " << stats.stale << " stale registration(s), "
+                                                  << stats.scheduled << " scheduled for reboot-delete, "
+                                                  << stats.keysRemoved << " CLSID key(s) removed");
+    if (stats.scheduled < stats.stale)
+        TRACE_I("CleanupStaleShellExtensions(): reboot-delete not scheduled for all (administrator rights may be required)");
+}
 
 static BOOL FileExistsWLocal(const wchar_t* path)
 {
@@ -1843,28 +1869,29 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
             // Force a coherent dark palette for panel/client rendering in V2.
             // Keeping these synchronized avoids icon background artifacts when
             // image-list background follows ITEM_BK_NORMAL.
+            //
+            // NOTE: the "base" selection/focus colors that are stored flag-0 in the color
+            // schemes (their RGB is the source of truth, not SCF_DEFAULT-derived) must NOT
+            // be overwritten here. Writing dark values in place corrupts their light RGB and
+            // leaves selection colors dark after a dark->light switch (#81 follow-up). Those
+            // indices — FOCUS_FG_INACTIVE_NORMAL/SELECTED, ITEM_FG_SELECTED/FOCSEL,
+            // ITEM_BK_FOCUSED/FOCSEL, ICON_BLEND_FOCUSED/FOCSEL — are resolved to their dark
+            // value at render time via ResolveDarkBaseColor() (see sal_colors.cpp), mirroring
+            // how the highlight-mask dark contrast is already handled in files_window_paint.cpp.
             SetRGBPart(&colors[FOCUS_ACTIVE_NORMAL], RGB(145, 145, 145));
             SetRGBPart(&colors[FOCUS_ACTIVE_SELECTED], RGB(220, 220, 220));
-            SetRGBPart(&colors[FOCUS_FG_INACTIVE_NORMAL], RGB(120, 120, 120));
-            SetRGBPart(&colors[FOCUS_FG_INACTIVE_SELECTED], RGB(150, 150, 150));
             SetRGBPart(&colors[FOCUS_BK_INACTIVE_NORMAL], RGB(30, 30, 30));
             SetRGBPart(&colors[FOCUS_BK_INACTIVE_SELECTED], RGB(30, 30, 30));
 
             SetRGBPart(&colors[ITEM_FG_NORMAL], RGB(232, 232, 232));
-            SetRGBPart(&colors[ITEM_FG_SELECTED], RGB(255, 255, 255));
             SetRGBPart(&colors[ITEM_FG_FOCUSED], RGB(255, 255, 255));
-            SetRGBPart(&colors[ITEM_FG_FOCSEL], RGB(255, 255, 255));
             SetRGBPart(&colors[ITEM_FG_HIGHLIGHT], RGB(255, 255, 255));
 
             SetRGBPart(&colors[ITEM_BK_NORMAL], RGB(30, 30, 30));
             SetRGBPart(&colors[ITEM_BK_SELECTED], RGB(30, 30, 30));
-            SetRGBPart(&colors[ITEM_BK_FOCUSED], RGB(62, 125, 231));
-            SetRGBPart(&colors[ITEM_BK_FOCSEL], RGB(62, 125, 231));
             SetRGBPart(&colors[ITEM_BK_HIGHLIGHT], RGB(45, 45, 48));
 
             SetRGBPart(&colors[ICON_BLEND_SELECTED], RGB(120, 170, 255));
-            SetRGBPart(&colors[ICON_BLEND_FOCUSED], RGB(150, 150, 150));
-            SetRGBPart(&colors[ICON_BLEND_FOCSEL], RGB(120, 170, 255));
 
             SetRGBPart(&colors[PROGRESS_FG_NORMAL], RGB(232, 232, 232));
             SetRGBPart(&colors[PROGRESS_FG_SELECTED], RGB(255, 255, 255));
@@ -4427,6 +4454,10 @@ FIND_NEW_SLG_FILE:
                 SalShExtRegistered = FALSE;
         }
 #endif // _WIN64
+
+        // #82: reclaim previous installs' salext DLLs still locked by Explorer so their folders
+        // become deletable (schedules delete-on-reboot; best-effort, needs admin).
+        CleanupStaleShellExtensions(shellExtPath);
     }
 
     //--- creating main window

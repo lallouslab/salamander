@@ -2740,6 +2740,17 @@
 #define IDS_FIND_RESULTS_LOAD_REPORT    14216
 #define IDS_FIND_RESULTS_ANSI_ONLY      14217
 
+// Paste Shortcut: the shell rejected the pastelink command.
+#define IDS_PASTELINK_FAILED            14218
+#define IDS_MENU_CMD_WINDOWS_TERMINAL   14219
+#define IDS_MENU_CMD_WT_DEFAULT         14220
+#define IDS_MENU_CMD_WT_REFRESH         14221
+#define IDS_MENU_CMD_DEFAULT_SHELL      14222
+#define IDS_MENU_CMD_WT_UNAVAILABLE     14223
+#define IDS_SHELL_COMSPEC               14224
+#define IDS_SHELL_WT_DEFAULT            14225
+#define IDS_SHELL_TARGET_UNAVAILABLE    14226
+
 //#define CM_TEXTS_MAX                  18000    // maximal texts id
 
 #endif // __TEXTS_RH2

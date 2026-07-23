@@ -5,7 +5,7 @@
 [![Stars](https://img.shields.io/github/stars/0xeb/sally?style=social)](https://github.com/0xeb/sally/stargazers)
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 
-Sally is a fast, keyboard-first dual-panel file manager for Windows power users. It keeps the classic [Open Salamander](https://github.com/OpenSalamander/salamander) workflow alive and moves it forward for current machines: Unicode and long paths, dark mode, native ARM64, modern viewing, active plugin packaging, Wine compatibility, maintained language packs, and a real release pipeline.
+Sally is a fast, keyboard-first dual-panel file manager for Windows power users. It keeps the classic [Open Salamander](https://github.com/OpenSalamander/salamander) workflow alive and moves it forward for current machines: Unicode and long paths, dark mode, Windows Terminal integration, native ARM64, modern viewing, active plugin packaging, Wine compatibility, maintained language packs, and a real release pipeline.
 
 **Download:** [latest release](https://github.com/0xeb/sally/releases/latest) | **Star:** [help Sally get discovered](https://github.com/0xeb/sally) | **Support:** [PayPal](https://paypal.me/EliasBachaalany) or [Buy Me a Coffee](https://buymeacoffee.com/0xeb)
 
@@ -66,6 +66,14 @@ The viewer stack has moved away from legacy Internet Explorer-era assumptions.
 - BOM-marked UTF-8, UTF-16LE, and UTF-16BE text files open decoded in Auto/Text mode while Hex mode still shows raw bytes.
 - Viewer fixes cover final-line navigation, decoded row clipping, Unicode windows, prompt ownership, and WebView2 process cleanup.
 
+### Windows Terminal And Shell Integration
+
+Sally meets the tools you already use instead of assuming a bare `cmd.exe`.
+
+- **Preferred command shell**: Sally discovers **Windows Terminal** (`wt.exe`), reads its Stable, Preview, and unpackaged profiles, and builds a dynamic `Commands` > `Windows Terminal` submenu. Launch any profile — PowerShell, a WSL distribution, or Command Prompt — straight into the active panel's folder.
+- **Set your default**: `Commands` > `Default Shell...` picks what the Command Shell action (`Num /`) opens — `%COMSPEC%`, the Terminal default, or a named profile — and remembers it. One-off profile launches never overwrite the saved default, and the submenu simply disappears when Windows Terminal is not installed.
+- **Rich icon overlays**: version-control and cloud status badges from tools like TortoiseGit, TortoiseSVN, OneDrive, Dropbox, and Google Drive appear in the panels — and Sally can show more of them at once than Explorer's tighter overlay-handler limit allows.
+
 ### Bundled Plugins
 
 Current Sally builds package a broad first-party plugin set instead of leaving users to assemble the basics.
@@ -84,7 +92,7 @@ Sally is not a one-off binary drop. The release machinery is part of the product
 - Separate debug-symbol zips for crash dump investigation.
 - Translator workspace artifacts for localization contributors.
 - GitHub release updater over HTTPS through the Check Version plugin.
-- Wine compatibility work makes Sally run under Wine 10.0 by avoiding hard dependency on `imageres.dll` and falling back to `shell32.dll` resources where needed.
+- [Wine compatibility work](#running-on-linux-with-wine) makes Sally run under Wine (10.0 and newer) by avoiding hard dependency on `imageres.dll` and falling back to `shell32.dll` resources where needed.
 - Modern CMake build covers Sally, bundled plugins, trace server, translator, shell extension, helper tools, language files, and release population.
 - Clang-CL/xwin toolchains support Windows x64 and ARM64 cross-compilation with the MSVC ABI.
 
@@ -105,6 +113,21 @@ Pre-built binaries are available on the [Releases](https://github.com/0xeb/sally
 - Pick `Sally-<version>-x86.zip` for 32-bit systems.
 - Download `Sally-<version>-pdb.zip` only if you need symbols for debugging.
 - Download `Sally-<version>-translator-workspace.zip` if you want to help with language packs.
+
+## Running on Linux with Wine
+
+Sally is a native Windows application, but it runs well under
+[Wine](https://www.winehq.org/) on Linux — no Windows and no virtual machine
+required. The screenshot below is Sally on Ubuntu 24.04 (x64) under Wine.
+
+<p align="center">
+  <img src="doc/images/sally-wine.png" alt="Sally running under Wine on an Ubuntu/GNOME x64 desktop" width="900">
+</p>
+
+Grab an x64 runtime zip from the [Releases](https://github.com/0xeb/sally/releases)
+page and launch it with `wine sally.exe`. Sally needs no .NET or Wine Mono/Gecko.
+See the [Wine guide](doc/WINE.md) for install steps, a download/run walkthrough,
+a launcher wrapper, and troubleshooting.
 
 ## Support Sally
 
@@ -153,7 +176,14 @@ Sally is an independent fork of [Open Salamander](https://github.com/OpenSalaman
 
 ## License
 
-Sally is based on Open Salamander, open source software licensed under [GPLv2](LICENSE). Individual components and libraries have separate but compatible licenses; see [third_party.txt](doc/third_party.txt) for details.
+Sally is a modified version of Open Salamander, open source software licensed under [GPLv2](LICENSE).
+
+- Copyright © 1997-2023 Open Salamander Authors — see [doc/AUTHORS](doc/AUTHORS).
+- Modifications © 2025-2026 Elias Bachaalany and Sally contributors — see [AUTHORS](AUTHORS).
+
+Files throughout `src/` have been modified from their Open Salamander originals since 2025-10-17; see [NOTICE](NOTICE). Per-file provenance is recorded in SPDX headers, so a file derived from Open Salamander carries both copyright lines while a file written for Sally carries only the fork line.
+
+Individual components and libraries have separate but compatible licenses, and some retain their individual authors' copyright; see [third_party.txt](doc/third_party.txt) for details.
 
 ## Resources
 

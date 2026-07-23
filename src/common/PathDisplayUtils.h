@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Sally Authors
+// SPDX-FileCopyrightText: 2025-2026 Elias Bachaalany
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // Wide display/validation name helpers (pure string manipulation, no I/O).

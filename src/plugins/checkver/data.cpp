@@ -7,7 +7,7 @@
 #include "checkver.h"
 #include "checkver.rh"
 #include "checkver.rh2"
-#include "github_release.h"
+#include "release_check.h"
 #include "lang\lang.rh"
 
 #include <string>
@@ -22,19 +22,7 @@ DWORD LoadedScriptSize = 0;
 namespace
 {
 
-struct CReleaseCheckState
-{
-    bool HasCorrectData = false;
-    bool UpdateAvailable = false;
-    bool UsedDirectAssetLink = false;
-    std::string InstalledVersion;
-    std::string LatestVersion;
-    std::string ReleasePageUrl;
-    std::string PrimaryUrl;
-    std::string PrimaryAssetName;
-};
-
-CReleaseCheckState ReleaseState;
+checkver::ReleaseCheckResult ReleaseState;
 
 checkver::GitHubAssetPlatform GetCurrentPlatform()
 {
@@ -58,52 +46,19 @@ void ApplyFixedReleaseSettings(CDataDefaults& data)
 
 void ResetReleaseState()
 {
-    ReleaseState = CReleaseCheckState();
-}
-
-std::string GetInstalledVersionTag()
-{
-    return checkver::NormalizeVersionTag(SalamanderTextVersion.Get());
+    ReleaseState = checkver::ReleaseCheckResult();
 }
 
 bool BuildReleaseState()
 {
-    ResetReleaseState();
-
-    if (LoadedScriptSize == 0)
-    {
-        TRACE_E("GitHub release payload is empty");
-        return false;
-    }
-
-    checkver::GitHubReleaseInfo release;
     std::string error;
-    if (!checkver::ParseGitHubLatestReleaseJson(reinterpret_cast<const char*>(LoadedScript), LoadedScriptSize,
-                                                release, error))
+    if (!checkver::BuildReleaseCheckResult(
+            reinterpret_cast<const char*>(LoadedScript), LoadedScriptSize,
+            SalamanderTextVersion.Get(), GetCurrentPlatform(), ReleaseState, error))
     {
-        TRACE_E("Unable to parse GitHub release JSON: " << error.c_str());
+        TRACE_E("Unable to build GitHub release state: " << error.c_str());
         return false;
     }
-
-    ReleaseState.HasCorrectData = true;
-    ReleaseState.InstalledVersion = GetInstalledVersionTag();
-    ReleaseState.LatestVersion = checkver::NormalizeVersionTag(release.TagName);
-    ReleaseState.ReleasePageUrl = release.HtmlUrl;
-    ReleaseState.PrimaryUrl = checkver::SelectReleaseAssetUrl(release, GetCurrentPlatform(),
-                                                              &ReleaseState.PrimaryAssetName);
-
-    if (!ReleaseState.PrimaryUrl.empty())
-    {
-        ReleaseState.UsedDirectAssetLink = true;
-    }
-    else
-    {
-        ReleaseState.PrimaryUrl = release.HtmlUrl;
-        ReleaseState.UsedDirectAssetLink = false;
-    }
-
-    ReleaseState.UpdateAvailable =
-        checkver::CompareVersionTags(ReleaseState.InstalledVersion, ReleaseState.LatestVersion) < 0;
     return true;
 }
 

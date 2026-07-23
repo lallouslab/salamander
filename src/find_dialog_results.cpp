@@ -5381,20 +5381,20 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
     case WM_MEASUREITEM:
     case WM_MENUCHAR:
     {
-        if (wParam == IDC_FIND_STATUS)
+        if (uMsg == WM_DRAWITEM && wParam == IDC_FIND_STATUS)
         {
             DRAWITEMSTRUCT* di = (DRAWITEMSTRUCT*)lParam;
             DarkModeColors colors;
             BOOL useDark = DarkMode_GetColors(&colors);
-            if (useDark)
-            {
-                FindFillRectSolid(di->hDC, &di->rcItem, colors.DialogBackground);
-                SetTextColor(di->hDC, colors.DialogText);
-            }
+            COLORREF background = useDark ? colors.DialogBackground : GetSysColor(COLOR_3DFACE);
+            COLORREF foreground = useDark ? colors.DialogText : GetSysColor(COLOR_BTNTEXT);
+            FindFillRectSolid(di->hDC, &di->rcItem, background);
+            COLORREF prevTextColor = SetTextColor(di->hDC, foreground);
             int prevBkMode = SetBkMode(di->hDC, TRANSPARENT);
             std::wstring text = SearchingText.GetWString();
             DrawTextW(di->hDC, text.c_str(), -1, &di->rcItem, DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_PATH_ELLIPSIS);
             SetBkMode(di->hDC, prevBkMode);
+            SetTextColor(di->hDC, prevTextColor);
             return TRUE;
         }
 

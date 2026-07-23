@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Sally Authors
+// SPDX-FileCopyrightText: 2025-2026 Elias Bachaalany
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "UnicodeNameInputController.h"
@@ -253,7 +253,19 @@ std::wstring CUnicodeNameInputController::GetText() const
 
 void CUnicodeNameInputController::SetText(const std::wstring& text) const
 {
-    if (HUnicodeCombo != NULL)
+    if (HUnicodeCombo == NULL)
+        return;
+
+    // Setting text on an editable combo selects a case-insensitive history
+    // match and replaces the requested casing with the list item's casing.
+    // Set the edit child directly so programmatic seeds remain exact (#88).
+    HWND hEdit = GetComboEditControl(HUnicodeCombo);
+    if (hEdit != NULL)
+    {
+        SendMessage(HUnicodeCombo, CB_SETCURSEL, (WPARAM)-1, 0);
+        SetWindowTextW(hEdit, text.c_str());
+    }
+    else
         SetWindowTextW(HUnicodeCombo, text.c_str());
 }
 
@@ -284,7 +296,9 @@ void CUnicodeNameInputController::SyncSelectionToEdit() const
     if (!TryGetSelectedItemText(text))
         return;
 
-    SetText(text);
+    // This text came from an explicit list selection, so retain the combo's
+    // normal selection semantics rather than clearing it through SetText().
+    SetWindowTextW(HUnicodeCombo, text.c_str());
 
     int len = (int)text.length();
     SendMessage(HUnicodeCombo, CB_SETEDITSEL, 0, MAKELPARAM(len, len));

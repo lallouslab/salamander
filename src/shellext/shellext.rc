@@ -8,7 +8,7 @@
 
 #define FILE_SALVER "1.0"   // without the build number and platform, e.g. "3.1 beta 1"
 #define FILE_VER "1.50\0"
-#define FILE_COPYRIGHT "Copyright \xA9 2003-2026 Sally Authors\0"
+#define FILE_COPYRIGHT "Copyright \xA9 2003-2023 Open Salamander Authors; \xA9 2025-2026 Elias Bachaalany\0"
 
 #ifdef _WIN64
 #define FILE_DESCR "Shell Extension (x64) for Sally " FILE_SALVER "\0"

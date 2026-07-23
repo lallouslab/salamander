@@ -1792,9 +1792,10 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     return TRUE;
 }
 
-void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targetPathW, CCopyMoveData* data)
+BOOL CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targetPathW, CCopyMoveData* data)
 {
     CALL_STACK_MESSAGE3("CFilesWindow::DropCopyMove(%d, %s, )", copy, targetPath);
+    BOOL started = FALSE;
     if (!FilesActionInProgress)
     {
         FilesActionInProgress = TRUE;
@@ -1897,12 +1898,14 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targ
             else
             {
                 UpdateWindow(MainWindow->HWindow);
+                started = TRUE;
             }
         }
         //---  if any Salamander window activated, suspend mode ends
         EndStopRefresh();
         FilesActionInProgress = FALSE;
     }
+    return started;
 }
 
 BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,

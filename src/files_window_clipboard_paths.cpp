@@ -6,8 +6,13 @@
 
 #include "ui/IPrompter.h"
 #include "common/IClipboard.h"
+#include "common/Win32ClipboardFileDropSource.h"
+#include "common/clipboard/ClipboardCopyMoveBridge.h"
+#include "common/clipboard/ClipboardPasteService.h"
 #include "common/unicode/helpers.h"
 #include "common/unicode/PanelPathPolicy.h"
+#include "darkmode.h"
+#include "sal_colors.h"
 
 #include <shlwapi.h>
 #undef PathIsPrefix // otherwise collision with CSalamanderGeneral::PathIsPrefix
@@ -172,88 +177,6 @@ BOOL CFilesWindow::ParsePathW(std::wstring& path, int& type, BOOL& isDir, wchar_
                          Is(ptDisk) || Is(ptZIPArchive), curPath.c_str(), curArchivePath, error);
 }
 
-static BOOL BuildCopyMoveDataFromHDrop(IDataObject* dataObj, BOOL copy, CCopyMoveData** outData)
-{
-    if (outData == NULL)
-        return FALSE;
-    *outData = NULL;
-    if (dataObj == NULL)
-        return FALSE;
-
-    FORMATETC formatEtc;
-    formatEtc.cfFormat = CF_HDROP;
-    formatEtc.ptd = NULL;
-    formatEtc.dwAspect = DVASPECT_CONTENT;
-    formatEtc.lindex = -1;
-    formatEtc.tymed = TYMED_HGLOBAL;
-
-    STGMEDIUM stgMedium;
-    stgMedium.tymed = TYMED_HGLOBAL;
-    stgMedium.hGlobal = NULL;
-    stgMedium.pUnkForRelease = NULL;
-
-    if (dataObj->GetData(&formatEtc, &stgMedium) != S_OK)
-        return FALSE;
-
-    BOOL ok = FALSE;
-    DROPFILES* data = (DROPFILES*)HANDLES(GlobalLock(stgMedium.hGlobal));
-    if (data != NULL)
-    {
-        CCopyMoveData* array = new CCopyMoveData(100, 50);
-        if (array != NULL)
-        {
-            array->MakeCopyOfName = copy;
-            if (data->fWide)
-            {
-                const wchar_t* fileW = (const wchar_t*)(((const char*)data) + data->pFiles);
-                while (*fileW != 0)
-                {
-                    CCopyMoveRecord* record = new CCopyMoveRecord(fileW, (const wchar_t*)NULL);
-                    if (record == NULL)
-                        break;
-                    array->Add(record);
-                    if (!array->IsGood())
-                    {
-                        array->ResetState();
-                        break;
-                    }
-                    while (*fileW++ != 0)
-                        ;
-                }
-            }
-            else
-            {
-                const char* fileA = ((const char*)data) + data->pFiles;
-                while (*fileA != 0)
-                {
-                    CCopyMoveRecord* record = new CCopyMoveRecord(fileA, (const char*)NULL);
-                    if (record == NULL)
-                        break;
-                    array->Add(record);
-                    if (!array->IsGood())
-                    {
-                        array->ResetState();
-                        break;
-                    }
-                    while (*fileA++ != 0)
-                        ;
-                }
-            }
-
-            if (array->IsGood())
-            {
-                *outData = array;
-                ok = TRUE;
-            }
-            else
-                DestroyCopyMoveData(array);
-        }
-    }
-    HANDLES(GlobalUnlock(stgMedium.hGlobal));
-    ReleaseStgMedium(&stgMedium);
-    return ok;
-}
-
 int CFilesWindow::GetPanelCode()
 {
     CALL_STACK_MESSAGE_NONE
@@ -289,6 +212,59 @@ BOOL SafeInvokeCommand(IContextMenu2* menu, CMINVOKECOMMANDINFO& ici)
     return ret;
 }
 
+static DWORD GetPreferredClipboardDropEffect(DWORD defaultEffect = 0)
+{
+    const UINT format = gClipboard->RegisterFormat(L"Preferred DropEffect");
+    std::vector<uint8_t> data;
+    if (format != 0 && gClipboard->GetRawData(format, data).success &&
+        data.size() >= sizeof(DWORD))
+    {
+        DWORD effect = 0;
+        memcpy(&effect, data.data(), sizeof(effect));
+        return effect;
+    }
+    return defaultEffect;
+}
+
+class CPanelClipboardPasteExecutor : public sally::clipboard::IClipboardPasteExecutor
+{
+public:
+    CPanelClipboardPasteExecutor(CFilesWindow& panel, const char* pastePath)
+        : Panel(panel)
+    {
+        const BOOL haveExplicitPath = pastePath != NULL && pastePath[0] != '\0';
+        if (haveExplicitPath)
+        {
+            lstrcpyn(TargetPath, pastePath, TargetPath.Size());
+            TargetPathW = AnsiToWide(pastePath);
+        }
+        else
+        {
+            lstrcpyn(TargetPath, panel.GetPath(), TargetPath.Size());
+            TargetPathW = panel.GetPathW();
+        }
+    }
+
+    bool Execute(const sally::clipboard::ClipboardFileTransfer& transfer) override
+    {
+        CCopyMoveData* data = NULL;
+        if (!sally::clipboard::CreateCopyMoveData(transfer, &data))
+            return false;
+
+        const BOOL copy = transfer.Effect == sally::clipboard::ClipboardFileEffect::Copy;
+        const BOOL started = Panel.DropCopyMove(copy, TargetPath,
+                                                TargetPathW.empty() ? NULL : TargetPathW.c_str(),
+                                                data);
+        DestroyCopyMoveData(data);
+        return started != FALSE;
+    }
+
+private:
+    CFilesWindow& Panel;
+    CPathBuffer TargetPath;
+    std::wstring TargetPathW;
+};
+
 BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pastePath)
 {
     CALL_STACK_MESSAGE4("CFilesWindow::ClipboardPaste(%d, %d, %s)", onlyLinks, onlyTest, pastePath);
@@ -297,7 +273,7 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
     BOOL filesOnClip = FALSE; // check if there is our data on the clipboard for pasting files/directories
                               //  TRACE_I("CFilesWindow::ClipboardPaste() called: " << (onlyLinks ? "links " : "") <<
                               //          (onlyTest ? "test " : "") << (pastePath != NULL ? pastePath : "(null)"));
-    if (OleGetClipboard(&dataObj) == S_OK && dataObj != NULL)
+    if (gClipboard->GetDataObject(&dataObj).success && dataObj != NULL)
     {
         if (!onlyLinks && !onlyTest && IsFakeDataObject(dataObj, NULL, NULL, 0) && SalShExtSharedMemView != NULL)
         { // Salamander "fake" data object on the clipboard -> paste files/directories from the archive
@@ -315,23 +291,7 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
 
             if (pasteFromOurData)
             {
-                DWORD pasteEffect = 0;
-                if (OpenClipboard(HWindow))
-                {
-                    HANDLE handle = GetClipboardData(RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT));
-                    if (handle != NULL)
-                    {
-                        DWORD* effect = (DWORD*)HANDLES(GlobalLock(handle));
-                        if (effect != NULL)
-                        {
-                            pasteEffect = *effect;
-                            HANDLES(GlobalUnlock(handle));
-                        }
-                    }
-                    CloseClipboard();
-                }
-                else
-                    TRACE_E("OpenClipboard() has failed!");
+                DWORD pasteEffect = GetPreferredClipboardDropEffect();
                 SalShExtPastedData.SetLock(TRUE);
                 dataObj->Release(); // one instance still remains on the clipboard
                 pasteEffect &= DROPEFFECT_COPY | DROPEFFECT_MOVE;
@@ -340,7 +300,7 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
                     // move clears the clipboard after itself (cut&paste), release the clipboard before launching
                     // the operation itself so other applications can use it for further data transfers
                     if (pasteEffect == DROPEFFECT_MOVE)
-                        OleSetClipboard(NULL);
+                        gClipboard->Clear();
 
                     // perform the actual Paste operation
                     SalShExtPastedData.DoPasteOperation(pasteEffect == DROPEFFECT_COPY,
@@ -359,6 +319,32 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
                 SalShExtPastedData.SetLock(FALSE);
                 PostMessage(MainWindow->HWindow, WM_USER_SALSHEXT_TRYRELDATA, 0, 0); // after unlocking, perform data release if needed
                 return TRUE;
+            }
+        }
+
+        if (Is(ptDisk))
+        {
+            CPanelClipboardPasteExecutor executor(*this, pastePath);
+            sally::clipboard::Win32ClipboardFileDropSource fileDropSource(dataObj);
+            sally::clipboard::ClipboardPasteResult pasteResult =
+                sally::clipboard::ExecuteSallyDiskClipboardPaste(
+                    *gClipboard, fileDropSource, onlyLinks != FALSE, onlyTest != FALSE,
+                    executor);
+            if (pasteResult.Route == sally::clipboard::ClipboardPasteRoute::Executed ||
+                pasteResult.Route == sally::clipboard::ClipboardPasteRoute::OwnedExecutionFailed)
+            {
+                if (pasteResult.Route == sally::clipboard::ClipboardPasteRoute::Executed)
+                    FocusFirstNewItem = TRUE;
+                else
+                    TRACE_E("Sally-owned clipboard paste was not accepted; clipboard retained for retry.");
+
+                if (pasteResult.Effect == sally::clipboard::ClipboardFileEffect::Move)
+                {
+                    IdleRefreshStates = TRUE;
+                    IdleCheckClipboard = TRUE;
+                }
+                dataObj->Release();
+                return pasteResult.FilesOnClipboard ? TRUE : FALSE;
             }
         }
 
@@ -387,35 +373,15 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
         DWORD effect = 0;
         if (ownRutine) // if there's a chance for our own handling, check if it's copy or move
         {
-            DWORD dropEffect = 0;
-            UINT cfPrefDrop = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
-            UINT cfSalDataObject = RegisterClipboardFormat(SALCF_IDATAOBJECT);
+            DWORD dropEffect = GetPreferredClipboardDropEffect();
+            UINT cfSalDataObject = gClipboard->RegisterFormat(L"SalIDataObject");
             if (onlyLinks || onlyTest)
                 ownRutine = FALSE; // we cannot handle links and testing is unnecessary
 
-            if (OpenClipboard(HWindow))
-            {
-                if (!onlyLinks && !onlyTest)
-                {
-                    HANDLE handle = GetClipboardData(cfPrefDrop);
-                    if (handle != NULL)
-                    {
-                        DWORD* effectPtr = (DWORD*)HANDLES(GlobalLock(handle));
-                        if (effectPtr != NULL)
-                        {
-                            dropEffect = *effectPtr;
-                            HANDLES(GlobalUnlock(handle));
-                        }
-                    }
-                }
-                if (GetClipboardData(cfSalDataObject) != NULL)
-                    ourClipDataObject = TRUE;
-                else
-                    ownRutine = FALSE; // if it is not our IDataObject, we won't perform our own operation
-                CloseClipboard();
-            }
+            if (cfSalDataObject != 0 && gClipboard->HasFormat(cfSalDataObject))
+                ourClipDataObject = TRUE;
             else
-                TRACE_E("OpenClipboard() has failed!");
+                ownRutine = FALSE; // if it is not our IDataObject, we won't perform our own operation
 
             if (!onlyLinks && !onlyTest && ownRutine)
             {
@@ -428,102 +394,41 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
 
         if (ownRutine) // execute our own routine - copy or move
         {
-            if (Is(ptDisk) && ourClipDataObject)
-            {
-                CCopyMoveData* array = NULL;
-                if (BuildCopyMoveDataFromHDrop(dataObj, effect == DROPEFFECT_COPY, &array))
-                {
-                    // Honor the caller-supplied pastePath when present (set by
-                    // the shell extension's folder-context-menu Paste at
-                    // shellsup.cpp). The earlier FakeDataObject branch above
-                    // already honors it; this HDROP branch was dropping it on
-                    // the floor and pasting into the panel root instead of
-                    // the clicked folder.
-                    CPathBuffer targetPath;
-                    std::wstring targetPathW;
-                    const BOOL haveExplicitPath =
-                        pastePath != NULL && pastePath[0] != '\0';
-                    if (haveExplicitPath)
-                    {
-                        lstrcpyn(targetPath, pastePath, targetPath.Size());
-                        targetPathW = AnsiToWide(pastePath);
-                    }
-                    else
-                    {
-                        lstrcpyn(targetPath, GetPath(), targetPath.Size());
-                        targetPathW = GetPathW();
-                    }
-                    DropCopyMove(effect == DROPEFFECT_COPY, targetPath,
-                                 targetPathW.empty() ? NULL : targetPathW.c_str(),
-                                 array);
-                    DestroyCopyMoveData(array);
-
-                    FocusFirstNewItem = TRUE; // if it will be a single new file, let the focus find it
-
-                    if (effect == DROPEFFECT_MOVE)
-                    {
-                        if (OpenClipboard(HWindow))
-                        {
-                            EmptyClipboard();
-                            CloseClipboard();
-                        }
-                        else
-                            TRACE_E("OpenClipboard() has failed!");
-                    }
-
-                    if (effect != DROPEFFECT_COPY)
-                    {
-                        IdleRefreshStates = TRUE;  // force state variable check on next Idle
-                        IdleCheckClipboard = TRUE; // also enable clipboard checking
-                    }
-                }
-            }
+            if (pastePath != NULL)
+                lstrcpyn(DropPath, pastePath, DropPath.Size());
             else
+                lstrcpyn(DropPath, GetPath(), DropPath.Size());
+            CImpDropTarget* dropTarget = new CImpDropTarget(MainWindow->HWindow, DoCopyMove, this,
+                                                            GetCurrentDirClipboard, this,
+                                                            DropEnd, this, NULL, NULL, NULL, NULL,
+                                                            UseOwnRutine, DoDragDropOper, this,
+                                                            NULL, NULL);
+            if (dropTarget != NULL)
             {
-                if (pastePath != NULL)
-                    lstrcpyn(DropPath, pastePath, DropPath.Size());
-                else
-                    lstrcpyn(DropPath, GetPath(), DropPath.Size());
-                CImpDropTarget* dropTarget = new CImpDropTarget(MainWindow->HWindow, DoCopyMove, this,
-                                                                GetCurrentDirClipboard, this,
-                                                                DropEnd, this, NULL, NULL, NULL, NULL,
-                                                                UseOwnRutine, DoDragDropOper, this,
-                                                                NULL, NULL);
-                if (dropTarget != NULL)
+                OurClipDataObject = ourClipDataObject;
+                POINTL pt;
+                pt.x = pt.y = 0;
+                DWORD eff = effect;
+                dropTarget->DragEnter(dataObj, 0, pt, &effect);
+                effect = eff;
+                dropTarget->DragOver(0, pt, &effect);
+                effect = eff;
+                dropTarget->Drop(dataObj, 0, pt, &eff);
+
+                FocusFirstNewItem = TRUE; // if it will be a single new file, let the focus find it
+
+                dropTarget->Release();
+                OurClipDataObject = FALSE;
+                if (effect == DROPEFFECT_MOVE)
+                    gClipboard->Clear();
+
+                if (effect != DROPEFFECT_COPY)
                 {
-                    OurClipDataObject = ourClipDataObject;
-                    POINTL pt;
-                    pt.x = pt.y = 0;
-                    DWORD eff = effect;
-                    dropTarget->DragEnter(dataObj, 0, pt, &effect);
-                    effect = eff;
-                    dropTarget->DragOver(0, pt, &effect);
-                    effect = eff;
-                    dropTarget->Drop(dataObj, 0, pt, &eff);
-
-                    FocusFirstNewItem = TRUE; // if it will be a single new file, let the focus find it
-
-                    dropTarget->Release();
-                    OurClipDataObject = FALSE;
-                    if (effect == DROPEFFECT_MOVE)
-                    {
-                        if (OpenClipboard(HWindow))
-                        {
-                            EmptyClipboard();
-                            CloseClipboard();
-                        }
-                        else
-                            TRACE_E("OpenClipboard() has failed!");
-                    }
-
-                    if (effect != DROPEFFECT_COPY)
-                    {
-                        IdleRefreshStates = TRUE;  // force state variable check on next Idle
-                        IdleCheckClipboard = TRUE; // also enable clipboard checking
-                    }
-
-                    // panel refresh is performed in DropCopyMove
+                    IdleRefreshStates = TRUE;  // force state variable check on next Idle
+                    IdleCheckClipboard = TRUE; // also enable clipboard checking
                 }
+
+                // panel refresh is performed in DropCopyMove
             }
         }
         else
@@ -554,10 +459,13 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
                     if (onlyLinks)
                         PasteLinkIsRunning++; // better to handle possible concurrency with multiple threads
 
-                    SafeInvokeCommand(menu, ici);
+                    BOOL invoked = SafeInvokeCommand(menu, ici);
 
                     if (onlyLinks && PasteLinkIsRunning > 0)
                         PasteLinkIsRunning--;
+
+                    if (!invoked && onlyLinks)
+                        gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), LoadStrW(IDS_PASTELINK_FAILED));
 
                     IdleRefreshStates = TRUE;  // force state variable check on next Idle
                     IdleCheckClipboard = TRUE; // also enable clipboard checking
@@ -601,23 +509,7 @@ BOOL CFilesWindow::ClipboardPaste(BOOL onlyLinks, BOOL onlyTest, const char* pas
         }
         if (onlyTest && onlyLinks && files)
         {
-            UINT cfPrefDrop = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
-            if (OpenClipboard(MainWindow->HWindow))
-            {
-                HANDLE h = GetClipboardData(cfPrefDrop);
-                if (h != NULL)
-                {
-                    void* ptr = HANDLES(GlobalLock(h));
-                    if (ptr != NULL)
-                    {
-                        files = (*((DWORD*)ptr) & DROPEFFECT_LINK) != 0;
-                        HANDLES(GlobalUnlock(h));
-                    }
-                }
-                CloseClipboard();
-            }
-            else
-                TRACE_E("OpenClipboard() has failed!");
+            files = (GetPreferredClipboardDropEffect() & DROPEFFECT_LINK) != 0;
         }
 
         dataObj->Release();
@@ -641,7 +533,7 @@ BOOL CFilesWindow::ClipboardPasteToArcOrFS(BOOL onlyTest, DWORD* pasteDefEffect)
         *pasteDefEffect = 0;
     BOOL ret = FALSE;
     IDataObject* dataObj;
-    if (OleGetClipboard(&dataObj) == S_OK && dataObj != NULL)
+    if (gClipboard->GetDataObject(&dataObj).success && dataObj != NULL)
     {
         CDragDropOperData* namesList = NULL;
         if (!onlyTest)
@@ -654,24 +546,8 @@ BOOL CFilesWindow::ClipboardPasteToArcOrFS(BOOL onlyTest, DWORD* pasteDefEffect)
         {
             ret = TRUE;
             // check if it's copy or move
-            DWORD dropEffect = DROPEFFECT_COPY | DROPEFFECT_MOVE; // if we can't determine the effect, assume both (Copy takes priority)
-            UINT cfPrefDrop = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
-            if (OpenClipboard(HWindow))
-            {
-                HANDLE handle = GetClipboardData(cfPrefDrop);
-                if (handle != NULL)
-                {
-                    DWORD* effect = (DWORD*)HANDLES(GlobalLock(handle));
-                    if (effect != NULL)
-                    {
-                        dropEffect = *effect;
-                        HANDLES(GlobalUnlock(handle));
-                    }
-                }
-                CloseClipboard();
-            }
-            else
-                TRACE_E("OpenClipboard() has failed!");
+            DWORD dropEffect = GetPreferredClipboardDropEffect(
+                DROPEFFECT_COPY | DROPEFFECT_MOVE); // if unknown, assume both (Copy is safer)
             dropEffect &= (DROPEFFECT_COPY | DROPEFFECT_MOVE);
             if (pasteDefEffect != NULL)
                 *pasteDefEffect = dropEffect;
@@ -738,13 +614,7 @@ BOOL CFilesWindow::ClipboardPasteToArcOrFS(BOOL onlyTest, DWORD* pasteDefEffect)
                 }
                 if (moveOper) // Cut & Paste: we must clear the clipboard
                 {
-                    if (OpenClipboard(HWindow))
-                    {
-                        EmptyClipboard();
-                        CloseClipboard();
-                    }
-                    else
-                        TRACE_E("OpenClipboard() has failed!");
+                    gClipboard->Clear();
                     IdleRefreshStates = TRUE;  // force state variable check on next Idle
                     IdleCheckClipboard = TRUE; // also enable clipboard checking
                 }
@@ -1846,7 +1716,7 @@ CFilesWindow::CreateDragImage(int cursorX, int cursorY, int& dxHotspot, int& dyH
     {
         int oldBkMode = SetBkMode(hDC, OPAQUE);
         int oldTextColor = SetTextColor(hDC, GetCOLORREF(CurrentColors[ITEM_FG_FOCUSED]));
-        int oldBkColor = SetBkColor(hDC, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]));
+        int oldBkColor = SetBkColor(hDC, ResolveDarkBaseColor(ITEM_BK_FOCUSED, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]), DarkMode_ShouldUseDark()));
         r.left = iconWidth;
         DrawText(hDC, buff, buffLen, &r, DT_LEFT | DT_SINGLELINE | DT_TOP | DT_NOPREFIX);
         SetTextColor(hDC, oldTextColor);

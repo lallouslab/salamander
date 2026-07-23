@@ -621,7 +621,7 @@ public:
     // sets the main window icon according to MainWindowIconIndex
     void SetWindowIcon();
 
-    void ShowCommandLine();
+    void ShowCommandLine(BOOL focusLine = TRUE);
     void HideCommandLine(BOOL storeContent = FALSE, BOOL focusPanel = TRUE);
 
     void GetWindowSplitRect(RECT& r);

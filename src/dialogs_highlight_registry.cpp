@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
-// SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
@@ -12,6 +11,7 @@
 #include "edtlbwnd.h"
 #include "cfgdlg.h"
 #include "dialogs.h"
+#include "sal_colors.h"
 #include "plugins.h"
 #include "fileswnd.h"
 #include "shellib.h"
@@ -292,6 +292,9 @@ CConfiguration::CConfiguration()
     PrimaryContextMenu = TRUE;
     NotHiddenSystemFiles = FALSE;
     AlwaysOnTop = FALSE;
+    CommandShellTargetKind = 0;
+    CommandShellProfileGuid[0] = L'\0';
+    CommandShellProfileName[0] = L'\0';
     //  FastDirectoryMove = TRUE;
     SortUsesLocale = TRUE;
     SortDetectNumbers = TRUE;
@@ -3463,10 +3466,16 @@ void CCfgPageColors::LoadColors()
         SetDlgItemText(HWindow, CConfigurationPage7Items[i], label);
         if (subData->Label != 0)
         {
+            // Mirror the panel's render-time dark resolution so the base-color swatches match
+            // what the panel actually shows in dark mode (these indices are stored flag-0 and
+            // are no longer dark-mutated in UpdateDefaultColors). Read-only. #81 follow-up.
+            BOOL swatchDark = DarkMode_ShouldUseDark();
+            COLORREF sfg = ResolveDarkBaseColor(subData->ColorFg, GetCOLORREF(tmpColors[subData->ColorFg]), swatchDark);
+            COLORREF sbk = ResolveDarkBaseColor(subData->ColorBk, GetCOLORREF(tmpColors[subData->ColorBk]), swatchDark);
             if (subData->Flags & CFG7F_SINGLECOLOR)
-                Items[i]->SetColor(GetCOLORREF(tmpColors[subData->ColorFg]), GetCOLORREF(tmpColors[subData->ColorFg]));
+                Items[i]->SetColor(sfg, sfg);
             else
-                Items[i]->SetColor(GetCOLORREF(tmpColors[subData->ColorFg]), GetCOLORREF(tmpColors[subData->ColorBk]));
+                Items[i]->SetColor(sfg, sbk);
         }
         ShowWindow(Items[i]->HWindow, subData->Label != 0 ? SW_SHOW : SW_HIDE);
     }
@@ -3502,10 +3511,10 @@ void CCfgPageColors::LoadColors()
             {
                 BYTE fgGray = GetGrayscaleFromRGB(GetRValue(fg), GetGValue(fg), GetBValue(fg));
                 if (fgGray < 96)
-                    fg = GetCOLORREF(tmpColors[maskSwatches[m].panelFg]);
+                    fg = ResolveDarkBaseColor(maskSwatches[m].panelFg, GetCOLORREF(tmpColors[maskSwatches[m].panelFg]), TRUE);
                 BYTE bkGray = GetGrayscaleFromRGB(GetRValue(bk), GetGValue(bk), GetBValue(bk));
                 if (bkGray > 160)
-                    bk = GetCOLORREF(tmpColors[maskSwatches[m].panelBk]);
+                    bk = ResolveDarkBaseColor(maskSwatches[m].panelBk, GetCOLORREF(tmpColors[maskSwatches[m].panelBk]), TRUE);
             }
             Masks[m]->SetColor(fg, bk);
         }

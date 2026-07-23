@@ -164,6 +164,8 @@ extern const char* DefRightToolBar;
 #define TITLE_BAR_MODE_FULLPATH 2
 
 #define TITLE_PREFIX_MAX 100 // size of the buffer for the title prefix
+#define COMMAND_SHELL_PROFILE_GUID_MAX 64
+#define COMMAND_SHELL_PROFILE_NAME_MAX 256
 
 typedef struct
 {
@@ -459,6 +461,9 @@ struct CConfiguration
     CPathBuffer ConversionTable;
 
     int ThemeMode;                              // dark mode behavior (THEME_MODE_* from darkmode.h)
+    int CommandShellTargetKind; // ShellTargetKind persisted as a DWORD
+    wchar_t CommandShellProfileGuid[COMMAND_SHELL_PROFILE_GUID_MAX];
+    wchar_t CommandShellProfileName[COMMAND_SHELL_PROFILE_NAME_MAX];
     int TitleBarShowPath;                        // will we display the path in the title bar?
     int TitleBarMode;                            // title bar display mode (TITLE_BAR_MODE_xxx)
     int UseTitleBarPrefix;                       // should prefix be shown in the title bar?

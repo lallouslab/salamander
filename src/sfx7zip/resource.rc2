@@ -32,7 +32,7 @@ BEGIN
             VALUE "FileVersion", "2.0.0.0"
             VALUE "InternalName", "Sally Installer"
             VALUE "OriginalFilename", "sfx7zip.exe"
-            VALUE "LegalCopyright", "Copyright \xA9 1997-2026 Sally Authors"
+            VALUE "LegalCopyright", "Copyright © 1997-2023 Open Salamander Authors; © 2025-2026 Elias Bachaalany"
         END
     END
     BLOCK "VarFileInfo"

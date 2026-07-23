@@ -17,6 +17,7 @@
 #include "stswnd.h"
 #include "plugins.h"
 #include "fileswnd.h"
+#include "editwnd.h"
 #include "mainwnd.h"
 #include "cfgdlg.h"
 #include "usermenu.h"
@@ -254,6 +255,9 @@ const char* CONFIG_NOTHIDDENSYSTEM_REG = "Hide Hidden and System Files and Direc
 const char* CONFIG_RIGHT_FOCUS_REG = "Right Panel Focused";
 const char* CONFIG_SHOWCHDBUTTON_REG = "Show Change Drive Button";
 const char* CONFIG_ALWAYSONTOP_REG = "Always On Top";
+const char* CONFIG_COMMANDSHELL_KIND_REG = "Command Shell Kind";
+const char* CONFIG_COMMANDSHELL_PROFILE_GUID_REG = "Command Shell Profile GUID";
+const char* CONFIG_COMMANDSHELL_PROFILE_NAME_REG = "Command Shell Profile Name";
 //const char *CONFIG_FASTDIRMOVE_REG = "Fast Directory Move";
 const char* CONFIG_SORTUSESLOCALE_REG = "Sort Uses Locale";
 const char* CONFIG_SORTDETECTNUMBERS_REG = "Sort Detects Numbers";
@@ -1699,6 +1703,15 @@ void CMainWindow::SaveConfig(HWND parent)
                          &rightPanelFocused, sizeof(DWORD));
                 SetValue(actKey, CONFIG_ALWAYSONTOP_REG, REG_DWORD,
                          &Configuration.AlwaysOnTop, sizeof(DWORD));
+                SetValue(actKey, CONFIG_COMMANDSHELL_KIND_REG, REG_DWORD,
+                         &Configuration.CommandShellTargetKind, sizeof(DWORD));
+                if (gRegistry != NULL)
+                {
+                    gRegistry->SetString(actKey, AnsiToWideReg(CONFIG_COMMANDSHELL_PROFILE_GUID_REG).c_str(),
+                                         Configuration.CommandShellProfileGuid);
+                    gRegistry->SetString(actKey, AnsiToWideReg(CONFIG_COMMANDSHELL_PROFILE_NAME_REG).c_str(),
+                                         Configuration.CommandShellProfileName);
+                }
                 //      SetValue(actKey, CONFIG_FASTDIRMOVE_REG, REG_DWORD,
                 //               &Configuration.FastDirectoryMove, sizeof(DWORD));
                 SetValue(actKey, CONFIG_SORTUSESLOCALE_REG, REG_DWORD,
@@ -3229,6 +3242,18 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
                      &rightPanelFocused, sizeof(DWORD));
             GetValue(actKey, CONFIG_ALWAYSONTOP_REG, REG_DWORD,
                      &Configuration.AlwaysOnTop, sizeof(DWORD));
+            GetValue(actKey, CONFIG_COMMANDSHELL_KIND_REG, REG_DWORD,
+                     &Configuration.CommandShellTargetKind, sizeof(DWORD));
+            if (Configuration.CommandShellTargetKind < 0 || Configuration.CommandShellTargetKind > 2)
+                Configuration.CommandShellTargetKind = 0;
+            if (gRegistry != NULL)
+            {
+                std::wstring profileValue;
+                if (gRegistry->GetString(actKey, AnsiToWideReg(CONFIG_COMMANDSHELL_PROFILE_GUID_REG).c_str(), profileValue).success)
+                    wcsncpy_s(Configuration.CommandShellProfileGuid, profileValue.c_str(), _TRUNCATE);
+                if (gRegistry->GetString(actKey, AnsiToWideReg(CONFIG_COMMANDSHELL_PROFILE_NAME_REG).c_str(), profileValue).success)
+                    wcsncpy_s(Configuration.CommandShellProfileName, profileValue.c_str(), _TRUNCATE);
+            }
             //      GetValue(actKey, CONFIG_FASTDIRMOVE_REG, REG_DWORD,
             //               &Configuration.FastDirectoryMove, sizeof(DWORD));
             GetValue(actKey, CONFIG_SORTUSESLOCALE_REG, REG_DWORD,
@@ -4059,6 +4084,12 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
         ColorsChanged(TRUE, FALSE, TRUE); // rebuild color-dependent resources for initial theme
         DarkMode_ApplyTitleBar(HWindow);
         DarkMode_ApplyToThreadTopLevelWindows(GetCurrentThreadId());
+        if (EditWindow != NULL && EditWindow->HWindow != NULL)
+        {
+            EditWindowSetDirectory();
+            RedrawWindow(EditWindow->HWindow, NULL, NULL,
+                         RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        }
         InvalidateRect(HWindow, NULL, TRUE);
 
         return ret;

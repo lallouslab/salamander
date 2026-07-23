@@ -1,11 +1,15 @@
-// SPDX-FileCopyrightText: 2026 Sally Authors
+// SPDX-FileCopyrightText: 2025-2026 Elias Bachaalany
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "github_release.h"
 
+#pragma push_macro("free")
+#undef free
+#include "yyjson/yyjson.h"
+#pragma pop_macro("free")
+
 #include <algorithm>
 #include <cctype>
-#include <cstring>
 #include <sstream>
 #include <string_view>
 #include <utility>
@@ -56,460 +60,6 @@ bool EndsWith(std::string_view text, std::string_view suffix)
            text.substr(text.size() - suffix.size()) == suffix;
 }
 
-class JsonCursor
-{
-public:
-    JsonCursor(const char* json, size_t size)
-        : Text(json != nullptr ? json : ""),
-          Size(size)
-    {
-    }
-
-    void SkipWhitespace()
-    {
-        while (Pos < Size && IsSpace(Text[Pos]))
-            Pos++;
-    }
-
-    bool Consume(char expected)
-    {
-        SkipWhitespace();
-        if (Pos < Size && Text[Pos] == expected)
-        {
-            Pos++;
-            return true;
-        }
-        return false;
-    }
-
-    bool ParseString(std::string& out, std::string& error)
-    {
-        SkipWhitespace();
-        if (Pos >= Size || Text[Pos] != '"')
-        {
-            error = "expected JSON string";
-            return false;
-        }
-
-        Pos++;
-        out.clear();
-        while (Pos < Size)
-        {
-            char ch = Text[Pos++];
-            if (ch == '"')
-                return true;
-
-            if (ch != '\\')
-            {
-                out.push_back(ch);
-                continue;
-            }
-
-            if (Pos >= Size)
-            {
-                error = "unterminated escape sequence";
-                return false;
-            }
-
-            char escaped = Text[Pos++];
-            switch (escaped)
-            {
-            case '"':
-            case '\\':
-            case '/':
-                out.push_back(escaped);
-                break;
-            case 'b':
-                out.push_back('\b');
-                break;
-            case 'f':
-                out.push_back('\f');
-                break;
-            case 'n':
-                out.push_back('\n');
-                break;
-            case 'r':
-                out.push_back('\r');
-                break;
-            case 't':
-                out.push_back('\t');
-                break;
-            case 'u':
-            {
-                if (Pos + 4 > Size)
-                {
-                    error = "incomplete unicode escape";
-                    return false;
-                }
-                unsigned value = 0;
-                for (int i = 0; i < 4; i++)
-                {
-                    char hex = Text[Pos++];
-                    value <<= 4;
-                    if (hex >= '0' && hex <= '9')
-                        value |= static_cast<unsigned>(hex - '0');
-                    else if (hex >= 'a' && hex <= 'f')
-                        value |= static_cast<unsigned>(hex - 'a' + 10);
-                    else if (hex >= 'A' && hex <= 'F')
-                        value |= static_cast<unsigned>(hex - 'A' + 10);
-                    else
-                    {
-                        error = "invalid unicode escape";
-                        return false;
-                    }
-                }
-                if (value <= 0x7F)
-                    out.push_back(static_cast<char>(value));
-                else
-                    out.push_back('?');
-                break;
-            }
-            default:
-                error = "unsupported escape sequence";
-                return false;
-            }
-        }
-
-        error = "unterminated JSON string";
-        return false;
-    }
-
-    bool ParseBool(bool& out, std::string& error)
-    {
-        SkipWhitespace();
-        if (MatchLiteral("true"))
-        {
-            out = true;
-            return true;
-        }
-        if (MatchLiteral("false"))
-        {
-            out = false;
-            return true;
-        }
-
-        error = "expected JSON boolean";
-        return false;
-    }
-
-    bool SkipValue(std::string& error)
-    {
-        SkipWhitespace();
-        if (Pos >= Size)
-        {
-            error = "unexpected end of JSON";
-            return false;
-        }
-
-        switch (Text[Pos])
-        {
-        case '"':
-        {
-            std::string ignored;
-            return ParseString(ignored, error);
-        }
-
-        case '{':
-            return SkipObject(error);
-
-        case '[':
-            return SkipArray(error);
-
-        case 't':
-            return MatchLiteral("true") ? true : (error = "invalid literal", false);
-
-        case 'f':
-            return MatchLiteral("false") ? true : (error = "invalid literal", false);
-
-        case 'n':
-            return MatchLiteral("null") ? true : (error = "invalid literal", false);
-
-        default:
-            if (Text[Pos] == '-' || std::isdigit(static_cast<unsigned char>(Text[Pos])) != 0)
-                return SkipNumber(error);
-            error = "unsupported JSON token";
-            return false;
-        }
-    }
-
-private:
-    bool MatchLiteral(const char* literal)
-    {
-        const size_t literalLength = std::strlen(literal);
-        if (Pos + literalLength > Size)
-            return false;
-        if (std::strncmp(Text + Pos, literal, literalLength) != 0)
-            return false;
-        Pos += literalLength;
-        return true;
-    }
-
-    bool SkipNumber(std::string& error)
-    {
-        size_t start = Pos;
-        if (Text[Pos] == '-')
-            Pos++;
-
-        if (Pos >= Size || !std::isdigit(static_cast<unsigned char>(Text[Pos])))
-        {
-            error = "invalid number";
-            return false;
-        }
-
-        if (Text[Pos] == '0')
-        {
-            Pos++;
-        }
-        else
-        {
-            while (Pos < Size && std::isdigit(static_cast<unsigned char>(Text[Pos])))
-                Pos++;
-        }
-
-        if (Pos < Size && Text[Pos] == '.')
-        {
-            Pos++;
-            if (Pos >= Size || !std::isdigit(static_cast<unsigned char>(Text[Pos])))
-            {
-                error = "invalid number fraction";
-                return false;
-            }
-            while (Pos < Size && std::isdigit(static_cast<unsigned char>(Text[Pos])))
-                Pos++;
-        }
-
-        if (Pos < Size && (Text[Pos] == 'e' || Text[Pos] == 'E'))
-        {
-            Pos++;
-            if (Pos < Size && (Text[Pos] == '+' || Text[Pos] == '-'))
-                Pos++;
-            if (Pos >= Size || !std::isdigit(static_cast<unsigned char>(Text[Pos])))
-            {
-                error = "invalid number exponent";
-                return false;
-            }
-            while (Pos < Size && std::isdigit(static_cast<unsigned char>(Text[Pos])))
-                Pos++;
-        }
-
-        return Pos > start;
-    }
-
-    bool SkipArray(std::string& error)
-    {
-        if (!Consume('['))
-        {
-            error = "expected '['";
-            return false;
-        }
-
-        SkipWhitespace();
-        if (Consume(']'))
-            return true;
-
-        while (true)
-        {
-            if (!SkipValue(error))
-                return false;
-
-            SkipWhitespace();
-            if (Consume(']'))
-                return true;
-            if (!Consume(','))
-            {
-                error = "expected ',' or ']'";
-                return false;
-            }
-        }
-    }
-
-    bool SkipObject(std::string& error)
-    {
-        if (!Consume('{'))
-        {
-            error = "expected '{'";
-            return false;
-        }
-
-        SkipWhitespace();
-        if (Consume('}'))
-            return true;
-
-        while (true)
-        {
-            std::string key;
-            if (!ParseString(key, error))
-                return false;
-            if (!Consume(':'))
-            {
-                error = "expected ':'";
-                return false;
-            }
-            if (!SkipValue(error))
-                return false;
-
-            SkipWhitespace();
-            if (Consume('}'))
-                return true;
-            if (!Consume(','))
-            {
-                error = "expected ',' or '}'";
-                return false;
-            }
-        }
-    }
-
-public:
-    const char* Text = nullptr;
-    size_t Size = 0;
-    size_t Pos = 0;
-};
-
-bool ParseAssetObject(JsonCursor& cursor, GitHubReleaseAsset& asset, std::string& error)
-{
-    if (!cursor.Consume('{'))
-    {
-        error = "expected asset object";
-        return false;
-    }
-
-    cursor.SkipWhitespace();
-    if (cursor.Consume('}'))
-        return true;
-
-    while (true)
-    {
-        std::string key;
-        if (!cursor.ParseString(key, error))
-            return false;
-        if (!cursor.Consume(':'))
-        {
-            error = "expected ':' in asset object";
-            return false;
-        }
-
-        if (key == "name")
-        {
-            if (!cursor.ParseString(asset.Name, error))
-                return false;
-        }
-        else if (key == "browser_download_url")
-        {
-            if (!cursor.ParseString(asset.DownloadUrl, error))
-                return false;
-        }
-        else
-        {
-            if (!cursor.SkipValue(error))
-                return false;
-        }
-
-        cursor.SkipWhitespace();
-        if (cursor.Consume('}'))
-            return true;
-        if (!cursor.Consume(','))
-        {
-            error = "expected ',' or '}' in asset object";
-            return false;
-        }
-    }
-}
-
-bool ParseAssetsArray(JsonCursor& cursor, std::vector<GitHubReleaseAsset>& assets,
-                      std::string& error)
-{
-    if (!cursor.Consume('['))
-    {
-        error = "expected assets array";
-        return false;
-    }
-
-    cursor.SkipWhitespace();
-    if (cursor.Consume(']'))
-        return true;
-
-    while (true)
-    {
-        GitHubReleaseAsset asset;
-        if (!ParseAssetObject(cursor, asset, error))
-            return false;
-        if (!asset.Name.empty() && !asset.DownloadUrl.empty())
-            assets.push_back(std::move(asset));
-
-        cursor.SkipWhitespace();
-        if (cursor.Consume(']'))
-            return true;
-        if (!cursor.Consume(','))
-        {
-            error = "expected ',' or ']' in assets array";
-            return false;
-        }
-    }
-}
-
-bool ParseRootObject(JsonCursor& cursor, GitHubReleaseInfo& release, std::string& error)
-{
-    if (!cursor.Consume('{'))
-    {
-        error = "expected root JSON object";
-        return false;
-    }
-
-    cursor.SkipWhitespace();
-    if (cursor.Consume('}'))
-    {
-        error = "release payload is empty";
-        return false;
-    }
-
-    while (true)
-    {
-        std::string key;
-        if (!cursor.ParseString(key, error))
-            return false;
-        if (!cursor.Consume(':'))
-        {
-            error = "expected ':' in release object";
-            return false;
-        }
-
-        if (key == "tag_name")
-        {
-            if (!cursor.ParseString(release.TagName, error))
-                return false;
-        }
-        else if (key == "html_url")
-        {
-            if (!cursor.ParseString(release.HtmlUrl, error))
-                return false;
-        }
-        else if (key == "prerelease")
-        {
-            if (!cursor.ParseBool(release.Prerelease, error))
-                return false;
-        }
-        else if (key == "assets")
-        {
-            if (!ParseAssetsArray(cursor, release.Assets, error))
-                return false;
-        }
-        else
-        {
-            if (!cursor.SkipValue(error))
-                return false;
-        }
-
-        cursor.SkipWhitespace();
-        if (cursor.Consume('}'))
-            return true;
-        if (!cursor.Consume(','))
-        {
-            error = "expected ',' or '}' in release object";
-            return false;
-        }
-    }
-}
-
 bool ParseSemverParts(const std::string& normalizedTag, std::vector<int>& parts)
 {
     parts.clear();
@@ -558,16 +108,62 @@ bool ParseGitHubLatestReleaseJson(const char* json, size_t size, GitHubReleaseIn
     release = GitHubReleaseInfo();
     error.clear();
 
-    JsonCursor cursor(json, size);
-    if (!ParseRootObject(cursor, release, error))
-        return false;
-
-    cursor.SkipWhitespace();
-    if (cursor.Pos != cursor.Size)
+    const char* input = json != nullptr ? json : "";
+    const size_t inputSize = json != nullptr ? size : 0;
+    yyjson_read_err readError{};
+    yyjson_doc* document = yyjson_read_opts(const_cast<char*>(input), inputSize, 0, nullptr, &readError);
+    if (document == nullptr)
     {
-        error = "unexpected trailing JSON content";
+        std::ostringstream message;
+        message << (readError.msg != nullptr ? readError.msg : "invalid JSON")
+                << " at byte " << readError.pos;
+        error = message.str();
         return false;
     }
+
+    yyjson_val* root = yyjson_doc_get_root(document);
+    if (!yyjson_is_obj(root))
+    {
+        yyjson_doc_free(document);
+        error = "expected root JSON object";
+        return false;
+    }
+
+    auto ReadString = [](yyjson_val* object, const char* key, std::string& value) {
+        yyjson_val* member = yyjson_obj_get(object, key);
+        if (!yyjson_is_str(member))
+            return false;
+        value.assign(yyjson_get_str(member), yyjson_get_len(member));
+        return true;
+    };
+
+    ReadString(root, "tag_name", release.TagName);
+    ReadString(root, "html_url", release.HtmlUrl);
+
+    yyjson_val* prerelease = yyjson_obj_get(root, "prerelease");
+    if (yyjson_is_bool(prerelease))
+        release.Prerelease = yyjson_get_bool(prerelease);
+
+    yyjson_val* assets = yyjson_obj_get(root, "assets");
+    if (yyjson_is_arr(assets))
+    {
+        size_t index;
+        size_t count;
+        yyjson_val* value;
+        yyjson_arr_foreach(assets, index, count, value)
+        {
+            if (!yyjson_is_obj(value))
+                continue;
+
+            GitHubReleaseAsset asset;
+            ReadString(value, "name", asset.Name);
+            ReadString(value, "browser_download_url", asset.DownloadUrl);
+            if (!asset.Name.empty() && !asset.DownloadUrl.empty())
+                release.Assets.push_back(std::move(asset));
+        }
+    }
+
+    yyjson_doc_free(document);
 
     if (release.TagName.empty())
     {

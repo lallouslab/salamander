@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2026 Open Salamander Authors
+﻿// SPDX-FileCopyrightText: 2025-2026 Elias Bachaalany
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #ifdef SALLY_WORKER_CORE_STANDALONE
@@ -523,11 +523,17 @@ public:
     {
         LongPath s(source);
         LongPath t(target);
-        DWORD win = 0;
-        if (HasFlag(flags, MoveFlags::ReplaceExisting)) win |= MOVEFILE_REPLACE_EXISTING;
-        if (HasFlag(flags, MoveFlags::CopyAllowed))     win |= MOVEFILE_COPY_ALLOWED;
-        if (HasFlag(flags, MoveFlags::WriteThrough))    win |= MOVEFILE_WRITE_THROUGH;
-        if (!::MoveFileExW(s.Get(), t.Get(), win))
+        if (!::MoveFileExW(s.Get(), t.Get(), MoveFlagsToWin32(flags)))
+            return FileResult::Error(::GetLastError());
+        return FileResult::Ok();
+    }
+
+    FileResult ScheduleDeleteOnReboot(const wchar_t* path) override
+    {
+        // Do NOT wrap with LongPath / \\?\ here: this value is handed to the Session Manager
+        // (HKLM ...\PendingFileRenameOperations) and MoveFileEx performs its own DOS->NT
+        // conversion; a \\?\ prefix can leave a non-canonical pending entry. Requires admin.
+        if (!::MoveFileExW(path, NULL, MOVEFILE_DELAY_UNTIL_REBOOT))
             return FileResult::Error(::GetLastError());
         return FileResult::Ok();
     }
@@ -574,4 +580,14 @@ IFileSystem* gFileSystem = &g_win32FileSystem;
 IFileSystem* GetWin32FileSystem()
 {
     return &g_win32FileSystem;
+}
+
+DWORD MoveFlagsToWin32(MoveFlags flags)
+{
+    DWORD win = 0;
+    if (HasFlag(flags, MoveFlags::ReplaceExisting)) win |= MOVEFILE_REPLACE_EXISTING;
+    if (HasFlag(flags, MoveFlags::CopyAllowed)) win |= MOVEFILE_COPY_ALLOWED;
+    if (HasFlag(flags, MoveFlags::WriteThrough)) win |= MOVEFILE_WRITE_THROUGH;
+    if (HasFlag(flags, MoveFlags::DelayUntilReboot)) win |= MOVEFILE_DELAY_UNTIL_REBOOT;
+    return win;
 }

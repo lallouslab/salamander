@@ -68,6 +68,13 @@ jobs:
 
           Copy-Item -Path "$outputRoot/*" -Destination $runtimeDir -Recurse -Force
 
+          # GPLv2 section 1 requires the license text to travel with the binaries,
+          # and NOTICE/AUTHORS carry the Open Salamander attribution.
+          Copy-Item -Path LICENSE,NOTICE,AUTHORS -Destination $runtimeDir -Force
+          $runtimeDocDir = Join-Path $runtimeDir "doc"
+          New-Item -ItemType Directory -Path $runtimeDocDir -Force | Out-Null
+          Copy-Item -Path doc/AUTHORS,doc/third_party.txt -Destination $runtimeDocDir -Force
+
           # Collect symbols into a dedicated folder and remove them from runtime package.
           Get-ChildItem -Path $runtimeDir -Recurse -File -Filter *.pdb | ForEach-Object {
             $relative = $_.FullName.Substring($runtimeDir.Length).TrimStart('\')

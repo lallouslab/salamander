@@ -690,6 +690,8 @@
 #define IDD_VIEWERGOTOOFFSET            6220
 #define IDE_VGTO_OFFSET                 6221
 #define IDC_VGTO_HEX                    6222
+#define IDD_DEFAULT_SHELL               6230
+#define IDC_DEFAULT_SHELL_TARGET        6231
 
 // Next default values for new objects
 // 

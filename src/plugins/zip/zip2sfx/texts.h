@@ -9,7 +9,7 @@
 
 STRING(STR_WELCOME_MESSAGE,
        "\n"
-       "Zip2Sfx 2.9  Copyright (c) 2000-2026 Sally Authors   Home page: github.com/0xeb/sally\n\n")
+       "Zip2Sfx 2.9  Copyright (c) 2000-2023 Open Salamander Authors; (c) 2025-2026 Elias Bachaalany   Home page: github.com/0xeb/sally\n\n")
 STRING(STR_HELP,
        "Usage:\tzip2sfx [options] zipfile [exefile]\n"
        "\n"

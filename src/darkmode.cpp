@@ -8,6 +8,7 @@
 #include <commctrl.h>
 #include <tchar.h>
 #include <uxtheme.h>
+#include <vssym32.h>
 
 namespace
 {
@@ -59,6 +60,8 @@ const WCHAR* UXTHEME_EXPLORER = L"Explorer";
 const UINT_PTR GROUPBOX_SUBCLASS_ID = 1;
 const UINT_PTR STATIC_EDGE_SUBCLASS_ID = 2;
 const UINT_PTR HEADER_SUBCLASS_ID = 4;
+const UINT_PTR CHECK_RADIO_SUBCLASS_ID = 8;
+const TCHAR* CHECK_RADIO_HOT_PROP = TEXT("SallyCheckRadioHot");
 
 HBRUSH DialogDarkBrush = NULL;
 HBRUSH DialogDarkInputBrush = NULL;
@@ -245,6 +248,42 @@ BOOL IsGroupBox(HWND hwnd)
     return (style & BS_TYPEMASK) == BS_GROUPBOX;
 }
 
+BOOL IsRadioButtonStyle(LONG_PTR style)
+{
+    switch (style & BS_TYPEMASK)
+    {
+    case BS_RADIOBUTTON:
+    case BS_AUTORADIOBUTTON:
+        return TRUE;
+    }
+    return FALSE;
+}
+
+BOOL IsCheckButtonStyle(LONG_PTR style)
+{
+    switch (style & BS_TYPEMASK)
+    {
+    case BS_CHECKBOX:
+    case BS_AUTOCHECKBOX:
+    case BS_3STATE:
+    case BS_AUTO3STATE:
+        return TRUE;
+    }
+    return FALSE;
+}
+
+BOOL IsCheckOrRadioButton(HWND hwnd)
+{
+    if (!HasClassName(hwnd, BUTTON_CLASS_NAME))
+        return FALSE;
+
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    if ((style & BS_PUSHLIKE) != 0)
+        return FALSE;
+
+    return IsCheckButtonStyle(style) || IsRadioButtonStyle(style);
+}
+
 BOOL IsStaticEdge(HWND hwnd)
 {
     if (!HasClassName(hwnd, STATIC_CLASS_NAME))
@@ -264,6 +303,12 @@ BOOL IsStaticEdge(HWND hwnd)
 }
 
 void InvalidateGroupBox(HWND hwnd)
+{
+    if (hwnd != NULL && IsWindow(hwnd))
+        InvalidateRect(hwnd, NULL, TRUE);
+}
+
+void InvalidateCheckRadio(HWND hwnd)
 {
     if (hwnd != NULL && IsWindow(hwnd))
         InvalidateRect(hwnd, NULL, TRUE);
@@ -535,6 +580,296 @@ BOOL PaintDarkGroupBox(HWND hwnd, HDC paintDC)
     return TRUE;
 }
 
+DWORD GetCheckRadioTextFlags(HWND hwnd)
+{
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    DWORD flags = 0;
+
+    if ((style & BS_CENTER) == BS_CENTER)
+        flags |= DT_CENTER;
+    else if ((style & BS_RIGHT) == BS_RIGHT)
+        flags |= DT_RIGHT;
+    else
+        flags |= DT_LEFT;
+
+    if ((style & BS_MULTILINE) != 0)
+        flags |= DT_WORDBREAK;
+    else
+    {
+        flags |= DT_SINGLELINE | DT_END_ELLIPSIS;
+        LONG_PTR vAlign = style & BS_VCENTER;
+        if (vAlign == BS_BOTTOM)
+            flags |= DT_BOTTOM;
+        else if (vAlign != BS_TOP)
+            flags |= DT_VCENTER;
+    }
+
+#ifdef BS_NOPREFIX
+    if ((style & BS_NOPREFIX) != 0)
+        flags |= DT_NOPREFIX;
+    else
+#endif
+    {
+        LRESULT uiState = SendMessage(hwnd, WM_QUERYUISTATE, 0, 0);
+        if ((uiState & UISF_HIDEACCEL) != 0)
+            flags |= DT_HIDEPREFIX;
+    }
+
+    return flags;
+}
+
+int GetCheckRadioThemeState(HWND hwnd, LONG_PTR style, BOOL hot)
+{
+    BOOL enabled = IsWindowEnabled(hwnd);
+    BOOL pressed = (SendMessage(hwnd, BM_GETSTATE, 0, 0) & BST_PUSHED) != 0;
+    LRESULT checkState = SendMessage(hwnd, BM_GETCHECK, 0, 0);
+    int stateOffset = 0;
+
+    if (!enabled)
+        stateOffset = 3;
+    else if (pressed)
+        stateOffset = 2;
+    else if (hot)
+        stateOffset = 1;
+
+    if (IsRadioButtonStyle(style))
+        return (checkState == BST_CHECKED ? RBS_CHECKEDNORMAL : RBS_UNCHECKEDNORMAL) + stateOffset;
+
+    if (checkState == BST_INDETERMINATE)
+        return CBS_MIXEDNORMAL + stateOffset;
+    if (checkState == BST_CHECKED)
+        return CBS_CHECKEDNORMAL + stateOffset;
+    return CBS_UNCHECKEDNORMAL + stateOffset;
+}
+
+BOOL PaintDarkCheckRadioButton(HWND hwnd, HDC paintDC)
+{
+    if (!IsCheckOrRadioButton(hwnd))
+        return FALSE;
+
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    PAINTSTRUCT ps;
+    HDC hdc = paintDC;
+    if (hdc == NULL)
+        hdc = BeginPaint(hwnd, &ps);
+    if (hdc == NULL)
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    FillRectSolid(hdc, &client, colors.DialogBackground);
+
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    HFONT hFont = (HFONT)SendMessage(hwnd, WM_GETFONT, 0, 0);
+    if (hFont == NULL)
+        hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+    COLORREF oldTextColor = SetTextColor(hdc, IsWindowEnabled(hwnd) ? colors.DialogText : colors.DisabledText);
+    COLORREF oldBkColor = SetBkColor(hdc, colors.DialogBackground);
+
+    TEXTMETRIC tm;
+    memset(&tm, 0, sizeof(tm));
+    GetTextMetrics(hdc, &tm);
+
+    BOOL hot = GetProp(hwnd, CHECK_RADIO_HOT_PROP) != NULL;
+    BOOL radio = IsRadioButtonStyle(style);
+    int part = radio ? BP_RADIOBUTTON : BP_CHECKBOX;
+    int state = GetCheckRadioThemeState(hwnd, style, hot);
+    SIZE glyphSize = {GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK)};
+    HTHEME hTheme = OpenThemeData(hwnd, L"Button");
+    if (hTheme != NULL)
+    {
+        SIZE themeSize = {0};
+        if (SUCCEEDED(GetThemePartSize(hTheme, hdc, part, state, NULL, TS_TRUE, &themeSize)) &&
+            themeSize.cx > 0 && themeSize.cy > 0)
+            glyphSize = themeSize;
+    }
+    if (glyphSize.cx <= 0)
+        glyphSize.cx = max(12, tm.tmHeight);
+    if (glyphSize.cy <= 0)
+        glyphSize.cy = max(12, tm.tmHeight);
+
+    int margin = max(2, tm.tmAveCharWidth / 2);
+    int spacing = max(4, tm.tmAveCharWidth / 2);
+    int height = client.bottom - client.top;
+    LONG_PTR vAlign = style & BS_VCENTER;
+    int glyphTop = client.top + (height - glyphSize.cy) / 2;
+    if (vAlign == BS_TOP)
+        glyphTop = client.top;
+    else if (vAlign == BS_BOTTOM)
+        glyphTop = client.bottom - glyphSize.cy;
+
+    RECT glyphRect = {0};
+    glyphRect.top = glyphTop;
+    glyphRect.bottom = glyphTop + glyphSize.cy;
+
+    RECT textRect = client;
+    textRect.top = client.top;
+    textRect.bottom = client.bottom;
+
+    BOOL glyphOnRight = (style & BS_LEFTTEXT) != 0;
+    if (glyphOnRight)
+    {
+        glyphRect.right = client.right - margin;
+        glyphRect.left = glyphRect.right - glyphSize.cx;
+        textRect.left = client.left + margin;
+        textRect.right = max(textRect.left, glyphRect.left - spacing);
+    }
+    else
+    {
+        glyphRect.left = client.left + margin;
+        glyphRect.right = glyphRect.left + glyphSize.cx;
+        textRect.left = min(client.right, glyphRect.right + spacing);
+        textRect.right = client.right - margin;
+    }
+
+    BOOL glyphDrawn = FALSE;
+    if (hTheme != NULL)
+    {
+        glyphDrawn = SUCCEEDED(DrawThemeBackground(hTheme, hdc, part, state, &glyphRect, NULL));
+        CloseThemeData(hTheme);
+    }
+    if (!glyphDrawn)
+    {
+        UINT glyphState = radio ? DFCS_BUTTONRADIO : DFCS_BUTTONCHECK;
+        LRESULT checkState = SendMessage(hwnd, BM_GETCHECK, 0, 0);
+        if (!radio && checkState == BST_INDETERMINATE)
+            glyphState = DFCS_BUTTON3STATE | DFCS_CHECKED;
+        else if (checkState == BST_CHECKED)
+            glyphState |= DFCS_CHECKED;
+        if (!IsWindowEnabled(hwnd))
+            glyphState |= DFCS_INACTIVE;
+        if ((SendMessage(hwnd, BM_GETSTATE, 0, 0) & BST_PUSHED) != 0)
+            glyphState |= DFCS_PUSHED;
+        DrawFrameControl(hdc, &glyphRect, DFC_BUTTON, glyphState);
+    }
+
+    int textLen = GetWindowTextLength(hwnd);
+    if (textLen > 0 && textRect.right > textRect.left && textRect.bottom > textRect.top)
+    {
+        TCHAR* text = new TCHAR[textLen + 1];
+        if (text != NULL)
+        {
+            int copied = GetWindowText(hwnd, text, textLen + 1);
+            if (copied > 0)
+                DrawText(hdc, text, copied, &textRect, GetCheckRadioTextFlags(hwnd));
+            delete[] text;
+        }
+    }
+
+    if (GetFocus() == hwnd || (SendMessage(hwnd, BM_GETSTATE, 0, 0) & BST_FOCUS) != 0)
+    {
+        RECT focusRect = textRect;
+        if (focusRect.right <= focusRect.left || focusRect.bottom <= focusRect.top)
+            focusRect = glyphRect;
+        InflateRect(&focusRect, 1, 1);
+        IntersectRect(&focusRect, &focusRect, &client);
+        if (focusRect.right > focusRect.left && focusRect.bottom > focusRect.top)
+            DrawFocusRect(hdc, &focusRect);
+    }
+
+    SetBkColor(hdc, oldBkColor);
+    SetTextColor(hdc, oldTextColor);
+    SetBkMode(hdc, oldBkMode);
+    if (hOldFont != NULL)
+        SelectObject(hdc, hOldFont);
+
+    if (paintDC == NULL)
+        EndPaint(hwnd, &ps);
+    return TRUE;
+}
+
+LRESULT CALLBACK CheckRadioSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_PAINT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkCheckRadioButton(hwnd, NULL))
+            return 0;
+        break;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && PaintDarkCheckRadioButton(hwnd, (HDC)wParam))
+            return 0;
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (DarkMode_ShouldUseDark() && IsCheckOrRadioButton(hwnd))
+            return TRUE;
+        break;
+    }
+
+    case WM_MOUSEMOVE:
+    {
+        if (DarkMode_ShouldUseDark() && IsCheckOrRadioButton(hwnd) && GetProp(hwnd, CHECK_RADIO_HOT_PROP) == NULL)
+        {
+            SetProp(hwnd, CHECK_RADIO_HOT_PROP, (HANDLE)(UINT_PTR)1);
+            TRACKMOUSEEVENT tme = {0};
+            tme.cbSize = sizeof(tme);
+            tme.dwFlags = TME_LEAVE;
+            tme.hwndTrack = hwnd;
+            TrackMouseEvent(&tme);
+            InvalidateCheckRadio(hwnd);
+        }
+        break;
+    }
+
+    case WM_MOUSELEAVE:
+    {
+        RemoveProp(hwnd, CHECK_RADIO_HOT_PROP);
+        InvalidateCheckRadio(hwnd);
+        break;
+    }
+
+    case WM_SETTEXT:
+    case WM_SETFONT:
+    case WM_ENABLE:
+    case WM_UPDATEUISTATE:
+    case WM_THEMECHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_SYSCOLORCHANGE:
+    case WM_SIZE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+    case WM_LBUTTONUP:
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_CANCELMODE:
+    case WM_CAPTURECHANGED:
+    case BM_SETCHECK:
+    case BM_SETSTATE:
+    case BM_SETSTYLE:
+    {
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        InvalidateCheckRadio(hwnd);
+        return ret;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveProp(hwnd, CHECK_RADIO_HOT_PROP);
+        RemoveWindowSubclass(hwnd, CheckRadioSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
 LRESULT CALLBACK StaticEdgeSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
     UNREFERENCED_PARAMETER(dwRefData);
@@ -796,8 +1131,16 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
         return;
     }
 
-    if (_tcsicmp(className, BUTTON_CLASS_NAME) == 0 ||
-        _tcsicmp(className, EDIT_CLASS_NAME) == 0 ||
+    if (_tcsicmp(className, BUTTON_CLASS_NAME) == 0)
+    {
+        ApplyWindowTheme(hwnd, useDark);
+        if (IsCheckOrRadioButton(hwnd))
+            SetWindowSubclass(hwnd, CheckRadioSubclassProc, CHECK_RADIO_SUBCLASS_ID, 0);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+
+    if (_tcsicmp(className, EDIT_CLASS_NAME) == 0 ||
         _tcsicmp(className, UPDOWN_CLASS) == 0)
     {
         ApplyWindowTheme(hwnd, useDark);

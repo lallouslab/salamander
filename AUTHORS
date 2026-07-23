@@ -1,12 +1,22 @@
 == Altap Salamander Fork
 
-Elias Bachaalany (0xeb)
+Elias Bachaalany (0xeb), 2025-2026
   - Unicode/wide string support
   - Long path support (32K paths)
-  - Extended translations
+  - Dark mode
+  - Windows Terminal integration and shell/overlay integration
+  - WebView2-based Web Viewer and viewer modernization
+  - Plugin packaging and bundled plugin set
+  - Native ARM64 and Wine compatibility
+  - Extended translations and localization pipeline
   - Code modernization and normalization
-  - Build system improvements
+  - CMake build system and release pipeline
 
 == Original Authors
 
 See doc/AUTHORS for the original Open Salamander team and translators.
+
+== Licensing And Provenance
+
+See NOTICE for the fork's relationship to Open Salamander, and
+doc/third_party.txt for bundled components under separate licenses.

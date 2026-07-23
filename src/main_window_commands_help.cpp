@@ -10,7 +10,7 @@
 #include "common/fsutil.h"
 #include "common/unicode/helpers.h"
 #include "common/IEnvironment.h"
-#include "common/CommandShellService.h"
+#include "windows_terminal_ui.h"
 #include "common/IRegistry.h"
 #include <shlwapi.h>
 #undef PathIsPrefix // otherwise conflicts with CSalamanderGeneral::PathIsPrefix
@@ -2852,6 +2852,9 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             return 0;
         }
 
+        if (HandleCommandShellMenuCommand(this, activePanel, LOWORD(wParam)))
+            return 0;
+
         switch (LOWORD(wParam))
         {
         case CM_HELP_CONTEXT:
@@ -4289,7 +4292,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             else
             {
                 if (EditPermanentVisible || EditWindow->IsEnabled()) // there may be an archive in the panel
-                    ShowCommandLine();
+                    ShowCommandLine(TRUE);
             }
             return 0;
         }
@@ -4308,9 +4311,7 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             {
                 if (EditPermanentVisible)
                 {
-                    ShowCommandLine();
-                    if (lParam == 0)
-                        SetFocus(EditWindow->HWindow);
+                    ShowCommandLine(lParam == 0);
                 }
             }
             return 0;
@@ -4465,56 +4466,6 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             if (RightPanel->DirectoryLine->ToolBar != NULL)
                 RightPanel->DirectoryLine->ToolBar->Customize();
             break;
-        }
-
-        case CM_DOSSHELL:
-        {
-            activePanel->UserWorkedOnThisPath = TRUE;
-
-            CommandShellRequest policyRequest;
-            CommandShellPolicyResult policy = gCommandShellService != NULL
-                                                  ? gCommandShellService->GetPolicyInfo(policyRequest)
-                                                  : CommandShellPolicyResult::Error(ERROR_INVALID_PARAMETER);
-            const char* shellPolicyName = policy.success ? policy.info.executableNameForPolicy.c_str() : "";
-
-            if (SystemPolicies.GetNoRun() ||
-                (SystemPolicies.GetMyRunRestricted() && !SystemPolicies.GetMyCanRun(shellPolicyName)))
-            {
-                gPrompter->ShowErrorWithHelp(LoadStrW(IDS_POLICIESRESTRICTION_TITLE), LoadStrW(IDS_POLICIESRESTRICTION), IDH_GROUPPOLICY);
-                return 0;
-            }
-
-            SetDefaultDirectories();
-
-            CommandShellRequest request;
-            request.workingDirectory = (activePanel->Is(ptDisk) || activePanel->Is(ptZIPArchive)) ? activePanel->GetPathW() : NULL;
-            request.windowTitle = LoadStrW(IDS_COMMANDSHELL);
-            request.useShowWindow = true;
-            request.showWindow = SW_SHOWNORMAL;
-            POINT p;
-            if (MultiMonGetDefaultWindowPos(MainWindow->HWindow, &p))
-            {
-                // if the main window is on another monitor we should open
-                // the new window there as well, preferably at the default position (same as on the primary)
-                request.usePosition = true;
-                request.x = p.x;
-                request.y = p.y;
-                // TRACE_I("MultiMonGetDefaultWindowPos(): x = " << p.x << ", y = " << p.y);
-            }
-
-            CommandShellResult result = gCommandShellService != NULL
-                                            ? gCommandShellService->LaunchShell(request)
-                                            : CommandShellResult::Error(ERROR_INVALID_PARAMETER);
-            if (!result.success)
-            {
-                gPrompter->ShowError(LoadStrW(IDS_ERROREXECPROMPT), GetErrorTextW(result.errorCode));
-            }
-            else
-            {
-                result.CloseProcess();
-            }
-
-            return 0;
         }
 
         case CM_FILELIST:
@@ -5015,6 +4966,12 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
 
         switch (popupID)
         {
+        case CML_COMMANDS:
+        {
+            UpdateWindowsTerminalCommandsMenu(popup);
+            break;
+        }
+
         case CML_HELP:
         {
             int checkVerPos = popup->FindItemPosition(CM_HELP_CHECKNEWVERSION);

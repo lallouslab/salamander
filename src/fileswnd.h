@@ -1341,7 +1341,7 @@ public:
     void RenameFile(int specialIndex = -1);
     void RenameFileInternal(CFileData* f, const char* formatedFileName, BOOL* mayChange, BOOL* tryAgain);
     void RenameFileInternalW(CFileData* f, const std::wstring& newName, BOOL* mayChange, BOOL* tryAgain);
-    void DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targetPathW, CCopyMoveData* data);
+    BOOL DropCopyMove(BOOL copy, char* targetPath, const wchar_t* targetPathW, CCopyMoveData* data);
 
     // performs deletion using the SHFileOperation API function (only when deleting to the Recycle Bin)
     BOOL DeleteThroughRecycleBin(int* selection, int selCount, CFileData* oneFile);

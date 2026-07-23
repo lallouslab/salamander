@@ -1282,13 +1282,15 @@ void CMainWindow::FocusPanel(CFilesWindow* focus, BOOL testIfMainWndActive)
         // broadcast this news to loaded plugins
         Plugins.Event(PLUGINEVENT_PANELACTIVATED, focus == LeftPanel ? PANEL_LEFT : PANEL_RIGHT);
     }
+    else if (EditWindow != NULL)
+        EditWindowSetDirectory();
     //---  restore DefaultDir
     MainWindow->UpdateDefaultDir(TRUE);
 }
 
-void CMainWindow::ShowCommandLine()
+void CMainWindow::ShowCommandLine(BOOL focusLine)
 {
-    CALL_STACK_MESSAGE1("CMainWindow::ShowCommandLine()");
+    CALL_STACK_MESSAGE2("CMainWindow::ShowCommandLine(%d)", focusLine);
     if (EditWindow == NULL || EditWindow->HWindow != NULL)
         return;
 
@@ -1299,7 +1301,8 @@ void CMainWindow::ShowCommandLine()
         LayoutWindows();
         EditWindow->RestoreContent();
         ShowWindow(EditWindow->HWindow, SW_SHOW);
-        if (EditWindow->IsEnabled())
+        EditWindowSetDirectory();
+        if (focusLine && EditWindow->IsEnabled())
             SetFocus(EditWindow->HWindow);
         IdleRefreshStates = TRUE; // on the next Idle, force checking of state variables
     }

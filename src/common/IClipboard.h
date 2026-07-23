@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2026 Open Salamander Authors
+﻿// SPDX-FileCopyrightText: 2025-2026 Elias Bachaalany
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+
+struct IDataObject;
 
 // Result of clipboard operations
 struct ClipboardResult
@@ -50,6 +52,11 @@ public:
     // Register a custom clipboard format by name
     // Returns format ID, or 0 on failure
     virtual uint32_t RegisterFormat(const wchar_t* name) = 0;
+
+    // OLE data-object operations used by shell file transfers. SetDataObject
+    // borrows the caller's reference; GetDataObject returns an owned reference.
+    virtual ClipboardResult SetDataObject(IDataObject* dataObject) = 0;
+    virtual ClipboardResult GetDataObject(IDataObject** dataObject) = 0;
 };
 
 // Global clipboard instance

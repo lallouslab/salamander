@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2026 Open Salamander Authors
+﻿// SPDX-FileCopyrightText: 2025-2026 Elias Bachaalany
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
@@ -244,6 +244,24 @@ public:
         if (name == nullptr)
             return 0;
         return ::RegisterClipboardFormatW(name);
+    }
+
+    ClipboardResult SetDataObject(IDataObject* dataObject) override
+    {
+        HRESULT result = ::OleSetClipboard(dataObject);
+        return SUCCEEDED(result) ? ClipboardResult::Ok()
+                                 : ClipboardResult::Error(static_cast<uint32_t>(result));
+    }
+
+    ClipboardResult GetDataObject(IDataObject** dataObject) override
+    {
+        if (dataObject == nullptr)
+            return ClipboardResult::Error(ERROR_INVALID_PARAMETER);
+
+        *dataObject = nullptr;
+        HRESULT result = ::OleGetClipboard(dataObject);
+        return SUCCEEDED(result) ? ClipboardResult::Ok()
+                                 : ClipboardResult::Error(static_cast<uint32_t>(result));
     }
 
 private:

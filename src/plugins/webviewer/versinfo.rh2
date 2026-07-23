@@ -15,7 +15,7 @@
 
 #include "spl_vers.h" // pull version numbers + build
 
-#define VERSINFO_COPYRIGHT   "Copyright © 1999-2026 Sally Authors"
+#define VERSINFO_COPYRIGHT   "Copyright © 1999-2023 Open Salamander Authors; © 2025-2026 Elias Bachaalany"
 #define VERSINFO_COMPANY     "Sally"
 
 #define VERSINFO_DESCRIPTION "Web Viewer for Sally"

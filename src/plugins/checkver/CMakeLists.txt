@@ -11,9 +11,10 @@ sal_add_plugin(NAME checkver
     "${SAL_PLUGINS}/checkver/internet.cpp"
     "${SAL_PLUGINS}/checkver/logwnd.cpp"
     "${SAL_PLUGINS}/checkver/precomp.cpp"
+    "${SAL_PLUGINS}/checkver/release_check.cpp"
   RC "${SAL_PLUGINS}/checkver/checkver.rc"
   DEF "${SAL_PLUGINS}/checkver/checkver.def"
-  LIBS wininet
+  LIBS wininet yyjson
   NO_SHARED
 )
 

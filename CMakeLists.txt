@@ -70,6 +70,10 @@ set(CMAKE_C_STANDARD 11)
 # Load common settings
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sal_common.cmake)
 
+# yyjson 0.12.0 is shared by the core settings reader and CheckVer plugin.
+add_library(yyjson STATIC "${SAL_SRC}/common/dep/yyjson/yyjson.c")
+target_include_directories(yyjson PUBLIC "${SAL_SRC}/common/dep")
+
 if(NOT SALLY_PREVIEW_REGISTRY_VERSION STREQUAL "")
   list(APPEND SAL_COMMON_DEFINES "SALLY_PREVIEW_REGISTRY_VERSION=\"${SALLY_PREVIEW_REGISTRY_VERSION}\"")
 endif()
@@ -100,6 +104,7 @@ target_compile_definitions(sally PRIVATE
 
 target_link_libraries(sally PRIVATE
   htmlhelp comctl32 mpr ws2_32 netapi32 msimg32 shlwapi
+  yyjson
   ${SAL_COMMON_LIBS}
 )
 

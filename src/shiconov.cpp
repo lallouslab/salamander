@@ -9,6 +9,12 @@
 #include "shiconov.h"
 #include "common/widepath.h"
 #include "plugins\shared\sqlite\sqlite3.h"
+#include "shiconov_limits.h"
+
+// The overlay cap and the CFileData::IconOverlayIndex "no overlay" sentinel must stay in
+// lockstep: the maximum valid index is (cap - 1), which must never equal ICONOVERLAYINDEX_NOTUSED.
+static_assert(MAX_SHELL_ICON_OVERLAYS == ICONOVERLAYINDEX_NOTUSED,
+              "overlay cap must equal the CFileData::IconOverlayIndex sentinel (spl_com.h)");
 
 CShellIconOverlays ShellIconOverlays;                                  // array of all available icon-overlays
 TIndirectArray<CShellIconOverlayItem2> ListOfShellIconOverlays(15, 5); // list of all icon overlay handlers
@@ -373,7 +379,7 @@ void InitShellIconOverlays()
             i++;
         }
         // go through sorted list of icon-overlay-handlers (Explorer defines handler priority alphabetically)
-        // we take only the first 15, Explorer even only the first 11
+        // handlers past MAX_SHELL_ICON_OVERLAYS are rejected in CShellIconOverlays::Add(); Explorer itself shows only ~11-15
         for (int s = 0; s < keyNames.Count; s++)
         { // open icon-overlay-handler key
             HKEY handler;
@@ -641,9 +647,9 @@ BOOL CShellIconOverlays::Add(CShellIconOverlayItem* item /*, int priority*/)
 {
     CALL_STACK_MESSAGE1("CShellIconOverlays::Add()");
 
-    if (Overlays.Count == 15)
+    if (ShellIconOverlayCapReached(Overlays.Count))
     {
-        TRACE_I("CShellIconOverlays::Add(): unexpected situation: more than 15 icon-overlay-handlers!");
+        TRACE_I("CShellIconOverlays::Add(): unexpected situation: more than MAX_SHELL_ICON_OVERLAYS icon-overlay-handlers!");
         return FALSE;
     }
     // sorting by priority is nonsense, MS says it uses it only if other prioritization methods

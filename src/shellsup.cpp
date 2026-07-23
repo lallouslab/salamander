@@ -9,10 +9,11 @@
 #include "common/unicode/helpers.h"
 #include "common/unicode/PanelPathPolicy.h"
 #include "common/clipboard/ClipboardOwnershipPolicy.h"
-#include "common/clipboard/HDropWideBuilder.h"
 #include "common/clipboard/HDropWideDataObject.h"
+#include "common/clipboard/ShellSelectionDataObject.h"
 #include "common/widepath.h"
 #include "common/IEnvironment.h"
+#include "common/IClipboard.h"
 #include "cfgdlg.h"
 #include "plugins.h"
 #include "fileswnd.h"
@@ -729,37 +730,20 @@ void EnterLeaveDrop(BOOL enter, void* param)
 
 void SetClipCutCopyInfo(HWND hwnd, BOOL copy, BOOL salObject)
 {
-    UINT cfPrefDrop = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
-    UINT cfSalDataObject = RegisterClipboardFormat(SALCF_IDATAOBJECT);
-    HANDLE effect = NOHANDLES(GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sizeof(DWORD)));
-    HANDLE effect2 = NOHANDLES(GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sizeof(DWORD)));
-    if (effect != NULL && effect2 != NULL)
+    (void)hwnd;
+    const DWORD effect = copy ? (DROPEFFECT_COPY | DROPEFFECT_LINK) : DROPEFFECT_MOVE;
+    const UINT cfPrefDrop = gClipboard->RegisterFormat(L"Preferred DropEffect");
+    if (cfPrefDrop == 0 ||
+        !gClipboard->SetRawData(cfPrefDrop, &effect, sizeof(effect)).success)
+        TRACE_E("Unable to set preferred clipboard drop effect.");
+
+    if (salObject)
     {
-        DWORD* ef = (DWORD*)HANDLES(GlobalLock(effect));
-        if (ef != NULL)
-        {
-            *ef = copy ? (DROPEFFECT_COPY | DROPEFFECT_LINK) : DROPEFFECT_MOVE;
-            HANDLES(GlobalUnlock(effect));
-            if (OpenClipboard(hwnd))
-            {
-                if (SetClipboardData(cfPrefDrop, effect) == NULL)
-                    NOHANDLES(GlobalFree(effect));
-                if (!salObject || SetClipboardData(cfSalDataObject, effect2) == NULL)
-                    NOHANDLES(GlobalFree(effect2));
-                CloseClipboard();
-            }
-            else
-            {
-                TRACE_E("OpenClipboard() has failed!");
-                NOHANDLES(GlobalFree(effect));
-                NOHANDLES(GlobalFree(effect2));
-            }
-        }
-        else
-        {
-            NOHANDLES(GlobalFree(effect));
-            NOHANDLES(GlobalFree(effect2));
-        }
+        const DWORD marker = 1;
+        const UINT cfSalDataObject = gClipboard->RegisterFormat(L"SalIDataObject");
+        if (cfSalDataObject == 0 ||
+            !gClipboard->SetRawData(cfSalDataObject, &marker, sizeof(marker)).success)
+            TRACE_E("Unable to mark Sally clipboard ownership.");
     }
 }
 
@@ -816,76 +800,15 @@ static BOOL CollectSelectedPathsW(CFilesWindow* panel, const int* indexes, int i
 
 static BOOL SetClipboardHDropW(HWND owner, const std::vector<std::wstring>& paths, BOOL copy, BOOL salObject)
 {
-    std::vector<BYTE> payload;
-    if (!sally::clipboard::BuildHDropWidePayload(paths, payload))
+    sally::clipboard::HDropWideDataObject* dataObject =
+        new sally::clipboard::HDropWideDataObject(paths);
+    if (dataObject == NULL)
         return FALSE;
 
-    HGLOBAL hMem = NOHANDLES(GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, payload.size()));
-    if (hMem == NULL)
-        return FALSE;
-
-    void* out = HANDLES(GlobalLock(hMem));
-    if (out == NULL)
-    {
-        NOHANDLES(GlobalFree(hMem));
-        return FALSE;
-    }
-    memcpy(out, payload.data(), payload.size());
-    HANDLES(GlobalUnlock(hMem));
-
-    if (!OpenClipboard(owner))
-    {
-        NOHANDLES(GlobalFree(hMem));
-        return FALSE;
-    }
-
-    BOOL ok = FALSE;
-    if (EmptyClipboard() && SetClipboardData(CF_HDROP, hMem) != NULL)
-    {
-        hMem = NULL; // ownership transferred to the clipboard
-
-        // Set preferred drop effect and Salamander marker while the clipboard is still open.
-        UINT cfPrefDrop = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
-        UINT cfSalDataObject = RegisterClipboardFormat(SALCF_IDATAOBJECT);
-
-        HGLOBAL effect = NOHANDLES(GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sizeof(DWORD)));
-        if (effect != NULL)
-        {
-            DWORD* value = (DWORD*)HANDLES(GlobalLock(effect));
-            if (value != NULL)
-            {
-                *value = copy ? (DROPEFFECT_COPY | DROPEFFECT_LINK) : DROPEFFECT_MOVE;
-                HANDLES(GlobalUnlock(effect));
-                if (SetClipboardData(cfPrefDrop, effect) == NULL)
-                    NOHANDLES(GlobalFree(effect));
-            }
-            else
-                NOHANDLES(GlobalFree(effect));
-        }
-
-        if (salObject)
-        {
-            HGLOBAL salMarker = NOHANDLES(GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sizeof(DWORD)));
-            if (salMarker != NULL)
-            {
-                DWORD* marker = (DWORD*)HANDLES(GlobalLock(salMarker));
-                if (marker != NULL)
-                {
-                    *marker = 1;
-                    HANDLES(GlobalUnlock(salMarker));
-                    if (SetClipboardData(cfSalDataObject, salMarker) == NULL)
-                        NOHANDLES(GlobalFree(salMarker));
-                }
-                else
-                    NOHANDLES(GlobalFree(salMarker));
-            }
-        }
-
-        ok = TRUE;
-    }
-    if (hMem != NULL)
-        NOHANDLES(GlobalFree(hMem));
-    CloseClipboard();
+    BOOL ok = dataObject->IsValid() && gClipboard->SetDataObject(dataObject).success;
+    dataObject->Release();
+    if (ok)
+        SetClipCutCopyInfo(owner, copy, salObject);
     return ok;
 }
 
@@ -1494,7 +1417,7 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
                                                                                (count == 0) ? 1 : count))
                                                 {
                                                     BOOL clearSalShExtPastedData = TRUE;
-                                                    if (OleSetClipboard(fakeDataObject) == S_OK)
+                                                    if (gClipboard->SetDataObject(fakeDataObject).success)
                                                     { // pri uspesnem ulozeni system vola fakeDataObject->AddRef() +
                                                         // ulozime default drop-effect
                                                         if (OpenClipboard(MainWindow->HWindow))
@@ -1537,7 +1460,7 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
 
                                                         if (!sharedMemOK) // if it's not possible to establish communication with salextx86.dll or salextx64.dll, it makes no sense to leave data-object on clipboard
                                                         {
-                                                            OleSetClipboard(NULL);
+                                                            gClipboard->Clear();
                                                             OurDataOnClipboard = FALSE; // theoretically unnecessary (should be set in Release() of fakeDataObject - a few lines below)
                                                         }
                                                         // clipboard changed, let's verify...
@@ -1820,10 +1743,10 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
                 int idxCount = (count == 0) ? 1 : count;
                 int* idxs = (count == 0) ? &index : indexes.get();
                 BOOL clipboardSet = FALSE;
-                BOOL usedUnicodeHDropFallback = FALSE;
+                BOOL usedWideClipboardObject = FALSE;
 
-                // For Unicode filenames, avoid shell copy/cut through ANSI name enumeration.
-                // Prefer Unicode CF_HDROP for all disk selections and fall back to shell copy/cut only on failure.
+                // For disk selections, prefer the Shell's wide data object so Paste Shortcut
+                // receives both the shell ID list and CF_HDROP formats.
                 if (panel->Is(ptDisk))
                 {
                     std::vector<std::wstring> selectedPathsW;
@@ -1831,12 +1754,25 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
                     BOOL hasWideName = FALSE;
                     if (CollectSelectedPathsW(panel, idxs, idxCount, selectedPathsW, hasWideName))
                     {
-                        clipboardSet = SetClipboardHDropW(MainWindow->HWindow, selectedPathsW,
-                                                          action == saCopyToClipboard,
-                                                          salObject);
-                        usedUnicodeHDropFallback = clipboardSet;
+                        IDataObject* shellDataObject = NULL;
+                        HRESULT createResult = sally::clipboard::CreateShellSelectionDataObject(
+                            panel->GetPathW(), selectedPathsW, &shellDataObject);
+                        if (SUCCEEDED(createResult) && shellDataObject != NULL)
+                        {
+                            clipboardSet = gClipboard->SetDataObject(shellDataObject).success;
+                            shellDataObject->Release();
+                            usedWideClipboardObject = clipboardSet;
+                        }
+
                         if (!clipboardSet)
-                            TRACE_E("Unable to place Unicode file list on clipboard, falling back to shell copy/cut.");
+                        {
+                            clipboardSet = SetClipboardHDropW(MainWindow->HWindow, selectedPathsW,
+                                                              action == saCopyToClipboard,
+                                                              salObject);
+                            usedWideClipboardObject = clipboardSet;
+                            if (!clipboardSet)
+                                TRACE_E("Unable to place wide shell selection on clipboard, falling back to shell copy/cut.");
+                        }
                     }
                 }
 
@@ -1945,7 +1881,7 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
 
                     // also set preferred drop effect + origin from Salamander
                     SetClipCutCopyInfo(panel->HWindow, action == saCopyToClipboard,
-                                       sally::clipboard::ShouldTagAsSalamanderObject(usedUnicodeHDropFallback != FALSE));
+                                       sally::clipboard::ShouldTagAsSalamanderObject(usedWideClipboardObject != FALSE));
                 }
 #ifndef _WIN64
             }

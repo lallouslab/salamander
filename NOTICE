@@ -1,0 +1,29 @@
+Sally
+=====
+
+Sally is a modified version of Open Salamander:
+
+    https://github.com/OpenSalamander/salamander
+
+Copyright (c) 1997-2023 Open Salamander Authors -- see doc/AUTHORS for the
+original Open Salamander team and translators.
+
+Modifications copyright (c) 2025-2026 Elias Bachaalany and Sally contributors
+-- see AUTHORS.
+
+Fork modifications began on 2025-10-17. Files throughout src/ have been modified
+from their Open Salamander originals since that date. Per-file provenance is
+recorded in SPDX headers: files derived from Open Salamander carry both an
+"Open Salamander Authors" and a fork copyright line, while files written for
+Sally carry only the fork line.
+
+Sally is free software, licensed under the GNU General Public License version 2
+or later. See LICENSE for the full license text.
+
+Some bundled components carry separate but compatible licenses, and some retain
+the copyright of their individual authors (for example the Automation plugin by
+Milan Kase, portions of PictView by Jan Patera, and the WinSCP integration by
+Martin Prikryl). See doc/third_party.txt for the complete list.
+
+The original Open Salamander authors are not responsible for this project and do
+not provide support for it.

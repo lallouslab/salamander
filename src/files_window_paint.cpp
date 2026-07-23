@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
-// SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
@@ -14,6 +13,7 @@
 #include "common/PanelTextPainter.h"
 #include "common/unicode/NameRenderPolicy.h"
 #include "darkmode.h"
+#include "sal_colors.h"
 
 //****************************************************************************
 //
@@ -53,6 +53,8 @@ void CFilesWindow::SetFontAndColors(HDC hDC, CHighlightMasksItem* highlightMasks
     else
         colorMode = cmeFocSel;
 
+    BOOL useDark = DarkMode_ShouldUseDark();
+
     if (TrackingSingleClick && SingleClickIndex == itemIndex)
     {
         SelectObject(hDC, FontUL);
@@ -86,10 +88,18 @@ void CFilesWindow::SetFontAndColors(HDC hDC, CHighlightMasksItem* highlightMasks
                 fgColor = &highlightMasksItem->FocSelFg;
         }
         COLORREF fg = GetCOLORREF(*fgColor);
-        // In dark mode, mask text that is too dark for the dark background
-        // must fall back to the panel foreground. We adjust at render time
-        // (not in UpdateDefaultColors) to avoid corrupting saved mask data.
-        if (DarkMode_ShouldUseDark() && highlightMasksItem != NULL)
+        // Base (non-mask) selection/focused-selection text is stored flag-0; resolve its dark
+        // value here at render time so the schemes keep their light RGB and a dark->light
+        // switch restores the light colors (issue #81 follow-up). fgColor pointing into
+        // CurrentColors identifies the base path (masks point into highlightMasksItem).
+        if (fgColor == &CurrentColors[ITEM_FG_SELECTED])
+            fg = ResolveDarkBaseColor(ITEM_FG_SELECTED, fg, useDark);
+        else if (fgColor == &CurrentColors[ITEM_FG_FOCSEL])
+            fg = ResolveDarkBaseColor(ITEM_FG_FOCSEL, fg, useDark);
+        // In dark mode, mask text that is too dark for the dark background must fall back to
+        // the panel foreground. We adjust at render time (not in UpdateDefaultColors) to
+        // avoid corrupting saved mask data.
+        else if (useDark && highlightMasksItem != NULL)
         {
             BYTE gray = GetGrayscaleFromRGB(GetRValue(fg), GetGValue(fg), GetBValue(fg));
             if (gray < 96)
@@ -99,9 +109,9 @@ void CFilesWindow::SetFontAndColors(HDC hDC, CHighlightMasksItem* highlightMasks
                 else if (colorMode == cmeFocused)
                     fg = GetCOLORREF(CurrentColors[ITEM_FG_FOCUSED]);
                 else if (colorMode == cmeSelected)
-                    fg = GetCOLORREF(CurrentColors[ITEM_FG_SELECTED]);
+                    fg = ResolveDarkBaseColor(ITEM_FG_SELECTED, GetCOLORREF(CurrentColors[ITEM_FG_SELECTED]), useDark);
                 else
-                    fg = GetCOLORREF(CurrentColors[ITEM_FG_FOCSEL]);
+                    fg = ResolveDarkBaseColor(ITEM_FG_FOCSEL, GetCOLORREF(CurrentColors[ITEM_FG_FOCSEL]), useDark);
             }
         }
         SetTextColor(hDC, fg);
@@ -142,9 +152,17 @@ void CFilesWindow::SetFontAndColors(HDC hDC, CHighlightMasksItem* highlightMasks
             bkColor = &CurrentColors[ITEM_BK_FOCUSED];
     }
     COLORREF bk = GetCOLORREF(*bkColor);
+    // Base/drop-target focus backgrounds are stored flag-0; resolve their dark value here so
+    // the schemes keep their light RGB across a dark->light switch (issue #81 follow-up).
+    // bkColor pointing into CurrentColors covers both the base path and the drop-target
+    // override; masks (which point into highlightMasksItem) fall through to the branch below.
+    if (bkColor == &CurrentColors[ITEM_BK_FOCUSED])
+        bk = ResolveDarkBaseColor(ITEM_BK_FOCUSED, bk, useDark);
+    else if (bkColor == &CurrentColors[ITEM_BK_FOCSEL])
+        bk = ResolveDarkBaseColor(ITEM_BK_FOCSEL, bk, useDark);
     // In dark mode, mask backgrounds that are too light look wrong on the dark panel.
     // Normalize to the panel background for the current state.
-    if (DarkMode_ShouldUseDark() && highlightMasksItem != NULL && itemIndex != DropTargetIndex)
+    else if (useDark && highlightMasksItem != NULL && itemIndex != DropTargetIndex)
     {
         BYTE gray = GetGrayscaleFromRGB(GetRValue(bk), GetGValue(bk), GetBValue(bk));
         if (gray > 160)
@@ -152,11 +170,11 @@ void CFilesWindow::SetFontAndColors(HDC hDC, CHighlightMasksItem* highlightMasks
             if (colorMode == cmeNormal)
                 bk = GetCOLORREF(CurrentColors[ITEM_BK_NORMAL]);
             else if (colorMode == cmeFocused)
-                bk = GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]);
+                bk = ResolveDarkBaseColor(ITEM_BK_FOCUSED, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]), useDark);
             else if (colorMode == cmeSelected)
                 bk = GetCOLORREF(CurrentColors[ITEM_BK_SELECTED]);
             else
-                bk = GetCOLORREF(CurrentColors[ITEM_BK_FOCSEL]);
+                bk = ResolveDarkBaseColor(ITEM_BK_FOCSEL, GetCOLORREF(CurrentColors[ITEM_BK_FOCSEL]), useDark);
         }
     }
     SetBkColor(hDC, bk);
@@ -695,7 +713,7 @@ void CFilesWindow::DrawBriefDetailedItem(HDC hTgtDC, int itemIndex, RECT* itemRe
         if (drawFlags & DRAWFLAG_DRAGDROP)
         {
             SetTextColor(hDC, GetCOLORREF(CurrentColors[ITEM_FG_FOCUSED])); // focused text and background
-            SetBkColor(hDC, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]));
+            SetBkColor(hDC, ResolveDarkBaseColor(ITEM_BK_FOCUSED, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]), DarkMode_ShouldUseDark()));
         }
 
         if (drawFlags & DRAWFLAG_SKIP_VISTEST || RectVisible(hDC, &r))
@@ -1755,7 +1773,7 @@ void CFilesWindow::DrawIconThumbnailItem(HDC hTgtDC, int itemIndex, RECT* itemRe
         if (drawFlags & DRAWFLAG_DRAGDROP)
         {
             SetTextColor(hDC, GetCOLORREF(CurrentColors[ITEM_FG_FOCUSED])); // focused text and background
-            SetBkColor(hDC, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]));
+            SetBkColor(hDC, ResolveDarkBaseColor(ITEM_BK_FOCUSED, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]), DarkMode_ShouldUseDark()));
         }
 
         int nameLen = f->NameLen;
@@ -2210,7 +2228,7 @@ void CFilesWindow::DrawTileItem(HDC hTgtDC, int itemIndex, RECT* itemRect, DWORD
         if (drawFlags & DRAWFLAG_DRAGDROP)
         {
             SetTextColor(hDC, GetCOLORREF(CurrentColors[ITEM_FG_FOCUSED])); // focused text and background
-            SetBkColor(hDC, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]));
+            SetBkColor(hDC, ResolveDarkBaseColor(ITEM_BK_FOCUSED, GetCOLORREF(CurrentColors[ITEM_BK_FOCUSED]), DarkMode_ShouldUseDark()));
         }
 
         int nameLen = f->NameLen;
@@ -2368,9 +2386,9 @@ BOOL StateImageList_Draw(CIconList* iconList, int imageIndex, HDC hDC, int xDst,
     if (Configuration.UseIconTincture)
     {
         if (state & IMAGE_STATE_FOCUSED && state & IMAGE_STATE_SELECTED)
-            rgbFg = GetCOLORREF(CurrentColors[ICON_BLEND_FOCSEL]);
+            rgbFg = ResolveDarkBaseColor(ICON_BLEND_FOCSEL, GetCOLORREF(CurrentColors[ICON_BLEND_FOCSEL]), DarkMode_ShouldUseDark());
         else if (state & IMAGE_STATE_FOCUSED)
-            rgbFg = GetCOLORREF(CurrentColors[ICON_BLEND_FOCUSED]);
+            rgbFg = ResolveDarkBaseColor(ICON_BLEND_FOCUSED, GetCOLORREF(CurrentColors[ICON_BLEND_FOCUSED]), DarkMode_ShouldUseDark());
         else if (state & IMAGE_STATE_SELECTED)
             rgbFg = GetCOLORREF(CurrentColors[ICON_BLEND_SELECTED]);
         else if (state & IMAGE_STATE_HIDDEN)

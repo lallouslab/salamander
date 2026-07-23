@@ -60,6 +60,23 @@ static void DrawDarkComboFrame(HWND hwnd, HDC hDC)
     SelectObject(hDC, oldPen);
 }
 
+static void ExcludeChildWindowFromClip(HWND parent, HWND child, HDC hDC)
+{
+    if (child == NULL || !IsWindow(child))
+        return;
+
+    RECT r;
+    GetWindowRect(child, &r);
+    MapWindowPoints(NULL, parent, (POINT*)&r, 2);
+    ExcludeClipRect(hDC, r.left, r.top, r.right, r.bottom);
+}
+
+static void RedrawChildWindowNow(HWND child)
+{
+    if (child != NULL && IsWindow(child))
+        RedrawWindow(child, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+}
+
 } // namespace
 
 //*****************************************************************************
@@ -1714,7 +1731,8 @@ void CEditWindow::SetFont()
 
 void CEditWindow::SetDirectory(const char* dir)
 {
-    if (Text != NULL && !Text->SetText(dir))
+    BOOL changed = Text == NULL || Text->SetText(dir);
+    if (!changed && !DarkMode_ShouldUseDark())
         return;
     if (HWindow != NULL)
     {
@@ -1723,13 +1741,21 @@ void CEditWindow::SetDirectory(const char* dir)
         ResizeChilds(r.right - r.left, r.bottom - r.top, FALSE);
         if (Text != NULL)
             Text->UpdateControl();
-        UpdateWindow(HWindow);
+        if (DarkMode_ShouldUseDark())
+            RedrawWindow(HWindow, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+        else
+            UpdateWindow(HWindow);
+        if (Text != NULL)
+            RedrawChildWindowNow(Text->HWindow);
+        if (EditLine != NULL)
+            RedrawChildWindowNow(EditLine->HWindow);
     }
 }
 
 void CEditWindow::SetDirectoryW(const wchar_t* dir)
 {
-    if (Text != NULL && !Text->SetTextW(dir))
+    BOOL changed = Text == NULL || Text->SetTextW(dir);
+    if (!changed && !DarkMode_ShouldUseDark())
         return;
     if (HWindow != NULL)
     {
@@ -1738,7 +1764,14 @@ void CEditWindow::SetDirectoryW(const wchar_t* dir)
         ResizeChilds(r.right - r.left, r.bottom - r.top, FALSE);
         if (Text != NULL)
             Text->UpdateControl();
-        UpdateWindow(HWindow);
+        if (DarkMode_ShouldUseDark())
+            RedrawWindow(HWindow, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+        else
+            UpdateWindow(HWindow);
+        if (Text != NULL)
+            RedrawChildWindowNow(Text->HWindow);
+        if (EditLine != NULL)
+            RedrawChildWindowNow(EditLine->HWindow);
     }
 }
 
@@ -1853,9 +1886,19 @@ CEditWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         if (useDark)
         {
-            HDC hDC = HANDLES(GetDC(HWindow));
+            PAINTSTRUCT ps;
+            HDC hDC = HANDLES(BeginPaint(HWindow, &ps));
             if (hDC != NULL)
             {
+                int savedDC = SaveDC(hDC);
+                if (savedDC != 0)
+                {
+                    if (Text != NULL)
+                        ExcludeChildWindowFromClip(HWindow, Text->HWindow, hDC);
+                    if (EditLine != NULL)
+                        ExcludeChildWindowFromClip(HWindow, EditLine->HWindow, hDC);
+                }
+
                 FillRectSolid(hDC, &cr, EDITWND_DARK_BG);
 
                 int sbWidth = GetSystemMetrics(SM_CXVSCROLL);
@@ -1910,42 +1953,14 @@ CEditWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 SetDCPenColor(hDC, oldPenColor);
                 SelectObject(hDC, oldBrush);
                 SelectObject(hDC, oldPen);
-                HANDLES(ReleaseDC(HWindow, hDC));
+                if (savedDC != 0)
+                    RestoreDC(hDC, savedDC);
             }
-
-            // Keep default combo painting from clearing the custom dark frame.
-            RECT r;
-            r.left = 0;
-            r.top = 0;
-            r.right = cr.right;
-            r.bottom = 2;
-            ValidateRect(HWindow, &r);
-            r.left = 0;
-            r.top = cr.bottom - 2;
-            r.right = cr.right;
-            r.bottom = cr.bottom;
-            ValidateRect(HWindow, &r);
-            r.left = 0;
-            r.top = 2;
-            r.right = 2;
-            r.bottom = cr.bottom - 2;
-            ValidateRect(HWindow, &r);
-            r.left = cr.right - 2;
-            r.top = 2;
-            r.right = cr.right;
-            r.bottom = cr.bottom - 2;
-            ValidateRect(HWindow, &r);
-
-            int sbWidth = GetSystemMetrics(SM_CXVSCROLL);
-            int dividerX = cr.right - 2 - sbWidth;
-            r.left = dividerX - 1;
-            r.top = cr.top + 2;
-            r.right = dividerX + 1;
-            r.bottom = cr.bottom - 2;
-            if (r.right > r.left && r.bottom > r.top)
-                ValidateRect(HWindow, &r);
-
-            ValidateRect(HWindow, NULL);
+            HANDLES(EndPaint(HWindow, &ps));
+            if (Text != NULL)
+                RedrawChildWindowNow(Text->HWindow);
+            if (EditLine != NULL)
+                RedrawChildWindowNow(EditLine->HWindow);
             return 0;
         }
 

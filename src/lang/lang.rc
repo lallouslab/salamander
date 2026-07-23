@@ -634,10 +634,10 @@ BEGIN
     LTEXT           "",IDC_ABOUT_LOGO,174,1,123,104
     DEFPUSHBUTTON   "Close",IDOK,124,162,50,14,WS_GROUP
     LTEXT           "Version",IDS_ABOUT_SALAMANDER,10,86,201,8
-    LTEXT           "Copyright © 1997-2026 Sally Authors",IDC_STATIC_1,10,97,196,8
+    LTEXT           "Copyright © 1997-2023 Open Salamander Authors",IDC_STATIC_1,10,97,196,8
     LTEXT           "GitHub:",IDC_STATIC_3,10,108,28,8
     LTEXT           "github.com/0xeb/sally",IDC_ABOUT_WWW,40,108,160,8,WS_TABSTOP
-    LTEXT           "Sally is free software",IDC_STATIC_4,10,119,165,8
+    LTEXT           "Sally modifications © 2025-2026 Elias Bachaalany",IDC_STATIC_4,10,119,214,8
     LTEXT           "Licensed under GNU General Public License version 2 or later",IDC_STATIC_5,10,130,214,8
     CONTROL         "",IDC_ABOUT_BOTTOM,"Static",SS_ETCHEDHORZ | WS_GROUP,2,154,294,1
 END
@@ -2118,6 +2118,17 @@ BEGIN
     DEFPUSHBUTTON   "OK",IDOK,19,59,50,14,WS_GROUP
     PUSHBUTTON      "Cancel",IDCANCEL,77,59,50,14
     PUSHBUTTON      "Help",IDHELP,135,59,50,14
+END
+
+IDD_DEFAULT_SHELL DIALOGEX 0, 0, 244, 72
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Default Shell"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "Open &Command Shell with:",IDC_STATIC_1,8,9,228,8
+    COMBOBOX        IDC_DEFAULT_SHELL_TARGET,8,20,228,108,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,128,50,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,186,50,50,14
 END
 
 

@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
-// SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
@@ -3350,15 +3349,9 @@ void CMainWindow::OnColorsChanged(BOOL reloadUMIcons)
 
     if (EditWindow != NULL && EditWindow->HWindow != NULL)
     {
-        InvalidateRect(EditWindow->HWindow, NULL, TRUE);
-        UpdateWindow(EditWindow->HWindow);
-
-        CEditLine* editLine = EditWindow->GetEditLine();
-        if (editLine != NULL && editLine->HWindow != NULL)
-        {
-            InvalidateRect(editLine->HWindow, NULL, TRUE);
-            UpdateWindow(editLine->HWindow);
-        }
+        EditWindowSetDirectory();
+        RedrawWindow(EditWindow->HWindow, NULL, NULL,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
     }
 }
 

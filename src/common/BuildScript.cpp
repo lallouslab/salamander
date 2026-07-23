@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-FileCopyrightText: 2026 Sally Authors
-// SPDX-FileCopyrightText: 2026 Sally Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // BuildScript.cpp — standalone COperations script builder from CSelectionSnapshot.
@@ -112,9 +111,12 @@ static bool HasUnsupportedAttributes(DWORD attr)
     return (attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 }
 
-static bool NeedsSystemHiddenDeletePrompt(const CBuildConfig& config, DWORD attr)
+static bool ShouldPromptForSystemHiddenDelete(EActionType action,
+                                              const CBuildConfig& config,
+                                              DWORD attr)
 {
-    return config.ConfirmDeleteSystemHiddenDir &&
+    return action == EActionType::Delete &&
+           config.ConfirmDeleteSystemHiddenDir &&
            (attr & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) != 0;
 }
 
@@ -687,12 +689,10 @@ static bool BuildDirectoryTree(EActionType action,
         }
         return false;
     }
-    // System/hidden dir delete: handleable only for delete via the prompt
-    // callback (P4); otherwise reject to legacy. The actual prompt fires below,
-    // once the dir name is available.
-    const bool needsSHPrompt = NeedsSystemHiddenDeletePrompt(config, attr);
-    if (needsSHPrompt &&
-        (action != EActionType::Delete || config.DeletePromptCallback == nullptr))
+    // A system/hidden-directory prompt is a delete policy. Copy and move must
+    // not inherit it merely because they share this recursive builder.
+    const bool needsSHPrompt = ShouldPromptForSystemHiddenDelete(action, config, attr);
+    if (needsSHPrompt && config.DeletePromptCallback == nullptr)
     {
         return false;
     }
@@ -702,7 +702,7 @@ static bool BuildDirectoryTree(EActionType action,
     const std::string targetDirA = dirPlan.HasTarget() ? dirPlan.TargetPathA : opplan::JoinPathA(targetParentA, targetNameA);
     const std::wstring targetDirW = dirPlan.HasTarget() ? dirPlan.TargetPathW : opplan::JoinPathW(targetParentW, targetNameW);
 
-    if (needsSHPrompt) // action==Delete && callback present
+    if (needsSHPrompt)
     {
         CBuildDeletePromptResult r = config.DeletePromptCallback(
             CBuildDeletePromptKind::SystemHiddenDir, sourceDirA.c_str(), sourceDirW.c_str(),
@@ -1041,8 +1041,8 @@ static bool ValidateDirectoryTree(EActionType action,
     }
     // Feasibility only (no prompt): a system/hidden dir delete is handleable
     // iff a prompt callback exists (P4); otherwise reject to legacy.
-    if (NeedsSystemHiddenDeletePrompt(config, attr) &&
-        (action != EActionType::Delete || config.DeletePromptCallback == nullptr))
+    if (ShouldPromptForSystemHiddenDelete(action, config, attr) &&
+        config.DeletePromptCallback == nullptr)
     {
         return false;
     }
