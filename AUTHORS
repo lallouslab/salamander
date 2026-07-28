@@ -1,16 +1,74 @@
-== Altap Salamander Fork
+== Sally Fork
+
+Project lead and principal developer
 
 Elias Bachaalany (0xeb), 2025-2026
-  - Unicode/wide string support
-  - Long path support (32K paths)
-  - Dark mode
-  - Windows Terminal integration and shell/overlay integration
-  - WebView2-based Web Viewer and viewer modernization
-  - Plugin packaging and bundled plugin set
-  - Native ARM64 and Wine compatibility
-  - Extended translations and localization pipeline
-  - Code modernization and normalization
-  - CMake build system and release pipeline
+  - Project direction, architecture, maintenance, and releases
+  - Unicode/UTF-16 filenames and 32K long-path support across panels, file
+    operations, Find, viewers, editors, drag/drop, clipboard, history, and
+    network/UNC paths
+  - Safer destructive operations and Find-result validation, including
+    protection against lossy ANSI fallbacks
+  - Light, Dark, and System themes across the core UI and bundled plugins
+  - Windows Terminal profile discovery, default-shell selection, shell
+    extension maintenance, and expanded icon-overlay support
+  - WebView2-based Web Viewer, Markdown rendering, Unicode text decoding, and
+    viewer lifecycle and navigation fixes
+  - Bundled archive, filesystem, viewer, comparison, checksum, automation, and
+    system plugins, with dependency handling and automatic plugin discovery
+  - Native x64, x86, and ARM64 packages and Wine compatibility
+  - Maintained language packs, Translator workspaces, and a reproducible
+    localization pipeline
+  - Modern CMake builds for Sally, plugins, tools, language files, and the shell
+    extension, including MSVC and clang-cl/xwin toolchains
+  - GitHub release automation, update checks, runtime and symbol packages, and
+    release artifact validation
+  - Testable OS-abstraction boundaries, crash diagnostics, source cleanup, and
+    Czech-to-English code-comment modernization
+
+Translation contributors
+
+bellus869, 2025-2026
+  - Czech-to-English source-comment translation across the Sally core
+
+Lemi257, 2025
+  - Czech-to-English source-comment translation across dialogs, viewers,
+    worker operations, and ZIP support
+
+Acknowledgements
+
+Sally is shaped by the people who take the time to report problems, test
+pre-release builds, and confirm fixes. Thank you to:
+
+  Adamaji (Adamaji74)
+  ags1234
+  Akrotkiv
+  Martin Dařílek (darilek)
+  Eduardo G. (xmiseggs)
+  KubaDee
+  LiquidatorFX
+  Paro The Parrot (ParoTheParrot)
+  Robert Pösel (Robyer)
+  radek-sedlacik-LL
+  SelfMan
+  Patrik Švestka (tukanos)
+  Thierry Lambert (thyresias)
+  tormento
+  Vector Rilke (vectorrilke)
+
+Issues carried over from Open Salamander were originally reported by:
+
+  Lukáš Cerman (lcerman)
+  emseecz
+  Ralf Hahnloser (HahnloserR)
+  mbeilste
+  Melloware (melloware)
+  Jan Ryšavý (janrysavy)
+  vygi
+
+Bug reports, testing, translations, and focused patches from the wider Sally
+community have also shaped the project. Individual issue and commit history is
+preserved on GitHub.
 
 == Original Authors
 

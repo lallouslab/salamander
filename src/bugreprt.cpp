@@ -7,6 +7,8 @@
 #include <tlhelp32.h>
 #include "common/IEnvironment.h"
 #include "common/IRegistry.h"
+#include "shiconov_diag.h"
+#include "shellsup_diag.h"
 
 // Cross-architecture register access macros for CONTEXT structure
 #ifdef _WIN64
@@ -555,6 +557,10 @@ void CCallStack::PrintBugReport(EXCEPTION_POINTERS* Exception, DWORD ThreadID, D
     static char num[50];
     static char avbuf[MAX_PATH];
     static char nameBuf[MAX_PATH];
+    // Scratch for the shell-integration sections. Static like the rest: this runs inside a
+    // process that may already be crashing, so we do not want it on the stack. Sized for a
+    // \uXXXX-escaped long path plus the surrounding fields.
+    static char BugReportDiagBuf[4096];
 
     strcpy(buf, SALAMANDER_TEXT_VERSION);
 #ifdef _DEBUG
@@ -1469,6 +1475,77 @@ void CCallStack::PrintBugReport(EXCEPTION_POINTERS* Exception, DWORD ThreadID, D
         PrintLine(param, buf, TRUE);
         _snprintf_s(buf, _TRUNCATE, "DisabledCustomIconOverlays = %s", Configuration.DisabledCustomIconOverlays);
         PrintLine(param, buf, TRUE);
+        PrintLine(param, "", FALSE);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        sprintf(buf, "some exception has occured...");
+        PrintLine(param, buf, TRUE);
+        PrintLine(param, "", FALSE);
+    }
+
+    // Shell integration: what actually happened to each registered icon-overlay handler,
+    // and to the last few context-menu interactions. These two sections exist because the
+    // TRACE_* calls in shiconov.cpp and shellsup.cpp are compiled out of Release, so this
+    // report is the only channel that reaches a reporter running a shipped build.
+    __try
+    {
+        PrintLine(param, "Icon Overlays:", FALSE);
+
+        _snprintf_s(buf, _TRUNCATE, "Config root in use: %s", ShellOverlayDiag.Header.ConfigRoot);
+        PrintLine(param, buf, TRUE);
+        _snprintf_s(buf, _TRUNCATE, "ANSI code page: %u   Registered: %d   Loaded: %d",
+                    ShellOverlayDiag.Header.AnsiCodePage,
+                    ShellOverlayDiag.Header.Registered, ShellOverlayDiag.Header.Loaded);
+        PrintLine(param, buf, TRUE);
+        _snprintf_s(buf, _TRUNCATE, "System DPI: %u   Required icon sizes: %d/%d/%d",
+                    ShellOverlayDiag.Header.SystemDpi, ShellOverlayDiag.Header.IconSizes[0],
+                    ShellOverlayDiag.Header.IconSizes[1], ShellOverlayDiag.Header.IconSizes[2]);
+        PrintLine(param, buf, TRUE);
+
+        for (int i = 0; i < ShellOverlayDiag.Count(); i++)
+        {
+            const ShellOverlayDiagRecord* rec = ShellOverlayDiag.At(i);
+            if (rec == NULL)
+                continue;
+            BugReportDiagBuf[0] = 0;
+            FormatShellOverlayDiagRecord(*rec, BugReportDiagBuf, (int)sizeof(BugReportDiagBuf));
+            _snprintf_s(buf, _TRUNCATE, "[%2d] %s", i, BugReportDiagBuf);
+            PrintLine(param, buf, TRUE);
+        }
+        PrintLine(param, "", FALSE);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        sprintf(buf, "some exception has occured...");
+        PrintLine(param, buf, TRUE);
+        PrintLine(param, "", FALSE);
+    }
+
+    __try
+    {
+        PrintLine(param, "Shell Context Menu (oldest first):", FALSE);
+        for (int i = 0; i < ShellMenuDiag.Count(); i++)
+        {
+            const ShellMenuDiagRecord* rec = ShellMenuDiag.At(i);
+            if (rec == NULL)
+                continue;
+            BugReportDiagBuf[0] = 0;
+            FormatShellMenuDiagRecord(*rec, BugReportDiagBuf, (int)sizeof(BugReportDiagBuf));
+
+            // The formatter emits several lines; PrintLine takes one at a time.
+            char* line = BugReportDiagBuf;
+            while (*line != 0)
+            {
+                char* eol = strchr(line, '\n');
+                if (eol != NULL)
+                    *eol = 0;
+                PrintLine(param, line, TRUE);
+                if (eol == NULL)
+                    break;
+                line = eol + 1;
+            }
+        }
         PrintLine(param, "", FALSE);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)

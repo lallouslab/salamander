@@ -10,6 +10,8 @@
 #include "common/widepath.h"
 #include "plugins\shared\sqlite\sqlite3.h"
 #include "shiconov_limits.h"
+#include "shiconov_diag.h"
+#include "shiconov_icons.h"
 
 // The overlay cap and the CFileData::IconOverlayIndex "no overlay" sentinel must stay in
 // lockstep: the maximum valid index is (cap - 1), which must never equal ICONOVERLAYINDEX_NOTUSED.
@@ -207,19 +209,35 @@ HMODULE GetModuleByAddress(void *address)
 }
 */
 
-void InitShellIconOverlaysAuxAux(CLSID* clsid, const char* name)
+void InitShellIconOverlaysAuxAux(CLSID* clsid, const char* name, ShellOverlayDiagRecord* diag)
 {
     IShellIconOverlayIdentifier* iconOverlayIdentifier;
-    if (CoCreateInstance(*clsid, NULL,
-                         CLSCTX_INPROC_SERVER, IID_IShellIconOverlayIdentifier,
-                         (LPVOID*)&iconOverlayIdentifier) == S_OK &&
+    // Assign the HRESULT rather than comparing inline: it is the only evidence we get when
+    // a handler refuses to activate, and it used to be discarded here.
+    HRESULT coCreateHr = CoCreateInstance(*clsid, NULL,
+                                          CLSCTX_INPROC_SERVER, IID_IShellIconOverlayIdentifier,
+                                          (LPVOID*)&iconOverlayIdentifier);
+    if (coCreateHr == S_OK &&
         iconOverlayIdentifier != NULL) // probably unnecessary test, just to be safe
     {
         CWidePathBuffer iconFile;
         int iconIndex;
         DWORD flags;
-        if (iconOverlayIdentifier->GetOverlayInfo(iconFile, iconFile.Size(), &iconIndex, &flags) == S_OK)
+        // NOTE: strict == S_OK, so a handler returning S_FALSE is dropped exactly like one
+        // that failed. Recording the value is what will let us tell those apart (issue #90).
+        HRESULT overlayInfoHr = iconOverlayIdentifier->GetOverlayInfo(iconFile, iconFile.Size(), &iconIndex, &flags);
+        if (diag != NULL)
         {
+            diag->Hr = overlayInfoHr;
+            wcsncpy_s(diag->IconFile, iconFile.Get(), _TRUNCATE);
+        }
+        if (overlayInfoHr == S_OK)
+        {
+            if (diag != NULL)
+            {
+                diag->InfoFlags = flags;
+                diag->IconIndex = iconIndex;
+            }
             if (flags & ISIOI_ICONFILE)
             {
                 int priority; // priority: first we will query overlay handlers with the lowest priority number
@@ -228,6 +246,8 @@ void InitShellIconOverlaysAuxAux(CLSID* clsid, const char* name)
                     priority = 100; // lowest priority
                     TRACE_E("InitShellIconOverlays(): GetPriority method returns error for: " << name);
                 }
+                if (diag != NULL)
+                    diag->Priority = priority;
 
                 if ((flags & ISIOI_ICONINDEX) == 0)
                     iconIndex = 0;
@@ -236,27 +256,23 @@ void InitShellIconOverlaysAuxAux(CLSID* clsid, const char* name)
                 WideCharToMultiByte(CP_ACP, 0, (wchar_t*)iconFile, -1, iconFileMB, iconFileMB.Size(), NULL, NULL);
                 iconFileMB[iconFileMB.Size() - 1] = 0;
 
-                // load icons of all sizes for this icon-overlay
-                HICON hIcons[2] = {0};
-                ExtractIcons(iconFileMB, iconIndex,
-                             MAKELONG(IconSizes[ICONSIZE_32], IconSizes[ICONSIZE_16]),
-                             MAKELONG(IconSizes[ICONSIZE_32], IconSizes[ICONSIZE_16]),
-                             hIcons, NULL, 2, IconLRFlags);
-
+                // Load this overlay's icon at all three sizes (issue #90 - see
+                // shiconov_icons.h for why this must not be a single packed call).
                 HICON iconOverlay[ICONSIZE_COUNT] = {0};
-                iconOverlay[ICONSIZE_32] = hIcons[0];
-                iconOverlay[ICONSIZE_16] = hIcons[1];
-
-                ExtractIcons(iconFileMB, iconIndex,
-                             IconSizes[ICONSIZE_48],
-                             IconSizes[ICONSIZE_48],
-                             hIcons, NULL, 1, IconLRFlags);
-                iconOverlay[ICONSIZE_48] = hIcons[0];
+                LoadShellOverlayIcons(iconFileMB, iconIndex, IconSizes, ICONSIZE_COUNT,
+                                      iconOverlay);
 
                 int x;
                 for (x = 0; x < ICONSIZE_COUNT; x++)
                     if (iconOverlay[x] != NULL)
                         HANDLES_ADD(__htIcon, __hoLoadImage, iconOverlay[x]);
+
+                if (diag != NULL)
+                {
+                    diag->IconsOk = (unsigned char)((iconOverlay[ICONSIZE_16] != NULL ? 1 : 0) |
+                                                    (iconOverlay[ICONSIZE_32] != NULL ? 2 : 0) |
+                                                    (iconOverlay[ICONSIZE_48] != NULL ? 4 : 0));
+                }
 
                 // insert handler into ShellIconOverlays
                 if (iconOverlay[ICONSIZE_16] != NULL && iconOverlay[ICONSIZE_32] != NULL && iconOverlay[ICONSIZE_48] != NULL)
@@ -300,35 +316,70 @@ void InitShellIconOverlaysAuxAux(CLSID* clsid, const char* name)
                                 item->IconOverlay[x] = iconOverlay[x];
                                 iconOverlay[x] = NULL;
                             }
+                            if (diag != NULL)
+                            {
+                                diag->Outcome = OverlayOutcome::Loaded;
+                                diag->LoadedIndex = ShellIconOverlays.GetCount() - 1;
+                                ShellOverlayDiag.Header.Loaded++;
+                            }
                         }
                         else
+                        {
+                            // Either the cap was reached or the array could not grow; Add()
+                            // does not distinguish, and the second case logs nothing at all.
+                            if (diag != NULL)
+                                diag->Outcome = ShellIconOverlayCapReached(ShellIconOverlays.GetCount())
+                                                    ? OverlayOutcome::CapReached
+                                                    : OverlayOutcome::ArrayGrowFailed;
                             delete item;
+                        }
                     }
+                    else if (diag != NULL)
+                        diag->Outcome = OverlayOutcome::ItemAllocFailed;
                 }
                 else
+                {
+                    if (diag != NULL)
+                        diag->Outcome = OverlayOutcome::IconExtractFailed;
                     TRACE_E("InitShellIconOverlays(): unable to get icons of all sizes for: " << name);
+                }
 
                 for (x = 0; x < ICONSIZE_COUNT; x++)
                     if (iconOverlay[x] != NULL)
                         HANDLES(DestroyIcon(iconOverlay[x]));
             }
             else
+            {
+                if (diag != NULL)
+                    diag->Outcome = OverlayOutcome::NoIconFileFlag;
                 TRACE_I("InitShellIconOverlays(): unable to get icon overlay location for: " << name);
+            }
         }
         else
+        {
+            if (diag != NULL)
+                diag->Outcome = OverlayOutcome::GetOverlayInfoFailed;
             TRACE_I("InitShellIconOverlays(): GetOverlayInfo method returns error for: " << name); // Tortoise does this when more than 12 handlers are registered
+        }
         if (iconOverlayIdentifier != NULL)
             iconOverlayIdentifier->Release();
     }
     else
+    {
+        if (diag != NULL)
+        {
+            diag->Outcome = OverlayOutcome::CoCreateFailed;
+            diag->Hr = coCreateHr;
+        }
         TRACE_I("InitShellIconOverlays(): unable to create object for: " << name); // e.g., "Offline Files" reports this on clean XP
+    }
 }
 
-void InitShellIconOverlaysAux(CLSID* clsid, const char* name)
+void InitShellIconOverlaysAux(CLSID* clsid, const char* name, ShellOverlayDiagRecord* diag)
 {
     __try
     {
-        InitShellIconOverlaysAuxAux(clsid, name);
+        InitShellIconOverlaysAuxAux(clsid, name, diag);
     }
     __except (CCallStack::HandleException(GetExceptionInformation(), -1, name))
     {
@@ -341,6 +392,27 @@ void InitShellIconOverlaysAux(CLSID* clsid, const char* name)
 void InitShellIconOverlays()
 {
     CALL_STACK_MESSAGE1("InitShellIconOverlays()");
+
+    // Snapshot the configuration this run is actually using. Which registry root Sally
+    // resolved, and whether the overlay values were present in it, is the question behind
+    // the imported-configuration theory for issue #90: a config inherited from an older
+    // Altap Salamander install can carry a disabled-handler list, or force overlays off
+    // outright when the value pair is missing from a version-41-or-later config.
+    ShellOverlayDiag.Reset();
+    ShellOverlayDiag.Header.AnsiCodePage = GetACP();
+    ShellOverlayDiag.Header.IconSizes[0] = IconSizes[ICONSIZE_16];
+    ShellOverlayDiag.Header.IconSizes[1] = IconSizes[ICONSIZE_32];
+    ShellOverlayDiag.Header.IconSizes[2] = IconSizes[ICONSIZE_48];
+    ShellOverlayDiag.Header.SystemDpi = (UINT)SystemDPI;
+    ShellOverlayDiag.Header.EnableCustomIconOverlays = Configuration.EnableCustomIconOverlays != FALSE;
+    lstrcpynA(ShellOverlayDiag.Header.ConfigRoot, SALAMANDER_ROOT_REG,
+              (int)sizeof(ShellOverlayDiag.Header.ConfigRoot));
+    if (Configuration.DisabledCustomIconOverlays != NULL)
+    {
+        MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, Configuration.DisabledCustomIconOverlays, -1,
+                            ShellOverlayDiag.Header.DisabledList, 1024);
+        ShellOverlayDiag.Header.DisabledList[1023] = 0;
+    }
 
     HKEY clsIDKey;
     LONG errRet;
@@ -382,6 +454,16 @@ void InitShellIconOverlays()
         // handlers past MAX_SHELL_ICON_OVERLAYS are rejected in CShellIconOverlays::Add(); Explorer itself shows only ~11-15
         for (int s = 0; s < keyNames.Count; s++)
         { // open icon-overlay-handler key
+            // Register this handler in the diagnostic ledger before anything can go wrong,
+            // so that a key which fails at any of the branches below still appears in the
+            // bug report instead of vanishing without trace (see shiconov_diag.h).
+            wchar_t diagName[128];
+            diagName[0] = 0;
+            MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, keyNames[s], -1, diagName, 128);
+            diagName[127] = 0;
+            ShellOverlayDiagRecord* diag = ShellOverlayDiag.Add(diagName, L"");
+            ShellOverlayDiag.Header.Registered++;
+
             HKEY handler;
             if ((errRet = HANDLES_Q(RegOpenKeyEx(key, keyNames[s], 0, KEY_QUERY_VALUE, &handler))) == ERROR_SUCCESS)
             {
@@ -453,22 +535,60 @@ void InitShellIconOverlays()
                                 }
                             }
 
+                            if (diag != NULL)
+                                MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, txtClsId, -1, diag->Clsid, 48);
+
+                            // This gate is the only drop in the whole subsystem that logs
+                            // nothing in any build, and it is permanent: a handler lands in
+                            // DisabledCustomIconOverlays when the user ever answered "disable
+                            // this handler" to an overlay crash, and that answer is written
+                            // straight to HKCU (callstk.cpp) and survives reinstalls.
                             if (!IsDisabledCustomIconOverlays(keyNames[s]))
-                                InitShellIconOverlaysAux(&clsid, keyNames[s]);
+                            {
+                                InitShellIconOverlaysAux(&clsid, keyNames[s], diag);
+                            }
+                            else if (diag != NULL)
+                            {
+                                diag->Outcome = Configuration.EnableCustomIconOverlays
+                                                    ? OverlayOutcome::SkippedUserDisabled
+                                                    : OverlayOutcome::SkippedGloballyDisabled;
+                            }
                         }
                         else
+                        {
+                            if (diag != NULL)
+                                diag->Outcome = OverlayOutcome::InvalidClsid;
                             TRACE_E("InitShellIconOverlays(): invalid CLSID: " << txtClsId);
+                        }
                     }
                     else
+                    {
+                        if (diag != NULL)
+                            diag->Outcome = OverlayOutcome::RegValueNotSz;
                         TRACE_E("InitShellIconOverlays(): default value from ShellIconOverlayIdentifiers\\" << keyNames[s] << " key in not REG_SZ!");
+                    }
                 }
                 else
+                {
+                    if (diag != NULL)
+                    {
+                        diag->Outcome = OverlayOutcome::RegValueMissing;
+                        diag->Hr = HRESULT_FROM_WIN32(errRet);
+                    }
                     TRACE_E("InitShellIconOverlays(): error reading default value from ShellIconOverlayIdentifiers\\" << keyNames[s] << " key: " << GetErrorText(errRet));
+                }
 
                 HANDLES(RegCloseKey(handler));
             }
             else
+            {
+                if (diag != NULL)
+                {
+                    diag->Outcome = OverlayOutcome::RegKeyOpenFailed;
+                    diag->Hr = HRESULT_FROM_WIN32(errRet);
+                }
                 TRACE_E("InitShellIconOverlays(): error opening ShellIconOverlayIdentifiers\\" << keyNames[s] << " key: " << GetErrorText(errRet));
+            }
         }
         HANDLES(RegCloseKey(key));
     }
@@ -672,8 +792,9 @@ BOOL CShellIconOverlays::Add(CShellIconOverlayItem* item /*, int priority*/)
 void CreateIconReadersIconOverlayIdsAuxAux(CLSID* clsid, const char* name, IShellIconOverlayIdentifier** ids, int i)
 {
     IShellIconOverlayIdentifier* iconOverlayIdentifier;
-    if (CoCreateInstance(*clsid, NULL, CLSCTX_INPROC_SERVER, IID_IShellIconOverlayIdentifier,
-                         (LPVOID*)&iconOverlayIdentifier) == S_OK &&
+    HRESULT coCreateHr = CoCreateInstance(*clsid, NULL, CLSCTX_INPROC_SERVER, IID_IShellIconOverlayIdentifier,
+                                          (LPVOID*)&iconOverlayIdentifier);
+    if (coCreateHr == S_OK &&
         iconOverlayIdentifier != NULL) // probably unnecessary test, just to be safe
     {
         // just for form's sake, call the usual methods (as if we were Explorer and wanted to show those overlays)
@@ -687,7 +808,24 @@ void CreateIconReadersIconOverlayIdsAuxAux(CLSID* clsid, const char* name, IShel
         ids[i] = iconOverlayIdentifier;
     }
     else
+    {
+        // ids[i] stays NULL, so this handler silently matches nothing for the whole life of
+        // this panel's icon-reader thread - invisible in the trace, and invisible in the
+        // Configuration page, which still shows the handler as loaded and enabled.
+        wchar_t diagName[128];
+        diagName[0] = 0;
+        MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, name, -1, diagName, 128);
+        diagName[127] = 0;
+        ShellOverlayDiagRecord* diag = ShellOverlayDiag.Find(diagName);
+        if (diag != NULL)
+        {
+            // Two panel threads race here; the report is best-effort so an interlocked
+            // counter is enough and no lock is warranted.
+            InterlockedIncrement(&diag->ReaderFailures);
+            diag->ReaderLastHr = coCreateHr;
+        }
         TRACE_I("CreateIconReadersIconOverlayIdsAuxAux(): unable to create object for icon-overlay handler: " << name << "!");
+    }
 }
 
 void CreateIconReadersIconOverlayIdsAux(CLSID* clsid, const char* name, IShellIconOverlayIdentifier** ids, int i)
@@ -875,22 +1013,11 @@ void ColorsChangedAuxAux(CShellIconOverlayItem* item)
             WideCharToMultiByte(CP_ACP, 0, (wchar_t*)iconFile, -1, iconFileMB, iconFileMB.Size(), NULL, NULL);
             iconFileMB[iconFileMB.Size() - 1] = 0;
 
-            // load icons of all sizes for this icon-overlay
-            HICON hIcons[2] = {0};
-            ExtractIcons(iconFileMB, iconIndex,
-                         MAKELONG(IconSizes[ICONSIZE_32], IconSizes[ICONSIZE_16]),
-                         MAKELONG(IconSizes[ICONSIZE_32], IconSizes[ICONSIZE_16]),
-                         hIcons, NULL, 2, IconLRFlags);
-
+            // Same loader as at startup. Getting this wrong here would re-drop every
+            // overlay the moment the display colour depth changed (issue #90).
             HICON iconOverlay[ICONSIZE_COUNT] = {0};
-            iconOverlay[ICONSIZE_32] = hIcons[0];
-            iconOverlay[ICONSIZE_16] = hIcons[1];
-
-            ExtractIcons(iconFileMB, iconIndex,
-                         IconSizes[ICONSIZE_48],
-                         IconSizes[ICONSIZE_48],
-                         hIcons, NULL, 1, IconLRFlags);
-            iconOverlay[ICONSIZE_48] = hIcons[0];
+            LoadShellOverlayIcons(iconFileMB, iconIndex, IconSizes, ICONSIZE_COUNT,
+                                  iconOverlay);
 
             int x;
             for (x = 0; x < ICONSIZE_COUNT; x++)

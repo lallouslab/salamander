@@ -2075,6 +2075,108 @@ IContextMenu2* CreateIContextMenu2(HWND hOwnerWindow, const char* rootDir, int f
 
 //*****************************************************************************
 //
+// CreateIContextMenu2W - wide, partial-failure-tolerant selection menu (issue #79)
+//
+
+IContextMenu2* CreateIContextMenu2WAux(HWND hOwnerWindow, const wchar_t* rootDirW,
+                                       const std::vector<std::wstring>& names,
+                                       CShellPidlResolveStats* stats)
+{
+    CALL_STACK_MESSAGE1("CreateIContextMenu2WAux()");
+
+    if (stats != NULL)
+    {
+        stats->Requested = (int)names.size();
+        stats->Resolved = 0;
+    }
+    if (rootDirW == NULL || names.empty())
+        return NULL;
+
+    // Bind the folder from its wide path. The ANSI sibling of this function walks the
+    // shell namespace by hand from a CP_ACP string; SHParseDisplayName does the same job
+    // without ever narrowing the path.
+    LPITEMIDLIST folderPidl = NULL;
+    if (FAILED(SHParseDisplayName(rootDirW, NULL, &folderPidl, 0, NULL)) || folderPidl == NULL)
+    {
+        TRACE_E("CreateIContextMenu2WAux(): SHParseDisplayName failed for the panel path");
+        return NULL;
+    }
+
+    IShellFolder* desktop = NULL;
+    IShellFolder* folder = NULL;
+    if (SUCCEEDED(SHGetDesktopFolder(&desktop)))
+    {
+        if (FAILED(desktop->BindToObject(folderPidl, NULL, IID_IShellFolder, (LPVOID*)&folder)))
+            folder = NULL;
+        desktop->Release();
+    }
+    CoTaskMemFree(folderPidl);
+    if (folder == NULL)
+        return NULL;
+
+    // Resolve each selected name from its wide form. Unlike CreateItemIdList(), a name
+    // that cannot be resolved is skipped rather than discarding the whole selection: one
+    // unrepresentable name must not cost the user their entire context menu.
+    std::vector<LPITEMIDLIST> pidls;
+    pidls.reserve(names.size());
+    for (size_t i = 0; i < names.size(); i++)
+    {
+        LPITEMIDLIST pidl = NULL;
+        ULONG chEaten = 0;
+        // ParseDisplayName takes a non-const buffer in some SDKs, so hand it a copy.
+        std::wstring mutableName = names[i];
+        if (SUCCEEDED(folder->ParseDisplayName(NULL, NULL, &mutableName[0], &chEaten, &pidl, NULL)) &&
+            pidl != NULL)
+        {
+            pidls.push_back(pidl);
+        }
+        else
+        {
+            TRACE_I("CreateIContextMenu2WAux(): could not resolve a selected name");
+        }
+    }
+
+    if (stats != NULL)
+        stats->Resolved = (int)pidls.size();
+
+    IContextMenu2* contextMenu2Obj = NULL;
+    if (!pidls.empty())
+    {
+        IContextMenu* contextMenuObj = NULL;
+        if (SUCCEEDED(folder->GetUIObjectOf(hOwnerWindow, (UINT)pidls.size(),
+                                            (LPCITEMIDLIST*)&pidls[0], IID_IContextMenu, NULL,
+                                            (LPVOID*)&contextMenuObj)))
+        {
+            if (FAILED(contextMenuObj->QueryInterface(IID_IContextMenu2, (void**)&contextMenu2Obj)))
+                contextMenu2Obj = NULL;
+            contextMenuObj->Release();
+        }
+    }
+
+    for (size_t i = 0; i < pidls.size(); i++)
+        CoTaskMemFree(pidls[i]);
+    folder->Release();
+
+    return contextMenu2Obj;
+}
+
+IContextMenu2* CreateIContextMenu2W(HWND hOwnerWindow, const wchar_t* rootDirW,
+                                    const std::vector<std::wstring>& names,
+                                    CShellPidlResolveStats* stats)
+{
+    __try
+    {
+        return CreateIContextMenu2WAux(hOwnerWindow, rootDirW, names, stats);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        SHLExceptionHasOccured++;
+    }
+    return NULL; // error
+}
+
+//*****************************************************************************
+//
 // CreateIContextMenu2
 //
 

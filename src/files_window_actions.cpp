@@ -5,6 +5,8 @@
 #include "precomp.h"
 
 #include "common/IEnvironment.h"
+#include "common/unicode/helpers.h"
+#include "common/unicode/PanelPathPolicy.h"
 #include "cfgdlg.h"
 #include "mainwnd.h"
 #include "usermenu.h"
@@ -280,9 +282,21 @@ void CFilesWindow::Execute(int index)
             // launch of the default context menu item (association)
             HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
             MainWindow->SetDefaultDirectories(); // to ensure the launching process inherits the correct current directories
-            // Use wide version for Unicode filenames that can't be represented in ANSI
-            if (file->UseWideName())
-                ExecuteAssociationW(GetListBoxHWND(), GetPath(), file->NameW);
+
+            // Go wide when EITHER the file name or the panel path needs it. Testing only
+            // the name meant that inside a folder whose own path is outside the ANSI code
+            // page, every file took the legacy branch - including files with perfectly
+            // ordinary ASCII names, because NameW is NULL for those. That branch resolves
+            // the shell binding from the lossy CP_ACP directory, so it silently failed and
+            // Enter did nothing at all for every file in the folder.
+            //
+            // Same predicate CFilesWindow::RenameFile already uses (files_window_view_edit.cpp).
+            if (file->UseWideName() || sally::unicode::WidePathNeedsExactPreservation(GetPathW()))
+            {
+                std::wstring nameW = (file->NameW != NULL) ? std::wstring(file->NameW)
+                                                           : AnsiToWide(fileName);
+                ExecuteAssociationW(GetListBoxHWND(), GetPathW(), nameW.c_str());
+            }
             else
                 ExecuteAssociation(GetListBoxHWND(), GetPath(), fileName);
 

@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 // library initialization
 BOOL InitializeShellib();
 
@@ -26,6 +29,30 @@ IContextMenu2* CreateIContextMenu2(HWND hOwnerWindow, const char* rootDir, int f
 
 // creates a context menu interface for the specified directory
 IContextMenu2* CreateIContextMenu2(HWND hOwnerWindow, const char* dir);
+
+// How many of the requested selection names actually resolved to a shell PIDL.
+// Reported so the caller can tell "nothing to show" from "some names were skipped" and
+// say so, instead of failing silently the way issue #79 does.
+struct CShellPidlResolveStats
+{
+    int Requested = 0;
+    int Resolved = 0;
+};
+
+// Wide version of the selection context menu (issue #79).
+//
+// The ANSI version above resolves each name by widening the panel's CP_ACP name back to
+// UTF-16 and handing that to ParseDisplayName. For a filename outside the ANSI code page
+// that reconstruction does not name a real file, ParseDisplayName fails, and because
+// CreateItemIdList() is all-or-nothing the whole menu is abandoned - with no error shown.
+//
+// This version takes the wide names the panel already holds in CFileData::NameW, binds
+// the folder with SHParseDisplayName so the path is never narrowed either, and skips
+// individual names it cannot resolve rather than discarding the selection. Returns NULL
+// only when nothing at all resolved; 'stats' (optional) reports the counts.
+IContextMenu2* CreateIContextMenu2W(HWND hOwnerWindow, const wchar_t* rootDirW,
+                                    const std::vector<std::wstring>& names,
+                                    CShellPidlResolveStats* stats = NULL);
 
 // does the specified directory or file have a drop target?
 BOOL HasDropTarget(const char* dir);

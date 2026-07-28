@@ -65,6 +65,11 @@ public:
     // adds 'item' to the array (Drive was incorrectly ordered by 'priority')
     BOOL Add(CShellIconOverlayItem* item /*, int priority*/);
 
+    // number of handlers that actually loaded. Note this is NOT the same as the number of
+    // rows in ListOfShellIconOverlays, which holds every registered handler whether or not
+    // it loaded - the two being conflated is what made issues #83 and #90 undiagnosable.
+    int GetCount() const { return Overlays.Count; }
+
     // releases all icon overlays
     void Release() { Overlays.Destroy(); }
 

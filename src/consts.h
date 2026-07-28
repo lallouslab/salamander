@@ -822,7 +822,10 @@ void SetClipCutCopyInfo(HWND hwnd, BOOL copy, BOOL salObject);
 void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection = TRUE,
                  BOOL posByMouse = TRUE, BOOL onlyPanelMenu = FALSE);
 void ExecuteAssociation(HWND hWindow, const char* path, const char* name);
-void ExecuteAssociationW(HWND hWindow, const char* path, const wchar_t* nameW);
+// Wide sibling of ExecuteAssociation. BOTH the directory and the name are wide: a folder
+// whose own path is outside the ANSI code page must reach the shell intact even when the
+// file inside it has a perfectly ordinary ASCII name.
+void ExecuteAssociationW(HWND hWindow, const wchar_t* pathW, const wchar_t* nameW);
 
 BOOL CanUseShellExecuteWndAsParent(const char* cmdName);
 
@@ -2384,8 +2387,11 @@ struct CTmpEnumData
 
 const char* EnumFileNames(int index, void* param);
 
-void ShellActionAux5(UINT flags, CFilesWindow* panel, HMENU h);
-void AuxInvokeCommand(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici);
+// Both return the HRESULT from the wrapped shell call, or E_UNEXPECTED if it raised an
+// exception. Callers may ignore it, but it is the only evidence we get when a shell
+// extension refuses a command (see shellsup_diag.h and issues #13/#15/#20).
+HRESULT ShellActionAux5(UINT flags, CFilesWindow* panel, HMENU h);
+HRESULT AuxInvokeCommand(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici);
 void ShellActionAux6(CFilesWindow* panel);
 
 //******************************************************************************

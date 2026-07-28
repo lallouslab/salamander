@@ -3019,6 +3019,70 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
             return 0;
         }
 
+        case CM_REPORTBUG:
+        {
+            // Produce a bug report for THIS process, without crashing it.
+            //
+            // The pre-existing route to a bug report is Help > Task List > Break, which
+            // refuses to break its own process (so the user needs two Sally instances) and
+            // ends in TerminateProcess. Neither is something we can ask a bug reporter to
+            // do. PrintBugReport already supports Exception == NULL - the thread-suspending
+            // "Stack Back Trace" block is gated on Exception != NULL - so the manual case
+            // costs nothing but a file.
+            //
+            // This is the only channel that carries the shell-integration ledgers
+            // (shiconov_diag.h, shellsup_diag.h) to a user running a Release build, where
+            // every TRACE_* is compiled out.
+            if (gPrompter->AskYesNo(LoadStrW(IDS_BUGREPORTCNFRM_TITLE),
+                                    LoadStrW(IDS_BUGREPORTCNFRM_TEXT))
+                    .type != PromptResult::kYes)
+            {
+                return 0;
+            }
+
+            // Same directory salmon uses, computed directly so this works even when salmon
+            // is not running: %LOCALAPPDATA%\Open Salamander.
+            char reportPath[MAX_PATH];
+            reportPath[0] = 0;
+            if (SHGetFolderPath(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, reportPath) != S_OK)
+            {
+                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), LoadStrW(IDS_BUGREPORT_FAILED));
+                return 0;
+            }
+            int len = lstrlen(reportPath);
+            if (len > 0 && reportPath[len - 1] == '\\')
+                reportPath[len - 1] = 0;
+            lstrcat(reportPath, "\\Open Salamander");
+
+            // Directory creation goes through the interface, never Win32 directly, so this
+            // file stays out of the win32-isolation allowlist.
+            std::wstring reportDirW = AnsiToWide(reportPath);
+            if (gFileSystem != NULL && !gFileSystem->DirectoryExists(reportDirW.c_str()))
+                gFileSystem->CreateDirectory(reportDirW.c_str());
+
+            // Must end in .TXT: that is what salmon's existing scan of this directory looks
+            // for when it offers to compress and upload old reports.
+            SYSTEMTIME st;
+            GetLocalTime(&st);
+            char fileName[64];
+            _snprintf_s(fileName, _TRUNCATE, "\\Sally-report-%04d%02d%02d-%02d%02d%02d.TXT",
+                        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+            lstrcat(reportPath, fileName);
+
+            if (CCallStack::CreateBugReportFile(NULL, GetCurrentThreadId(), -1, reportPath))
+            {
+                char message[MAX_PATH + 200];
+                _snprintf_s(message, _TRUNCATE, "%s\n\n%s",
+                            LoadStr(IDS_BUGREPORT_WRITTEN), reportPath);
+                gPrompter->ShowInfo(LoadStrW(IDS_INFOTITLE), AnsiToWide(message).c_str());
+            }
+            else
+            {
+                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE), LoadStrW(IDS_BUGREPORT_FAILED));
+            }
+            return 0;
+        }
+
         case CM_CLIPCOPYFULLNAME:
         {
             activePanel->UserWorkedOnThisPath = TRUE;

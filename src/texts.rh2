@@ -2218,6 +2218,7 @@
 //#define IDS_MENU_HELP_TIP            13195
 #define IDS_MENU_HELP_INDEX          13196
 #define IDS_MENU_HELP_TASKLIST       13197
+#define IDS_MENU_HELP_REPORTBUG      13198
 #define IDS_MENU_HELP_ABOUTPLUGINS   13199
 #define IDS_MENU_HELP_ABOUT          13200
 #define IDS_MENU_HELP_FORUM          13202
@@ -2405,6 +2406,9 @@
 
 #define IDS_BUGREPORTCNFRM_TITLE        13730
 #define IDS_BUGREPORTCNFRM_TEXT         13731
+#define IDS_BUGREPORT_WRITTEN           13732
+#define IDS_BUGREPORT_FAILED            13733
+#define IDS_SHELLMENU_NOSHELLITEMS      13734
 
 // too long name in disk operation: error messagebox buttons:
 #define IDS_MSGBOXBTN_SKIP              13735

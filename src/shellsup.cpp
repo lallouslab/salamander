@@ -27,6 +27,7 @@ extern "C"
 }
 #include "salshlib.h"
 #include "tasklist.h"
+#include "shellsup_diag.h"
 //#include "drivelst.h"
 
 #include <vector>
@@ -764,6 +765,38 @@ const char* EnumFileNames(int index, void* param)
         return NULL;
 }
 
+// Collects the selected items' bare names in their wide form - the same source
+// CollectSelectedPathsW() uses for the clipboard and for drag&drop, which the context
+// menu never got. CFileData::Name is the lossy CP_ACP mirror; NameW is the truth.
+static BOOL CollectSelectedNamesW(CFilesWindow* panel, const int* indexes, int indexCount,
+                                  std::vector<std::wstring>& names, BOOL& hasWideName)
+{
+    names.clear();
+    hasWideName = FALSE;
+
+    if (panel == NULL || indexes == NULL || indexCount <= 0)
+        return FALSE;
+
+    names.reserve(indexCount);
+    for (int i = 0; i < indexCount; i++)
+    {
+        int idx = indexes[i];
+        if (idx < 0 || idx >= panel->Dirs->Count + panel->Files->Count)
+            return FALSE;
+
+        CFileData* file = (idx < panel->Dirs->Count) ? &panel->Dirs->At(idx) : &panel->Files->At(idx - panel->Dirs->Count);
+        std::wstring nameW = (file->NameW != NULL) ? std::wstring(file->NameW) : AnsiToWide(file->Name);
+        if (nameW.empty())
+            return FALSE;
+
+        if (file->UseWideName())
+            hasWideName = TRUE;
+
+        names.push_back(nameW);
+    }
+    return TRUE;
+}
+
 static BOOL CollectSelectedPathsW(CFilesWindow* panel, const int* indexes, int indexCount,
                                   std::vector<std::wstring>& paths, BOOL& hasWideName)
 {
@@ -817,7 +850,7 @@ const char* EnumOneFileName(int index, void* param)
     return index == 0 ? (char*)param : NULL;
 }
 
-void AuxInvokeCommand2(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
+HRESULT AuxInvokeCommand2(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
 {
     CALL_STACK_MESSAGE_NONE
 
@@ -826,9 +859,10 @@ void AuxInvokeCommand2(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
     int oldThreadPriority = GetThreadPriority(hThread);
     SetThreadPriority(hThread, THREAD_PRIORITY_NORMAL);
 
+    HRESULT ret = E_UNEXPECTED;
     __try
     {
-        panel->ContextSubmenuNew->GetMenu2()->InvokeCommand(ici);
+        ret = panel->ContextSubmenuNew->GetMenu2()->InvokeCommand(ici);
     }
     __except (CCallStack::HandleException(GetExceptionInformation(), 17))
     {
@@ -836,9 +870,10 @@ void AuxInvokeCommand2(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
     }
 
     SetThreadPriority(hThread, oldThreadPriority);
+    return ret;
 }
 
-void AuxInvokeCommand(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
+HRESULT AuxInvokeCommand(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
 { // POZOR: pouziva se i z CSalamanderGeneral::OpenNetworkContextMenu()
     CALL_STACK_MESSAGE_NONE
 
@@ -847,9 +882,10 @@ void AuxInvokeCommand(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
     int oldThreadPriority = GetThreadPriority(hThread);
     SetThreadPriority(hThread, THREAD_PRIORITY_NORMAL);
 
+    HRESULT ret = E_UNEXPECTED;
     __try
     {
-        panel->ContextMenu->InvokeCommand(ici);
+        ret = panel->ContextMenu->InvokeCommand(ici);
     }
     __except (CCallStack::HandleException(GetExceptionInformation(), 18))
     {
@@ -857,9 +893,10 @@ void AuxInvokeCommand(CFilesWindow* panel, CMINVOKECOMMANDINFO* ici)
     }
 
     SetThreadPriority(hThread, oldThreadPriority);
+    return ret;
 }
 
-void AuxInvokeAndRelease(IContextMenu2* menu, CMINVOKECOMMANDINFO* ici)
+HRESULT AuxInvokeAndRelease(IContextMenu2* menu, CMINVOKECOMMANDINFO* ici)
 {
     CALL_STACK_MESSAGE_NONE
 
@@ -868,9 +905,10 @@ void AuxInvokeAndRelease(IContextMenu2* menu, CMINVOKECOMMANDINFO* ici)
     int oldThreadPriority = GetThreadPriority(hThread);
     SetThreadPriority(hThread, THREAD_PRIORITY_NORMAL);
 
+    HRESULT ret = E_UNEXPECTED;
     __try
     {
-        menu->InvokeCommand(ici);
+        ret = menu->InvokeCommand(ici);
     }
     __except (CCallStack::HandleException(GetExceptionInformation(), 19))
     {
@@ -887,6 +925,7 @@ void AuxInvokeAndRelease(IContextMenu2* menu, CMINVOKECOMMANDINFO* ici)
     {
         RelExceptionHasOccured++;
     }
+    return ret;
 }
 
 HRESULT AuxGetCommandString(IContextMenu2* menu, UINT_PTR idCmd, UINT uType, UINT* pReserved, LPSTR pszName, UINT cchMax)
@@ -906,7 +945,7 @@ HRESULT AuxGetCommandString(IContextMenu2* menu, UINT_PTR idCmd, UINT uType, UIN
     return ret;
 }
 
-void ShellActionAux5(UINT flags, CFilesWindow* panel, HMENU h)
+HRESULT ShellActionAux5(UINT flags, CFilesWindow* panel, HMENU h)
 { // POZOR: pouziva se i z CSalamanderGeneral::OpenNetworkContextMenu()
     CALL_STACK_MESSAGE_NONE
 
@@ -915,9 +954,10 @@ void ShellActionAux5(UINT flags, CFilesWindow* panel, HMENU h)
     int oldThreadPriority = GetThreadPriority(hThread);
     SetThreadPriority(hThread, THREAD_PRIORITY_NORMAL);
 
+    HRESULT ret = E_UNEXPECTED;
     __try
     {
-        panel->ContextMenu->QueryContextMenu(h, 0, 0, 4999, flags);
+        ret = panel->ContextMenu->QueryContextMenu(h, 0, 0, 4999, flags);
     }
     __except (CCallStack::HandleException(GetExceptionInformation(), 20))
     {
@@ -925,6 +965,17 @@ void ShellActionAux5(UINT flags, CFilesWindow* panel, HMENU h)
     }
 
     SetThreadPriority(hThread, oldThreadPriority);
+
+    // On success HRESULT_CODE(ret) is the number of ids the extension claimed. Recording it
+    // is what makes the 0..4999 / 5000..6000 range split verifiable instead of assumed - an
+    // extension that claims ids past the split is silently dropped today (issue #13).
+    ShellMenuDiagRecord* diag = ShellMenuDiag.Current();
+    if (diag != NULL)
+    {
+        diag->QueryContextMenuHr = ret;
+        diag->MenuItemCount = GetMenuItemCount(h);
+    }
+    return ret;
 }
 
 void ShellActionAux6(CFilesWindow* panel)
@@ -2018,6 +2069,12 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
             {
                 HMENU h = CreatePopupMenu();
 
+                // Open a diagnostic record for this right-click. GetPathW() is the wide
+                // source of truth; GetPath() is the lossy CP_ACP mirror and would hide
+                // exactly the case issues #79/#90 turn on.
+                ShellMenuDiag.Begin(panel->GetPathW(), useSelection ? (count == 0 ? 1 : count) : 0,
+                                    onlyPanelMenu);
+
                 UINT flags = CMF_NORMAL | CMF_EXPLORE;
                 // handle pressed shift - extended context menu, under W2K there's e.g. Run as...
 #define CMF_EXTENDEDVERBS 0x00000100 // rarely used verbs
@@ -2082,8 +2139,44 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
                             CTmpEnumData data;
                             data.Indexes = (count == 0) ? &index : indexes.get();
                             data.Panel = panel;
-                            panel->ContextMenu = CreateIContextMenu2(MainWindow->HWindow, panel->GetPath(), (count == 0) ? 1 : count,
-                                                                     EnumFileNames, &data);
+                            const int selCount = (count == 0) ? 1 : count;
+
+                            // Build the menu from the wide names first (issue #79). The
+                            // legacy path resolves each PIDL from CFileData::Name, the
+                            // lossy CP_ACP mirror, and abandons the entire menu if any one
+                            // name fails - which is why right-clicking a file with
+                            // non-ANSI characters in its name did nothing at all.
+                            std::vector<std::wstring> selectedNamesW;
+                            BOOL selHasWideName = FALSE;
+                            CShellPidlResolveStats resolveStats;
+                            if (panel->Is(ptDisk) &&
+                                CollectSelectedNamesW(panel, data.Indexes, selCount, selectedNamesW, selHasWideName))
+                            {
+                                panel->ContextMenu = CreateIContextMenu2W(MainWindow->HWindow, panel->GetPathW(),
+                                                                          selectedNamesW, &resolveStats);
+                                ShellMenuDiagRecord* diagRec = ShellMenuDiag.Current();
+                                if (diagRec != NULL)
+                                    diagRec->AnyNameNeedsWide = selHasWideName != FALSE;
+                            }
+
+                            if (panel->ContextMenu == NULL)
+                            {
+                                // Fall back to the legacy ANSI construction. Worth keeping:
+                                // it handles the "\\\\" and "\\\\server" namespace cases the
+                                // wide path deliberately does not.
+                                panel->ContextMenu = CreateIContextMenu2(MainWindow->HWindow, panel->GetPath(), selCount,
+                                                                         EnumFileNames, &data);
+                            }
+
+                            if (panel->ContextMenu == NULL && resolveStats.Requested > 0)
+                            {
+                                // Never fail silently again. The Find dialog already warns
+                                // when a row cannot be acted on through the ANSI shell API
+                                // (CFindDialog::EnsureRowActionableViaAnsi); the panel was
+                                // the outlier.
+                                gPrompter->ShowError(LoadStrW(IDS_ERRORTITLE),
+                                                     LoadStrW(IDS_SHELLMENU_NOSHELLITEMS));
+                            }
 #ifndef _WIN64
                         }
 #endif // _WIN64
@@ -2268,14 +2361,32 @@ MENU_TEMPLATE_ITEM PanelBkgndMenu[] =
                     }
                     else
                         cmd = 0;
+
+                    // Record what tracking returned before any interpretation. Note cmd == 0
+                    // is ambiguous today: QueryContextMenu is called with idCmdFirst 0, so an
+                    // extension's first command is indistinguishable from "user cancelled".
+                    ShellMenuDiagRecord* diag = ShellMenuDiag.Current();
+                    if (diag != NULL)
+                    {
+                        diag->TrackedCmd = cmd;
+                        if (cmd == 0)
+                            diag->Owner = ShellMenuOwner::Cancelled;
+                    }
+
                     if (cmd != 0)
                     {
                         CALL_STACK_MESSAGE1("ShellAction::context_menu::exec0");
                         if (cmd < 5000)
                         {
-                            if (AuxGetCommandString(panel->ContextMenu, cmd, GCS_VERB, NULL, cmdName, 200) != NOERROR)
+                            HRESULT verbHr = AuxGetCommandString(panel->ContextMenu, cmd, GCS_VERB, NULL, cmdName, 200);
+                            if (verbHr != NOERROR)
                             {
                                 cmdName[0] = 0;
+                            }
+                            if (diag != NULL)
+                            {
+                                diag->VerbHr = verbHr;
+                                lstrcpynA(diag->Verb, cmdName, (int)sizeof(diag->Verb));
                             }
                         }
                         if (cmd == 10000 || cmd == 10001)
@@ -2413,7 +2524,18 @@ MENU_TEMPLATE_ITEM PanelBkgndMenu[] =
                                             MainWindow->RightPanel->HandsOff(TRUE);
                                     }
 
-                                    AuxInvokeCommand(panel, (CMINVOKECOMMANDINFO*)&ici);
+                                    HRESULT invokeHr = AuxInvokeCommand(panel, (CMINVOKECOMMANDINFO*)&ici);
+                                    if (diag != NULL)
+                                    {
+                                        diag->Owner = ShellMenuOwner::ItemMenu;
+                                        diag->InvokeHr = invokeHr;
+                                        // ici.hwnd is a stack CShellExecuteWnd that dies when
+                                        // this scope exits. A verb that keeps working after
+                                        // InvokeCommand returns (the Compressed-folder handler
+                                        // is the suspect for #20) is left with a dead parent.
+                                        diag->ParentWasTransient = ici.hwnd != MainWindow->HWindow;
+                                        diag->ParentAliveAfter = IsWindow(ici.hwnd) != FALSE;
+                                    }
 
                                     // we catch cut/copy/paste, but to be safe we still refresh clipboard enablers
                                     IdleRefreshStates = TRUE;  // force state variable check on next Idle
@@ -2432,11 +2554,27 @@ MENU_TEMPLATE_ITEM PanelBkgndMenu[] =
                                 {
                                     if (panel->ContextSubmenuNew->MenuIsAssigned()) // exception could have occurred
                                     {
-                                        AuxInvokeCommand2(panel, (CMINVOKECOMMANDINFO*)&ici);
+                                        HRESULT invokeHr = AuxInvokeCommand2(panel, (CMINVOKECOMMANDINFO*)&ici);
+                                        if (diag != NULL)
+                                        {
+                                            diag->Owner = ShellMenuOwner::NewMenu;
+                                            diag->InvokeHr = invokeHr;
+                                            diag->ParentWasTransient = ici.hwnd != MainWindow->HWindow;
+                                            diag->ParentAliveAfter = IsWindow(ici.hwnd) != FALSE;
+                                        }
 
                                         //---  refresh non-automatically refreshed directories
                                         // report change in current directory (new file/directory can probably only be created in it)
                                         MainWindow->PostChangeOnPathNotification(panel->GetPath(), FALSE);
+                                    }
+                                    else if (diag != NULL)
+                                    {
+                                        // The silent discard behind issue #13: an extension that
+                                        // claimed ids at or past 5000 lands here, and in the
+                                        // selection case ContextSubmenuNew is never assigned, so
+                                        // the command is dropped with no invoke and no error.
+                                        diag->Owner = ShellMenuOwner::NewMenu;
+                                        diag->InvokeHr = E_ABORT;
                                     }
                                 }
 
@@ -2456,6 +2594,7 @@ MENU_TEMPLATE_ITEM PanelBkgndMenu[] =
                     ShellActionAux6(panel);
                     if (h != NULL)
                         DestroyMenu(h);
+                    ShellMenuDiag.End();
                 }
 
                 if (cmd == 10000) // our own "paste" to pastePath
@@ -2569,9 +2708,12 @@ void ExecuteAssociationAux3(IContextMenu2* menu)
 extern DWORD ExecuteAssociationTlsIndex; // allows only one call at a time (prevents recursion) in each thread
 
 // Wide version for Unicode filenames - uses ShellExecuteExW directly
-void ExecuteAssociationW(HWND hWindow, const char* path, const wchar_t* nameW)
+void ExecuteAssociationW(HWND hWindow, const wchar_t* pathW, const wchar_t* nameW)
 {
-    CALL_STACK_MESSAGE2("ExecuteAssociationW(, %s, <wide>)", path);
+    CALL_STACK_MESSAGE1("ExecuteAssociationW()");
+
+    if (pathW == NULL || nameW == NULL)
+        return;
 
     if (ExecuteAssociationTlsIndex == TLS_OUT_OF_INDEXES ||
         TlsGetValue(ExecuteAssociationTlsIndex) == 0)
@@ -2579,22 +2721,21 @@ void ExecuteAssociationW(HWND hWindow, const char* path, const wchar_t* nameW)
         if (ExecuteAssociationTlsIndex != TLS_OUT_OF_INDEXES)
             TlsSetValue(ExecuteAssociationTlsIndex, (void*)1);
 
-        // Build wide full path
+        // The directory arrives wide. It used to arrive as the panel's ANSI mirror and be
+        // re-widened here with CP_ACP, which meant a folder outside the code page reached
+        // the shell as "D:\???\" - so nothing opened, silently, no matter how the file
+        // itself was named.
         wchar_t fullPathW[SAL_MAX_LONG_PATH];
-        wchar_t pathW[SAL_MAX_LONG_PATH];
 
-        // Convert ANSI path to wide
-        MultiByteToWideChar(CP_ACP, 0, path, -1, pathW, SAL_MAX_LONG_PATH);
-
-        // Build full path: path + nameW
-        wcscpy(fullPathW, pathW);
+        // Build full path: pathW + nameW
+        wcsncpy_s(fullPathW, pathW, _TRUNCATE);
         int len = (int)wcslen(fullPathW);
         if (len > 0 && fullPathW[len - 1] != L'\\')
         {
             fullPathW[len] = L'\\';
             fullPathW[len + 1] = L'\0';
         }
-        wcscat(fullPathW, nameW);
+        wcsncat_s(fullPathW, nameW, _TRUNCATE);
 
         // Use ShellExecuteExW for Unicode filenames
         SHELLEXECUTEINFOW sei = {0};

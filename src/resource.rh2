@@ -278,6 +278,7 @@
 
 #define CM_STORESEL            866
 #define CM_RESTORESEL          867
+#define CM_REPORTBUG           868    // Help > Report a Bug: writes a bug report for THIS process without crashing it
 
 #define CM_NEWDROP             870
 

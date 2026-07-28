@@ -169,6 +169,7 @@ STRINGTABLE
  IDS_MENU_HELP_CONTEXT,      "&What is This?\tShift+F1"
 // IDS_MENU_HELP_TIP,          "&Tip of the Day"
  IDS_MENU_HELP_TASKLIST,     "Task &List..."
+ IDS_MENU_HELP_REPORTBUG,    "&Report a Bug..."
  IDS_MENU_HELP_FORUM,        "Official Support &Forum"
  IDS_MENU_HELP_ABOUTPLUGINS, "About &Plugin"
  IDS_MENU_HELP_CHECKNEWVERSION, "&Check For New Versions..."
@@ -1777,7 +1778,10 @@ IDS_BROKENFSPLUGINVERSION2, "The plugin (%s) targets broken Sally SDK version 10
  IDS_ACLNOTSUPPORTEDONTGTPATH, "Owners and permissions cannot be preserved. They are not supported\non target path (it is not NTFS volume).\n\nDo you want to continue?"
 
  IDS_BUGREPORTCNFRM_TITLE, "Report a Bug"
- IDS_BUGREPORTCNFRM_TEXT, "For bug reports or feature requests please use menu Help > Official Support Forum.\n\nUse this bug report only for sending us sensitive data or when we ask you."
+ IDS_BUGREPORTCNFRM_TEXT, "For bug reports or feature requests please use menu Help > Official Support Forum.\n\nUse this bug report only for sending us sensitive data or when we ask you.\n\nThe report describes this running copy of Sally: configuration, loaded modules, panel paths, and shell integration state. Please review it before sending.\n\nCreate the report now?"
+ IDS_BUGREPORT_WRITTEN, "The bug report has been written to:"
+ IDS_BUGREPORT_FAILED, "The bug report could not be written."
+ IDS_SHELLMENU_NOSHELLITEMS, "Windows could not provide a context menu for the selected item(s)."
 
  IDS_MSGBOXBTN_SKIP, "&Skip"
  IDS_MSGBOXBTN_SKIPALL, "S&kip All"

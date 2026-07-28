@@ -4,7 +4,44 @@
 
 find_package(Git QUIET)
 
-set(SALLY_LOCAL_DEV_VERSION "1.0.23" CACHE STRING "Sally local development version base")
+# Sally local development version base.
+#
+# Deliberately NOT a CACHE entry. `set(... CACHE ...)` only applies when the entry does
+# not already exist, so once a build directory had been configured, bumping this line did
+# nothing there - the stale cached value won and every build was stamped with the previous
+# release's version. That is silent and survives rebuilds, so it is only noticed when
+# someone reads the About box.
+#
+# As a normal variable it is re-evaluated on every configure, while an explicit
+# -DSALLY_LOCAL_DEV_VERSION=x.y.z on the command line still wins because that defines the
+# variable before this file runs.
+# Sally local development version base. THIS LINE IS THE SINGLE SOURCE OF TRUTH.
+#
+# Keep it AHEAD of the newest released tag: v1.0.23 is published, so leaving it at 1.0.23
+# would stamp unreleased builds with a version already shipped.
+#
+# It is deliberately neither a CACHE entry nor merely `if(NOT DEFINED)`-guarded, because
+# both let a value cached by an EARLIER configure win, and that has now shipped wrong
+# versions twice:
+#
+#   * `set(... CACHE STRING ...)` is skipped entirely when the entry already exists, so a
+#     build directory configured before a bump kept emitting the old version forever.
+#   * `if(NOT DEFINED ...)` is satisfied by a stale cache entry just as well as by a real
+#     -D, so sibling build trees (the private test suite configures Sally sub-builds of its
+#     own) silently kept their old value.
+#
+# The second one bites harder than it looks, because configure_file below writes into the
+# SOURCE tree: every build directory shares one src/git_version.h, so whichever configured
+# last decides the version for all of them. Making this line unconditional means they all
+# agree, and the shared header stops being a race.
+#
+# If you genuinely need a different value, pass -DSALLY_VERSION_OVERRIDE=x.y.z. That is a
+# distinct name, so it cannot be confused with a leftover cache entry.
+if(SALLY_VERSION_OVERRIDE)
+    set(SALLY_LOCAL_DEV_VERSION "${SALLY_VERSION_OVERRIDE}")
+else()
+    set(SALLY_LOCAL_DEV_VERSION "1.0.24")
+endif()
 
 if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     # Get the latest tag
