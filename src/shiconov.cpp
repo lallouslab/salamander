@@ -405,7 +405,14 @@ void InitShellIconOverlays()
     ShellOverlayDiag.Header.IconSizes[2] = IconSizes[ICONSIZE_48];
     ShellOverlayDiag.Header.SystemDpi = (UINT)SystemDPI;
     ShellOverlayDiag.Header.EnableCustomIconOverlays = Configuration.EnableCustomIconOverlays != FALSE;
-    lstrcpynA(ShellOverlayDiag.Header.ConfigRoot, SALAMANDER_ROOT_REG,
+    // SALAMANDER_ROOT_REG is still NULL here whenever no configuration was found:
+    // FindLatestConfiguration() clears it up front and only assigns a root when a key with
+    // a "Configuration" subkey exists, and the fallback to SalamanderConfigurationRoots[0]
+    // happens later in the startup sequence than this call. Sally's lstrcpyn is the
+    // deliberately crashing variant from lstrfix.h, so NULL is an access violation here,
+    // not a truncated string. Every other reader of SALAMANDER_ROOT_REG guards for NULL.
+    lstrcpynA(ShellOverlayDiag.Header.ConfigRoot,
+              SALAMANDER_ROOT_REG != NULL ? SALAMANDER_ROOT_REG : "",
               (int)sizeof(ShellOverlayDiag.Header.ConfigRoot));
     if (Configuration.DisabledCustomIconOverlays != NULL)
     {
