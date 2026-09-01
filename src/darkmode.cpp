@@ -4,11 +4,14 @@
 
 #include "precomp.h"
 #include "darkmode.h"
+#include "combo_dark_paint.h"
 
 #include <commctrl.h>
 #include <tchar.h>
 #include <uxtheme.h>
 #include <vssym32.h>
+
+#include <vector>
 
 namespace
 {
@@ -61,6 +64,7 @@ const UINT_PTR GROUPBOX_SUBCLASS_ID = 1;
 const UINT_PTR STATIC_EDGE_SUBCLASS_ID = 2;
 const UINT_PTR HEADER_SUBCLASS_ID = 4;
 const UINT_PTR CHECK_RADIO_SUBCLASS_ID = 8;
+const UINT_PTR EDIT_FRAME_SUBCLASS_ID = 16;
 const TCHAR* CHECK_RADIO_HOT_PROP = TEXT("SallyCheckRadioHot");
 
 HBRUSH DialogDarkBrush = NULL;
@@ -1019,14 +1023,241 @@ void ApplyWindowTheme(HWND hwnd, BOOL useDark, LPCWSTR lightTheme = NULL)
     SetWindowTheme(hwnd, useDark ? UXTHEME_DARKMODE_EXPLORER : lightTheme, NULL);
 }
 
+// #98: The white hairline around edits and comboboxes in dark mode is the control's
+// NON-CLIENT frame, which Windows paints with system (light) colours. No theme class governs
+// it - DarkMode_Explorer and DarkMode_CFD were both tried and neither touches it - and it is
+// not the 3D client edge either, so stripping WS_EX_CLIENTEDGE does nothing. The only way to
+// darken it is to paint it ourselves, which is exactly what the Find dialog has always done
+// for its combos (FindComboSkinSubclassProc) and why Find was the one dialog that looked
+// right. This generalises that mechanism to every edit-like control.
+// #98 (third attempt). The first two were reverted; the third drew a 1px outline over the
+// control AFTER letting it paint itself, which measured as a dark hairline with the control's
+// own WHITE 2px frame still inside it, and an untouched WHITE drop-down button. An outline is
+// not a fix - the control has to stop painting light in the first place.
+//
+// The Find dialog has always looked right because FindComboSkinSubclassProc OWNER-DRAWS its
+// combos: it fills the client, draws the button, the separator and the arrow, then the frame,
+// and returns without calling the default handler at all. This is that painter, generalised.
+// Colours match Find's so the two look identical.
+const COLORREF DARK_COMBO_LINE = RGB(55, 55, 58);
+const COLORREF DARK_COMBO_BUTTON = RGB(52, 52, 56);
+
+void DrawComboArrow(HDC hdc, const RECT* rect, COLORREF color)
+{
+    int centerX = (rect->left + rect->right) / 2;
+    int centerY = (rect->top + rect->bottom) / 2;
+    POINT arrow[3] = {
+        {centerX - 3, centerY - 1},
+        {centerX + 4, centerY - 1},
+        {centerX, centerY + 3},
+    };
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldPenColor = SetDCPenColor(hdc, color);
+    COLORREF oldBrushColor = SetDCBrushColor(hdc, color);
+    Polygon(hdc, arrow, 3);
+    SetDCBrushColor(hdc, oldBrushColor);
+    SetDCPenColor(hdc, oldPenColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+BOOL GetChildRectInParent(HWND hParent, HWND hChild, RECT* rect)
+{
+    if (hParent == NULL || hChild == NULL || rect == NULL || !IsWindow(hParent) || !IsWindow(hChild))
+        return FALSE;
+    // A drop-list combo reports itself (or nothing) as hwndItem. Treating the control as its own
+    // child produced a rect covering the whole client, and the ExcludeClipRect below then clipped
+    // away everything the painter was about to draw.
+    if (hChild == hParent)
+        return FALSE;
+    if (!GetWindowRect(hChild, rect))
+        return FALSE;
+    MapWindowPoints(NULL, hParent, (POINT*)rect, 2);
+    return TRUE;
+}
+
+BOOL IsComboBoxControl(HWND hwnd)
+{
+    TCHAR className[64] = {0};
+    if (GetClassName(hwnd, className, _countof(className)) == 0)
+        return FALSE;
+    return _tcsicmp(className, COMBOBOX_CLASS_NAME) == 0;
+}
+
+BOOL PaintDarkComboClient(HWND hwnd, HDC paintDC)
+{
+    DarkModeColors colors;
+    if (!DarkMode_GetColors(&colors))
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    if (client.right <= client.left || client.bottom <= client.top)
+        return TRUE;
+
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    GetComboBoxInfo(hwnd, &cbi);
+
+    RECT editRect;
+    BOOL haveEditRect = GetChildRectInParent(hwnd, cbi.hwndItem, &editRect);
+
+    int savedDC = SaveDC(paintDC);
+    if (haveEditRect)
+        ExcludeClipRect(paintDC, editRect.left, editRect.top, editRect.right, editRect.bottom);
+
+    FillRectSolid(paintDC, &client, colors.InputBackground);
+
+    int buttonWidth = max(GetSystemMetrics(SM_CXVSCROLL), client.bottom - client.top);
+    RECT button = client;
+    button.left = max(client.left + 1, client.right - buttonWidth - 1);
+    button.top = client.top + 1;
+    button.right = client.right - 1;
+    button.bottom = client.bottom - 1;
+    if (button.right > button.left && button.bottom > button.top)
+    {
+        FillRectSolid(paintDC, &button, DARK_COMBO_BUTTON);
+        HGDIOBJ oldPen = SelectObject(paintDC, GetStockObject(DC_PEN));
+        COLORREF oldPenColor = SetDCPenColor(paintDC, DARK_COMBO_LINE);
+        MoveToEx(paintDC, button.left, button.top, NULL);
+        LineTo(paintDC, button.left, button.bottom);
+        SetDCPenColor(paintDC, oldPenColor);
+        SelectObject(paintDC, oldPen);
+        DrawComboArrow(paintDC, &button, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+    }
+
+    // A CBS_DROPDOWNLIST combo has no edit child, so nothing else will ever draw its selected
+    // item - the control would render as an empty box with an arrow. Draw it here.
+    //
+    // This omission was inherited: the Find painter this was generalised from has it too, and
+    // went unnoticed because three of its four combos are CBS_DROPDOWN, where the edit child
+    // covers for it. Generalising took the defect from one control to every combo in the
+    // application - including the theme selector on the Appearance page.
+    if (!haveEditRect)
+        ComboDarkDrawSelectedItem(hwnd, paintDC, client, button, {colors.InputText, colors.DisabledText, colors.Highlight, colors.HighlightText});
+
+    RestoreDC(paintDC, savedDC);
+    DrawRectOutline(paintDC, &client, DIALOG_DARK_FRAME);
+    return TRUE;
+}
+
+void PaintDarkControlFrame(HWND hwnd)
+{
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+    RECT rect;
+    GetWindowRect(hwnd, &rect);
+    OffsetRect(&rect, -rect.left, -rect.top);
+    DrawRectOutline(hdc, &rect, DIALOG_DARK_FRAME);
+    ReleaseDC(hwnd, hdc);
+}
+
+LRESULT CALLBACK EditFrameSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                       UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkMode_ShouldUseDark())
+        {
+            // Scrollbars live in the NON-CLIENT area and are drawn by the default handler.
+            // Suppressing it outright left multiline edits (the FTP log, for one) with a blank
+            // gutter and no usable scrollbar. Let the default painter run for those, then put
+            // our frame back over the edge; only frameless controls skip it entirely.
+            const LONG style = GetWindowLong(hwnd, GWL_STYLE);
+            if ((style & (WS_VSCROLL | WS_HSCROLL)) != 0)
+            {
+                LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+                PaintDarkControlFrame(hwnd);
+                return ret;
+            }
+            PaintDarkControlFrame(hwnd); // replace the light system frame entirely
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        // A combobox must be owner-drawn outright. Letting it paint and then outlining the edge
+        // leaves its own white frame and white drop-down button underneath - that was the third
+        // failed attempt at #98.
+        if (DarkMode_ShouldUseDark() && IsComboBoxControl(hwnd))
+        {
+            PAINTSTRUCT ps;
+            HDC hdc = HANDLES(BeginPaint(hwnd, &ps));
+            if (hdc != NULL)
+                PaintDarkComboClient(hwnd, hdc);
+            HANDLES(EndPaint(hwnd, &ps));
+            return 0;
+        }
+
+        // Plain edits paint their client correctly already; only the non-client frame is light.
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (DarkMode_ShouldUseDark())
+            PaintDarkControlFrame(hwnd);
+        return ret;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (DarkMode_ShouldUseDark() && IsComboBoxControl(hwnd) &&
+            PaintDarkComboClient(hwnd, (HDC)wParam))
+        {
+            return 0;
+        }
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        // The owner-draw above covers the whole client; erasing first only flickers.
+        if (DarkMode_ShouldUseDark() && IsComboBoxControl(hwnd))
+            return TRUE;
+        break;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, EditFrameSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void ApplyEditLikeTheme(HWND hwnd, BOOL useDark)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+
+    ApplyWindowTheme(hwnd, useDark);
+    if (useDark)
+        SetWindowSubclass(hwnd, EditFrameSubclassProc, EDIT_FRAME_SUBCLASS_ID, 0);
+    else
+        RemoveWindowSubclass(hwnd, EditFrameSubclassProc, EDIT_FRAME_SUBCLASS_ID);
+
+    // SWP_FRAMECHANGED so the non-client area is repainted through the (new) handler
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    InvalidateRect(hwnd, NULL, TRUE);
+}
+
 void ApplyComboBoxChildThemes(HWND hwnd, BOOL useDark)
 {
     COMBOBOXINFO cbi = {0};
     cbi.cbSize = sizeof(cbi);
     if (GetComboBoxInfo(hwnd, &cbi))
     {
-        ApplyWindowTheme(cbi.hwndItem, useDark);
-        ApplyWindowTheme(cbi.hwndList, useDark);
+        ApplyEditLikeTheme(cbi.hwndItem, useDark); // the edit inside the combo
+        ApplyWindowTheme(cbi.hwndList, useDark);   // the drop-down list stays Explorer-themed
         if (cbi.hwndItem != NULL)
             InvalidateRect(cbi.hwndItem, NULL, TRUE);
         if (cbi.hwndList != NULL)
@@ -1143,16 +1374,14 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
     if (_tcsicmp(className, EDIT_CLASS_NAME) == 0 ||
         _tcsicmp(className, UPDOWN_CLASS) == 0)
     {
-        ApplyWindowTheme(hwnd, useDark);
-        InvalidateRect(hwnd, NULL, TRUE);
+        ApplyEditLikeTheme(hwnd, useDark); // #98: paints its own frame in dark mode
         return;
     }
 
     if (_tcsicmp(className, COMBOBOX_CLASS_NAME) == 0)
     {
-        ApplyWindowTheme(hwnd, useDark);
+        ApplyEditLikeTheme(hwnd, useDark); // #98
         ApplyComboBoxChildThemes(hwnd, useDark);
-        InvalidateRect(hwnd, NULL, TRUE);
         return;
     }
 
@@ -1201,6 +1430,18 @@ BOOL DarkMode_IsSupported()
 {
     EnsureInitialized();
     return DwmSetWindowAttributePtr != NULL;
+}
+
+HBRUSH DarkMode_GetMainFrameBrush()
+{
+    // #95: a solid dark brush for the main window CLASS background. Without it the class is
+    // registered with COLOR_WINDOW (white), so the first WM_ERASEBKGND when the window is
+    // shown paints the whole frame white for a moment before the dark children paint over it
+    // - the startup flash. Process-lifetime brush.
+    static HBRUSH mainFrameBrush = NULL;
+    if (mainFrameBrush == NULL)
+        mainFrameBrush = CreateSolidBrush(MAINFRAME_DARK_FILL);
+    return mainFrameBrush;
 }
 
 void DarkMode_SetThemeMode(int themeMode)

@@ -363,7 +363,7 @@ BOOL CData::LoadSalMenu(const char* fileName)
     if (parserState.Errors > 0)
     {
         wchar_t err[1000];
-        swprintf_s(err, L"SalMenu: found %d error(s). Please contact ALTAP for updated .mnu files.", parserState.Errors);
+        swprintf_s(err, L"SalMenu: found %d error(s). Please open an issue at https://github.com/0xeb/sally/issues for updated .mnu files.", parserState.Errors);
         OutWindow.AddLine(err, mteSummary);
     }
 

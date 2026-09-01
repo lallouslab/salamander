@@ -3,7 +3,7 @@
 // Convert Images using ImageMagick convert
 //
 // Microsoft JScript for Open Salamander Automation plugin
-// Contact us on forum.altap.cz
+// Report issues at https://github.com/0xeb/sally/issues
 //
 // Copyright (c) 2010-2023 Open Salamander Authors
 //
@@ -70,7 +70,7 @@ var logToFile = true;                                             // set 'true' 
 //   Skip All and Cancel buttons, error states handling, output log with opearation summary.
 //
 // Installation and Requirements:
-//   Open Salamander: https://www.altap.cz/
+//   Sally: https://github.com/0xeb/sally
 //   ImageMagick: http://www.imagemagick.org/ (download any Windows precompiled x86 or x64 version)
 //   Install both applications
 //
@@ -621,7 +621,7 @@ function CheckVersions()
     if (typeof(WScript) != "undefined")
     {
       var infText = "This script requires Open Salamander with Automation plugin installed.\n";
-      infText += "Please download latest version of Open Salamander from www.altap.cz.\n";
+      infText += "Please download latest version of Sally from github.com/0xeb/sally.\n";
       infText += "Install it and use menu Plugins > Automation > Run Focused Script to start this script.";
       try
       {

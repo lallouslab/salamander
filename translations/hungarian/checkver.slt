@@ -70,7 +70,7 @@ COMMENT,"Magyar változat"
 218,1,"A plugin az internettel dolgozik.\nMegszakítja ezt az internet feladatot?"
 220,1,"Internet kapcsolat inicializálása..."
 221,1,"Sikertelen inicializálás: %s"
-222,1,"Kapcsolódás a \tuwww.altap.cz\tlhttps://www.altap.cz\tn oldalra..."
+222,1,"Kapcsolódás a \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn oldalra..."
 223,1,"Csatlakozás sikertelen: %s"
 
 [STRINGTABLE 2]

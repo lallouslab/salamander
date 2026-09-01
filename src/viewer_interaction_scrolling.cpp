@@ -716,6 +716,11 @@ CViewerWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_USER_CFGCHANGED:
     {
+        // The decoded line index is keyed on the EOL policy and TabSize, so a settings change
+        // already invalidates it. Reset explicitly anyway: that coverage was incidental (via
+        // FileChanged) rather than intended, and relying on a coincidence is how the key came
+        // to be missing those fields in the first place.
+        ResetDecodedLineIndex();
         ReleaseViewerBrushs();
         CreateViewerBrushs();
         SetViewerFont();

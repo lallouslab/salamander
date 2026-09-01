@@ -152,7 +152,7 @@ vendor="Self-Extractor © 2000-2023 Open Salamander Authors"
 
 ;www link in bottom-right corner of main sfx dialog
 
-link="https://www.altap.cz/"
+link="https://github.com/0xeb/sally"
 
 ;files containing icon data, it can be either an ICO file or an PE
 ;executable file (like win32 EXEs or DLLs) containing the icon

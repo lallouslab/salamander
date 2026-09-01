@@ -56,7 +56,7 @@ function CheckVersions() {
     if (typeof(WScript) != "undefined")
     {
       var infText = "This script requires Open Salamander with Automation plugin installed.\n";
-      infText += "Please download latest version of Open Salamander from www.altap.cz.\n";
+      infText += "Please download latest version of Sally from github.com/0xeb/sally.\n";
       infText += "Install it and use menu Plugins > Automation > Run Focused Script to start this script.";
       try
       {

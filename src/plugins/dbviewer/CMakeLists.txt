@@ -6,6 +6,7 @@ sal_add_plugin(NAME dbviewer
     "${SAL_SHARED}/auxtools.cpp"
     "${SAL_SHARED}/dbg.cpp"
     "${SAL_SHARED}/plugindarkmode.cpp"
+    "${SAL_SRC}/combo_dark_paint.cpp"
     "${SAL_SHARED}/winliblt.cpp"
     "${SAL_SRC}/common/PanelTextPainter.cpp"
     "${SAL_PLUGINS}/dbviewer/csvlib/csvlib.cpp"

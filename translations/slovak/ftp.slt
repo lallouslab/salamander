@@ -1536,7 +1536,7 @@ COMMENT,"Slovenská verzia"
 10674,1,"Neplatný reťazec s textom mesiacov (formát: 12 mesiacov sa oddeľuje medzerou)."
 10680,1,"Stav automatickej detekcie obsahuje chybu.\n\nChyba: %s"
 10685,1,"Neznámy typ servera, nie je možné analyzovať text výpisu...\r\n"
-10686,1,"Nie je možné analyzovať výpis súborov a adresárov zo servera. V paneli bude zobrazený len čistý text výpisu.\n\nProsím skontrolujte naše web stránky pre novšiu verziu Sally. Ak používate poslednú verziu, prosím pošlite nám raw výpis (ak nie je dôverný; pravý klik v paneli > Zobraziť Raw výpis > Uložiť ako) na e-mail support@altap.cz. Prosím pomôžte nám s podporou ďalších typov serverov, ak je to možné."
+10686,1,"Nie je možné analyzovať výpis súborov a adresárov zo servera. V paneli bude zobrazený len čistý text výpisu.\n\nProsím skontrolujte naše web stránky pre novšiu verziu Sally. Ak používate poslednú verziu, založte prosím issue na https://github.com/0xeb/sally/issues a priložte raw výpis (ak nie je dôverný; pravý klik v paneli > Zobraziť Raw výpis > Uložiť ako). Prosím pomôžte nám s podporou ďalších typov serverov, ak je to možné."
 10687,1,"Nie je možné analyzovať text výpisu používajúci vybraný typ servera...\r\n"
 
 [STRINGTABLE 42]

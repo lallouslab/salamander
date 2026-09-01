@@ -6,6 +6,7 @@ sal_add_plugin(NAME zip
     # Shared sources (zip only uses dbg.cpp + plugcore/resedit.cpp)
     "${SAL_SHARED}/dbg.cpp"
     "${SAL_SHARED}/plugindarkmode.cpp"
+    "${SAL_SRC}/combo_dark_paint.cpp"
     "${SAL_SHARED}/plugcore/resedit.cpp"
     # Plugin sources
     "${SAL_PLUGINS}/zip/add.cpp"

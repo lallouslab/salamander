@@ -167,3 +167,9 @@ int FormatShellOverlayDiagRecord(const ShellOverlayDiagRecord& record, char* buf
 
     return written;
 }
+
+void SetOverlayDiagConfigRoot(ShellOverlayDiagHeader& header, const char* rootReg)
+{
+    lstrcpynA(header.ConfigRoot, rootReg != NULL ? rootReg : "<none: first run>",
+              (int)sizeof(header.ConfigRoot));
+}

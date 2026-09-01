@@ -1536,7 +1536,7 @@ COMMENT,"Magyar változat"
 10674,1,"Érvénytelen szöveges hónap karakterlánc (formátum: 12 hónap szünettel elválasztva)."
 10680,1,"Automatikus észlelés állapota hibát tartalmaz.\n\nHiba: %s"
 10685,1,"Ismeretlen szervertípus, szöveges listázás nem elemezhető...\r\n"
-10686,1,"Nem lehet elemezni a szerver fájljainak és mappáinak listázását. Csak formázatlan szöveges listázás fog megjelenni a panelen.\n\nKeresse fel weboldalunkat az Sally újabb verziójáért. Ha a legfrissebb verziót használja, küldje el nekünk a raw listázást (ha nem titkos; jobb kattintás a panelen > Raw listázás > Mentés mint) erre az email címre: support@altap.cz. Segítsen nekünk minél több szervertípust támogatni."
+10686,1,"Nem lehet elemezni a szerver fájljainak és mappáinak listázását. Csak formázatlan szöveges listázás fog megjelenni a panelen.\n\nKeresse fel weboldalunkat a Sally újabb verziójáért. Ha a legfrissebb verziót használja, nyisson egy hibajegyet itt: https://github.com/0xeb/sally/issues és csatolja a raw listázást (ha nem titkos; jobb kattintás a panelen > Raw listázás > Mentés mint). Segítsen nekünk minél több szervertípust támogatni."
 10687,1,"Sikertelen a választott szervertípus használatával a szöveges listázás elemzése...\r\n"
 
 [STRINGTABLE 42]

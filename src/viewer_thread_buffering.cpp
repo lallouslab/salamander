@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "viewer_line_index.h"
 
 #include "viewer.h"
 #include "codetbl.h"
@@ -883,6 +884,11 @@ void CViewerWindow::FileChanged(HANDLE file, BOOL testOnlyFileSize, BOOL& fatalE
     if (FileName.empty() && FileNameW.empty())
         return;
 
+    // The cached line scan describes the previous contents. The validity key would catch a
+    // size change, but a file edited in place keeps its size, so drop the cache whenever the
+    // viewer reloads rather than relying on the key alone.
+    ResetDecodedLineIndex();
+
     const char* s = strrchr(FileName.c_str(), '\\');
     const char* namePart = FileName.c_str();
     if (s != NULL)
@@ -1533,6 +1539,70 @@ BOOL CViewerWindow::FindPreviousEOL(HANDLE* hFile, __int64 seek, __int64 minSeek
     return !fatalErr && previousLineEnd != -1;
 }
 
+void CViewerWindow::ResetDecodedLineIndex()
+{
+    // swap-with-empty, not clear(): clear() keeps capacity, so the peak footprint of a huge
+    // file stayed committed for the lifetime of the viewer window even after a reload.
+    std::vector<CDecodedLine>().swap(DecodedLineCheckpoints);
+    DecodedLineIndexTextStart = -1;
+    DecodedLineIndexMaxCells = -1;
+    DecodedLineIndexFileSize = -1;
+    DecodedLineIndexEncoding = -1;
+    DecodedLineIndexEolFlags = -1;
+    DecodedLineIndexTabSize = -1;
+    DecodedLineIndexWrap = FALSE;
+    DecodedLineIndexComplete = FALSE;
+}
+
+int CViewerWindow::CurrentDecodedEolFlags() const
+{
+    return PackDecodedEolFlags(Configuration.EOL_CRLF != 0, Configuration.EOL_CR != 0,
+                               Configuration.EOL_LF != 0, Configuration.EOL_NULL != 0);
+}
+
+void CViewerWindow::EnsureDecodedIndexValid(__int64 textStart, __int64 maxCells)
+{
+    const int eolFlags = CurrentDecodedEolFlags();
+    if (DecodedLineIndexTextStart != textStart ||
+        DecodedLineIndexMaxCells != maxCells ||
+        DecodedLineIndexFileSize != FileSize ||
+        DecodedLineIndexEncoding != (int)TextEncoding ||
+        DecodedLineIndexEolFlags != eolFlags ||
+        DecodedLineIndexTabSize != Configuration.TabSize ||
+        DecodedLineIndexWrap != WrapText)
+    {
+        ResetDecodedLineIndex();
+        DecodedLineIndexTextStart = textStart;
+        DecodedLineIndexMaxCells = maxCells;
+        DecodedLineIndexFileSize = FileSize;
+        DecodedLineIndexEncoding = (int)TextEncoding;
+        DecodedLineIndexEolFlags = eolFlags;
+        DecodedLineIndexTabSize = Configuration.TabSize;
+        DecodedLineIndexWrap = WrapText;
+    }
+}
+
+const CViewerWindow::CDecodedLine* CViewerWindow::NearestDecodedCheckpoint(__int64 seek) const
+{
+    // Checkpoints are appended in increasing order, so a binary search is valid. We want the
+    // last one whose FOLLOWING line still starts before seek - resuming there cannot overshoot.
+    size_t lo = 0;
+    size_t hi = DecodedLineCheckpoints.size();
+    const CDecodedLine* best = NULL;
+    while (lo < hi)
+    {
+        const size_t mid = lo + (hi - lo) / 2;
+        if (DecodedLineCheckpoints[mid].NextBegin < seek)
+        {
+            best = &DecodedLineCheckpoints[mid];
+            lo = mid + 1;
+        }
+        else
+            hi = mid;
+    }
+    return best;
+}
+
 BOOL CViewerWindow::FindPreviousDecodedEOL(HANDLE* hFile, __int64 seek, __int64 minSeek, __int64& lineBegin,
                                            __int64& previousLineEnd, BOOL allowWrap, BOOL takeLineBegin,
                                            BOOL& fatalErr, int* lines, __int64* firstLineEndOff,
@@ -1561,43 +1631,92 @@ BOOL CViewerWindow::FindPreviousDecodedEOL(HANDLE* hFile, __int64 seek, __int64 
         return TRUE;
     }
 
-    __int64 pos = minSeek;
+    // Resume from the nearest checkpoint instead of re-walking from the start of the text.
+    //
+    // The index is keyed on the TEXT START, not on the caller minSeek. Keying on minSeek made
+    // display and search evict each other: a backward regex search moves minSeek every
+    // iteration, so the whole index was rebuilt once per line examined - quietly restoring the
+    // quadratic cost the memoisation removed. One shared index; results are clamped to minSeek
+    // at the end.
+    const __int64 textStart = max(TextContentOffset, (__int64)0);
+    __int64 maxCells = WrapText ? max(1, (Width - BORDER_WIDTH) / CharWidth) : TEXT_MAX_LINE_LEN + 1;
+    EnsureDecodedIndexValid(textStart, maxCells);
+
+    __int64 pos = textStart;
     __int64 lastBegin = minSeek;
     __int64 lastEnd = minSeek;
     __int64 lastPreviousEnd = minSeek;
     __int64 lastLen = 0;
+    __int64 lineOrdinal = 0;
+
+    const CDecodedLine* checkpoint = NearestDecodedCheckpoint(seek);
+    if (checkpoint != NULL)
+    {
+        // A checkpoint records the line BEFORE its resume point, which is exactly the loop
+        // state: position to continue from, plus the preceding line end and length.
+        pos = checkpoint->NextBegin;
+        lastBegin = checkpoint->Begin;
+        lastEnd = checkpoint->End;
+        lastPreviousEnd = checkpoint->End;
+        lastLen = checkpoint->CellCount;
+    }
+
     while (pos < seek && pos < FileSize)
     {
-        Sally::Unicode::DecodedRun visual;
-        __int64 lineEnd = pos;
-        __int64 nextLineBegin = pos;
+        __int64 cellCount = 0;
+        __int64 scanEnd = pos;
+        __int64 scanNext = pos;
         BOOL eol = FALSE;
         BOOL wrapped = FALSE;
         int eolBytes = 0;
-        __int64 maxCells = WrapText ? max(1, (Width - BORDER_WIDTH) / CharWidth) : TEXT_MAX_LINE_LEN + 1;
-        if (!ReadDecodedTextLine(hFile, pos, maxCells, visual, lineEnd, nextLineBegin,
-                                 eol, wrapped, eolBytes, fatalErr))
-            return FALSE;
-        if (fatalErr)
-            return FALSE;
-        if (nextLineBegin <= pos)
-            break;
-
-        if (nextLineBegin >= seek)
+        if (!ScanDecodedTextLine(hFile, pos, maxCells, cellCount, scanEnd, scanNext,
+                                 eol, wrapped, eolBytes, fatalErr) ||
+            fatalErr)
         {
-            lineBegin = pos;
+            // Never leave a half-built index behind: a later call must be able to retry.
+            ResetDecodedLineIndex();
+            return FALSE;
+        }
+        if (scanNext <= pos)
+            break; // no forward progress - the original scan stopped here too
+
+        CDecodedLine line;
+        line.Begin = pos;
+        line.End = scanEnd;
+        line.NextBegin = scanNext;
+        line.CellCount = cellCount;
+
+        if (line.NextBegin >= seek)
+        {
+            lineBegin = line.Begin;
             previousLineEnd = lastPreviousEnd;
-            lastEnd = lineEnd;
-            lastLen = (__int64)visual.CellCount();
+            lastEnd = line.End;
+            lastLen = line.CellCount;
             break;
         }
 
-        lastPreviousEnd = lineEnd;
-        lastBegin = pos;
-        lastEnd = lineEnd;
-        lastLen = (__int64)visual.CellCount();
-        pos = nextLineBegin;
+        // Remember every Nth line so a later call resumes near here rather than at the text
+        // start. Appended in increasing order, which the binary search depends on.
+        if ((lineOrdinal % DECODED_CHECKPOINT_STRIDE) == 0 &&
+            (DecodedLineCheckpoints.empty() || DecodedLineCheckpoints.back().Begin < line.Begin))
+        {
+            DecodedLineCheckpoints.push_back(line);
+        }
+        lineOrdinal++;
+
+        lastPreviousEnd = line.End;
+        lastBegin = line.Begin;
+        lastEnd = line.End;
+        lastLen = line.CellCount;
+        pos = line.NextBegin;
     }
+
+    // The index runs from the text start, so a caller asking about a later window must not be
+    // handed a line that begins before what it asked for.
+    if (lineBegin < minSeek)
+        lineBegin = minSeek;
+    if (previousLineEnd < minSeek)
+        previousLineEnd = minSeek;
 
     if (pos >= seek)
     {

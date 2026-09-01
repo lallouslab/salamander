@@ -211,6 +211,12 @@
     "1.52"
 
 #define SAL_REG_SUBKEY_CONFIGURATION_A "Configuration"
+
+// Name of the process environment variable through which the core publishes the configuration
+// root it actually resolved (see PublishConfigRootToEnvironment). Plugins must prefer this over
+// any hardcoded root: a Debug or Preview build does not live under SAL_REG_ROOT_SALLY_1_0_A,
+// and a plugin reading the wrong key gets a different theme than the core.
+#define SAL_ENV_CONFIG_ROOT_A "SALLY_CONFIG_ROOT"
 #define SAL_REG_VALUE_DEFAULT_A ""
 #define SAL_REG_VALUE_VERSION_A "Version"
 #define SAL_REG_VALUE_AUTO_IMPORT_CONFIG_A "AutoImportConfig"

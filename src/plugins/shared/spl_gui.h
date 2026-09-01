@@ -232,7 +232,7 @@ public:
     // returns NULL if SetText was not yet called and static control had no text
     virtual const char* WINAPI GetText() = 0;
 
-    // assigns action to open URL address (file="https://www.altap.cz") or
+    // assigns action to open URL address (file="https://github.com/0xeb/sally") or
     // launch program (file="C:\\TEST.EXE"); ShellExecute with 'open' command
     // is called on the parameter.
     virtual void WINAPI SetActionOpen(const char* file) = 0;

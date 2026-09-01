@@ -30,7 +30,7 @@ COMMENT,"Versiunea romana"
 10100,1,"Vizualizator Executabil Portabil"
 10101,1,"Nu pot deschide fisierul %s."
 10102,1,"Crearea fisierului temporar a esuat."
-10103,1,"A aparut o exceptie.\n\nFisierul vizualizat: %s\n\nDaca tu consideri ca fisierul vizualizat nu este corupt, te rog trimite acest fisier la support@altap.cz.\nVom reface si fixa defectul vizualizatorului. Multumiri pentru cooperare!"
+10103,1,"A aparut o exceptie.\n\nFisierul vizualizat: %s\n\nDaca tu consideri ca fisierul vizualizat nu este corupt, te rog deschide un issue la https://github.com/0xeb/sally/issues si ataseaza acest fisier.\nVom reface si fixa defectul vizualizatorului. Multumiri pentru cooperare!"
 10104,1,"Afiseaza informatii despre fisiere Executabile Portabile cum ar fi EXE, DLL, etc."
 
 [STRINGTABLE 2]

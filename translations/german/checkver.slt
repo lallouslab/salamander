@@ -70,7 +70,7 @@ COMMENT,"Deutsche Version"
 218,1,"Das Plugin verwendet eine Internetverbindung.\nMöchten Sie die Internetsitzung beenden?"
 220,1,"Initialisiere Internetverbindung..."
 221,1,"Initialisierung fehlgeschlagen: %s"
-222,1,"Verbinde zu \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"Verbinde zu \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"Verbinden fehlgeschlagen: %s"
 
 [STRINGTABLE 2]

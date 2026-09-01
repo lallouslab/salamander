@@ -1390,7 +1390,13 @@ extern LOGFONT LogFont;         // structure describing panel font
 
 BOOL CreatePanelFont(); // fills Font, FontUL and FontCharHeight based on LogFont
 
+// #96: bold labels in the bottom key bar. OFF by default: it made the words heavier without
+// touching the F-key glyphs, which are what the issue actually calls too small (they are a
+// fixed 17x13 bitmap that never scales - see the ledger). Flip to 1 to bring the bold back.
+#define SALLY_BOTTOMBAR_BOLD_LABELS 0
+
 extern HFONT EnvFont;         // environment font (edit, toolbar, header, status)
+extern HFONT EnvFontBold;     // bold variant of EnvFont (bottom toolbar shortcut labels, #96)
 extern HFONT EnvFontUL;       // underlined listbox font
 extern int EnvFontCharHeight; // font height
 extern HFONT TooltipFont;     // font for tooltips (and statusbars, but we don't use it there)
@@ -1518,6 +1524,11 @@ extern BOOL DragFullWindows; // if TRUE, change panel size realtime, otherwise a
 
 // registry key names
 extern const char* SALAMANDER_ROOT_REG;
+
+// Publishes SALAMANDER_ROOT_REG into this process's environment (SAL_ENV_CONFIG_ROOT_A) so
+// in-process plugins read the same configuration key the core does. Call after every change to
+// SALAMANDER_ROOT_REG, including when it becomes NULL.
+void PublishConfigRootToEnvironment();
 extern const char* SALAMANDER_SAVE_IN_PROGRESS;
 extern const char* SALAMANDER_COPY_IS_OK;
 extern const char* SALAMANDER_AUTO_IMPORT_CONFIG;

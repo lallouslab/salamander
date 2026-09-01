@@ -7,6 +7,7 @@
 
 #include "ui/IPrompter.h"
 #include "ui/UnicodeHistoryUtils.h"
+#include "window_placement_policy.h"
 #include "common/unicode/helpers.h"
 #include "common/IEnvironment.h"
 #include "common/IRegistry.h"
@@ -171,6 +172,26 @@ const char* SalamanderConfigurationVersions[SALCFG_ROOTS_COUNT] =
 
 const char* SALAMANDER_ROOT_REG = NULL; // will be set in salamander_entry_lifecycle.cpp
 
+// Publishes the configuration root Sally actually resolved into this process's environment,
+// so in-process plugins can read the SAME key the core reads.
+//
+// Plugins get their dark-mode setting from plugins/shared/plugindarkmode.cpp, which used to
+// hardcode "Software\Sally\1.0" and the Open Salamander 5.0 root. A Debug build runs on
+// "Software\Sally\1.0 Debug", so the core read "Theme mode" from one key and every plugin
+// dialog read it from another: switch the core to light and the FTP and Welcome dialogs stayed
+// black, across restarts, because the two keys genuinely disagreed. Any non-default root
+// (Debug, Preview, an imported config) has the same split.
+//
+// An environment variable rather than a new plugin API on purpose: plugins live in this
+// process, it needs no ABI change and no lockstep rebuild, and a plugin running without Sally
+// simply does not see it and falls back to its old behaviour.
+void PublishConfigRootToEnvironment()
+{
+    // NULL is meaningful (UPGRADE abort: "do not write configuration"), so clear it rather
+    // than leaving a stale value that would outlive the reason it was set.
+    SetEnvironmentVariableA(SAL_ENV_CONFIG_ROOT_A, SALAMANDER_ROOT_REG);
+}
+
 const char* SALAMANDER_SAVE_IN_PROGRESS = "Save In Progress"; // value exists only during configuration save (detects interrupted saves -> corrupted configuration)
 BOOL IsSetSALAMANDER_SAVE_IN_PROGRESS = FALSE;                // TRUE = the registry contains SALAMANDER_SAVE_IN_PROGRESS (detect interrupted configuration saving)
 
@@ -188,6 +209,26 @@ const char* WINDOW_SPLIT_REG = "Split Position";
 const char* WINDOW_BEFOREZOOMSPLIT_REG = "Before Zoom Split Position";
 const char* WINDOW_SHOW_REG = "Show";
 const char* FINDDIALOG_NAMEWIDTH_REG = "Name Width";
+
+// #97: collect monitor work areas and clamp a normal-window rect to a sane, visible size
+// before it is applied - so a stale/off-screen saved rect (e.g. after resume-from-sleep
+// monitor reattach at high DPI) cannot collapse the window to a sliver.
+static BOOL CALLBACK CollectMonitorWorkAreaProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam)
+{
+    std::vector<RECT>* mons = reinterpret_cast<std::vector<RECT>*>(lParam);
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (GetMonitorInfo(hMon, &mi))
+        mons->push_back(mi.rcWork);
+    return TRUE;
+}
+
+RECT SanitizeMainWindowNormalRect(RECT rect)
+{
+    std::vector<RECT> mons;
+    EnumDisplayMonitors(NULL, NULL, CollectMonitorWorkAreaProc, reinterpret_cast<LPARAM>(&mons));
+    return SanitizeWindowRect(rect, mons.data(), (int)mons.size(), 400, 300);
+}
 
 const char* SALAMANDER_LEFTP_REG = "Left Panel";
 const char* SALAMANDER_RIGHTP_REG = "Right Panel";
@@ -2511,11 +2552,30 @@ void LoadIconOvrlsInfo(const char* root)
     }
 }
 
+// #95: The main window becomes VISIBLE inside LoadConfig(): SetWindowPlacement() below
+// applies the persisted showCmd. That happened ~100 lines BEFORE the theme was finalized,
+// so the first painted frame was the default LIGHT theme and flipped to dark a few hundred
+// milliseconds later (measured: ~250ms of a fully light-themed window). Finalize the theme -
+// including the class erase brush - before the window can appear.
+static void ApplyStartupThemeToMainWindow(HWND hWindow)
+{
+    DarkMode_SetThemeMode(Configuration.ThemeMode);
+    ColorsChanged(TRUE, FALSE, TRUE); // rebuild color-dependent resources for the initial theme
+    // the class brush is what WM_ERASEBKGND paints with before the children draw
+    SetClassLongPtr(hWindow, GCLP_HBRBACKGROUND,
+                    (LONG_PTR)(DarkMode_ShouldUseDark() ? DarkMode_GetMainFrameBrush()
+                                                        : (HBRUSH)(COLOR_WINDOW + 1)));
+    DarkMode_ApplyTitleBar(hWindow);
+    DarkMode_ApplyToThreadTopLevelWindows(GetCurrentThreadId());
+}
+
 BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* cmdLineParams)
 {
     CALL_STACK_MESSAGE2("CMainWindow::LoadConfig(%d)", importingOldConfig);
     if (SALAMANDER_ROOT_REG == NULL)
         return FALSE;
+
+    BOOL themeFinalized = FALSE; // #95: theme applied before the window can become visible
 
     LoadSaveToRegistryMutex.Enter();
 
@@ -3991,6 +4051,12 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
                 }
                 }
             }
+            // #97: clamp the restored normal rect to a visible, sane size on a real monitor.
+            place.rcNormalPosition = SanitizeMainWindowNormalRect(place.rcNormalPosition);
+            // #95: SetWindowPlacement() makes the window visible - finalize the theme first so the
+            // very first painted frame is already dark.
+            ApplyStartupThemeToMainWindow(HWindow);
+            themeFinalized = TRUE;
             SetWindowPlacement(HWindow, &place);
         }
         LeftPanel->SetupListBoxScrollBars();
@@ -4078,12 +4144,10 @@ BOOL CMainWindow::LoadConfig(BOOL importingOldConfig, const CCommandLineParams* 
         // restore DefaultDir
         MainWindow->UpdateDefaultDir(TRUE);
 
-        // Main window is created before LoadConfig() runs; re-apply titlebar theme
-        // now that Configuration.ThemeMode is finalized from persisted settings.
-        DarkMode_SetThemeMode(Configuration.ThemeMode);
-        ColorsChanged(TRUE, FALSE, TRUE); // rebuild color-dependent resources for initial theme
-        DarkMode_ApplyTitleBar(HWindow);
-        DarkMode_ApplyToThreadTopLevelWindows(GetCurrentThreadId());
+        // #95: normally already done above, before SetWindowPlacement() could show the
+        // window. This covers the path where no persisted window placement existed.
+        if (!themeFinalized)
+            ApplyStartupThemeToMainWindow(HWindow);
         if (EditWindow != NULL && EditWindow->HWindow != NULL)
         {
             EditWindowSetDirectory();

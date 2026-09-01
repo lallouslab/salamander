@@ -3,6 +3,9 @@
 
 #include "precomp.h"
 #include "plugindarkmode.h"
+#include "combo_dark_paint.h"
+
+#include <vector>
 
 #include <commctrl.h>
 #include <tchar.h>
@@ -39,7 +42,11 @@ const COLORREF DARK_INACTIVE_CAPTION_BG = RGB(48, 48, 48);
 const TCHAR* IMMERSIVE_COLOR_SET_PARAM = TEXT("ImmersiveColorSet");
 const TCHAR* WINDOWS_THEME_ELEMENT_PARAM = TEXT("WindowsThemeElement");
 const TCHAR* SCROLLBAR_CLASS_NAME = TEXT("ScrollBar");
+const TCHAR* BUTTON_CLASS_NAME = TEXT("Button");
+const TCHAR* EDIT_CLASS_NAME = TEXT("Edit");
+const TCHAR* COMBOBOX_CLASS_NAME = TEXT("ComboBox");
 const WCHAR* UXTHEME_DARKMODE_EXPLORER = L"DarkMode_Explorer";
+const UINT_PTR PLUGIN_EDIT_FRAME_SUBCLASS_ID = 16;
 
 BOOL Initialized = FALSE;
 PFNDWMSETWINDOWATTRIBUTE DwmSetWindowAttributePtr = NULL;
@@ -103,8 +110,41 @@ BOOL ReadSystemPrefersDarkApps()
     return value == 0;
 }
 
+// Reads "Theme mode" from the configuration key the HOST is actually using.
+//
+// This used to try two hardcoded roots. That is wrong whenever Sally is not running on the
+// default one: a Debug build lives under "Software\\Sally\\1.0 Debug", so the core read the
+// theme from that key while every plugin dialog read it from "Software\\Sally\\1.0". Switching
+// the core to the light theme left the FTP and Welcome dialogs black across restarts, because
+// the two keys really did hold different values. Preview builds and imported configurations
+// split the same way.
+//
+// The core now publishes the root it resolved into the process environment
+// (PublishConfigRootToEnvironment), so prefer that and treat the hardcoded roots as a fallback
+// for a plugin running outside a Sally that publishes it.
 BOOL ReadConfiguredThemeMode(int* themeMode)
 {
+    char hostRoot[MAX_PATH];
+    DWORD hostRootLen = GetEnvironmentVariableA(SAL_ENV_CONFIG_ROOT_A, hostRoot, (DWORD)sizeof(hostRoot));
+    if (hostRootLen > 0 && hostRootLen < sizeof(hostRoot))
+    {
+        char hostKey[MAX_PATH];
+        if (_snprintf_s(hostKey, sizeof(hostKey), _TRUNCATE, "%s\\%s", hostRoot,
+                        SAL_REG_SUBKEY_CONFIGURATION_A) > 0)
+        {
+            DWORD value = PLUGIN_THEME_MODE_LIGHT;
+            if (ReadRegistryDword(HKEY_CURRENT_USER, hostKey, "Theme mode", &value))
+            {
+                *themeMode = NormalizeThemeMode((int)value);
+                return TRUE;
+            }
+            // The host named its root and it carries no "Theme mode" yet: that means the
+            // default, NOT "go look in some other build's key".
+            *themeMode = PLUGIN_THEME_MODE_LIGHT;
+            return TRUE;
+        }
+    }
+
     static const char* configRoots[] = {
         SAL_REG_ROOT_SALLY_1_0_A "\\" SAL_REG_SUBKEY_CONFIGURATION_A,
         SAL_REG_ROOT_OPENSAL_5_0_A "\\" SAL_REG_SUBKEY_CONFIGURATION_A,
@@ -171,6 +211,253 @@ BOOL IsThemeSettingHint(LPARAM lParam)
            _tcsicmp(valueName, WINDOWS_THEME_ELEMENT_PARAM) == 0;
 }
 
+// #98: same white hairline as in the core - the control's NON-CLIENT frame, painted by
+// Windows with system (light) colours. No theme class governs it, so paint it ourselves, the
+// way the core's Find dialog has always done for its combos.
+// #98: a combobox has to be OWNER-DRAWN, not outlined.
+//
+// Painting the control normally and then drawing a 1px frame over the edge leaves the
+// control's own white 2px frame and its white drop-down button underneath - measured on the
+// FTP Connect dialog. Kept in lockstep with darkmode.cpp's PaintDarkComboClient(); the
+// issue98 test pins core/plugin parity.
+const COLORREF DARK_COMBO_LINE = RGB(55, 55, 58);
+const COLORREF DARK_COMBO_BUTTON = RGB(52, 52, 56);
+
+void PluginFillRectSolid(HDC hdc, const RECT* rect, COLORREF color)
+{
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldColor = SetDCBrushColor(hdc, color);
+    FillRect(hdc, rect, (HBRUSH)GetStockObject(DC_BRUSH));
+    SetDCBrushColor(hdc, oldColor);
+    SelectObject(hdc, oldBrush);
+}
+
+void PluginDrawComboArrow(HDC hdc, const RECT* rect, COLORREF color)
+{
+    int centerX = (rect->left + rect->right) / 2;
+    int centerY = (rect->top + rect->bottom) / 2;
+    POINT arrow[3] = {
+        {centerX - 3, centerY - 1},
+        {centerX + 4, centerY - 1},
+        {centerX, centerY + 3},
+    };
+
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(DC_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    COLORREF oldPenColor = SetDCPenColor(hdc, color);
+    COLORREF oldBrushColor = SetDCBrushColor(hdc, color);
+    Polygon(hdc, arrow, 3);
+    SetDCBrushColor(hdc, oldBrushColor);
+    SetDCPenColor(hdc, oldPenColor);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+}
+
+BOOL PluginGetChildRectInParent(HWND hParent, HWND hChild, RECT* rect)
+{
+    if (hParent == NULL || hChild == NULL || rect == NULL || !IsWindow(hParent) || !IsWindow(hChild))
+        return FALSE;
+
+    // A drop-list combo reports itself (or nothing) as hwndItem; treating the control as its own
+    // child yields a rect covering the whole client, and ExcludeClipRect then erases everything
+    // the painter is about to draw.
+    if (hChild == hParent)
+        return FALSE;
+    if (!GetWindowRect(hChild, rect))
+        return FALSE;
+    MapWindowPoints(NULL, hParent, (POINT*)rect, 2);
+    return TRUE;
+}
+
+BOOL PluginIsComboBoxControl(HWND hwnd)
+{
+    TCHAR className[64] = {0};
+    if (GetClassName(hwnd, className, _countof(className)) == 0)
+        return FALSE;
+    return _tcsicmp(className, COMBOBOX_CLASS_NAME) == 0;
+}
+
+BOOL PaintPluginDarkComboClient(HWND hwnd, HDC paintDC)
+{
+    PluginDarkModeColors colors;
+    if (!PluginDarkMode_GetColors(&colors))
+        return FALSE;
+
+    RECT client;
+    GetClientRect(hwnd, &client);
+    if (client.right <= client.left || client.bottom <= client.top)
+        return TRUE;
+
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    GetComboBoxInfo(hwnd, &cbi);
+
+    RECT editRect;
+    BOOL haveEditRect = PluginGetChildRectInParent(hwnd, cbi.hwndItem, &editRect);
+
+    int savedDC = SaveDC(paintDC);
+    if (haveEditRect)
+        ExcludeClipRect(paintDC, editRect.left, editRect.top, editRect.right, editRect.bottom);
+
+    PluginFillRectSolid(paintDC, &client, colors.InputBackground);
+
+    int scrollWidth = GetSystemMetrics(SM_CXVSCROLL);
+    int clientHeight = client.bottom - client.top;
+    int buttonWidth = scrollWidth > clientHeight ? scrollWidth : clientHeight;
+    RECT button = client;
+    int buttonLeft = client.right - buttonWidth - 1;
+    button.left = buttonLeft > client.left + 1 ? buttonLeft : client.left + 1;
+    button.top = client.top + 1;
+    button.right = client.right - 1;
+    button.bottom = client.bottom - 1;
+    if (button.right > button.left && button.bottom > button.top)
+    {
+        PluginFillRectSolid(paintDC, &button, DARK_COMBO_BUTTON);
+        HGDIOBJ oldPen = SelectObject(paintDC, GetStockObject(DC_PEN));
+        COLORREF oldPenColor = SetDCPenColor(paintDC, DARK_COMBO_LINE);
+        MoveToEx(paintDC, button.left, button.top, NULL);
+        LineTo(paintDC, button.left, button.bottom);
+        SetDCPenColor(paintDC, oldPenColor);
+        SelectObject(paintDC, oldPen);
+        PluginDrawComboArrow(paintDC, &button,
+                             IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
+    }
+
+    // A CBS_DROPDOWNLIST combo has no edit child, so without this its selected item is never
+    // drawn and the control renders as an empty box with an arrow. Plugin dialogs are full of
+    // them - the FTP Logs picker, the confirmation combos, 7zip and renamer settings.
+    if (!haveEditRect)
+        ComboDarkDrawSelectedItem(hwnd, paintDC, client, button, {colors.InputText, colors.DisabledText, colors.Highlight, colors.HighlightText});
+
+    RestoreDC(paintDC, savedDC);
+    HBRUSH frameBrush = CreateSolidBrush(colors.Border);
+    if (frameBrush != NULL)
+    {
+        FrameRect(paintDC, &client, frameBrush);
+        DeleteObject(frameBrush);
+    }
+    return TRUE;
+}
+
+void PaintPluginDarkControlFrame(HWND hwnd)
+{
+    PluginDarkModeColors colors;
+    if (!PluginDarkMode_GetColors(&colors))
+        return;
+    HDC hdc = GetWindowDC(hwnd);
+    if (hdc == NULL)
+        return;
+    RECT rect;
+    GetWindowRect(hwnd, &rect);
+    OffsetRect(&rect, -rect.left, -rect.top);
+    HBRUSH hBrush = CreateSolidBrush(colors.Border);
+    if (hBrush != NULL)
+    {
+        FrameRect(hdc, &rect, hBrush);
+        DeleteObject(hBrush);
+    }
+    ReleaseDC(hwnd, hdc);
+}
+
+LRESULT CALLBACK PluginEditFrameSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                             UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    UNREFERENCED_PARAMETER(dwRefData);
+
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (PluginDarkMode_ShouldUseDark())
+        {
+            // Scrollbars are non-client and painted by the default handler. Suppressing it left
+            // multiline edits - the FTP log window, renamer stderr, dbviewer properties - with a
+            // blank gutter and no usable scrollbar.
+            const LONG style = GetWindowLong(hwnd, GWL_STYLE);
+            if ((style & (WS_VSCROLL | WS_HSCROLL)) != 0)
+            {
+                LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+                PaintPluginDarkControlFrame(hwnd);
+                return ret;
+            }
+            PaintPluginDarkControlFrame(hwnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_PAINT:
+    {
+        // A combobox is owner-drawn outright - see PaintPluginDarkComboClient.
+        if (PluginDarkMode_ShouldUseDark() && PluginIsComboBoxControl(hwnd))
+        {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            if (hdc != NULL)
+                PaintPluginDarkComboClient(hwnd, hdc);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        LRESULT ret = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+        if (PluginDarkMode_ShouldUseDark())
+            PaintPluginDarkControlFrame(hwnd);
+        return ret;
+    }
+
+    case WM_PRINTCLIENT:
+    {
+        if (PluginDarkMode_ShouldUseDark() && PluginIsComboBoxControl(hwnd) &&
+            PaintPluginDarkComboClient(hwnd, (HDC)wParam))
+        {
+            return 0;
+        }
+        break;
+    }
+
+    case WM_ERASEBKGND:
+    {
+        if (PluginDarkMode_ShouldUseDark() && PluginIsComboBoxControl(hwnd))
+            return TRUE;
+        break;
+    }
+
+    case WM_NCDESTROY:
+    {
+        RemoveWindowSubclass(hwnd, PluginEditFrameSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void ApplyPluginEditLikeTheme(HWND hwnd, BOOL useDark)
+{
+    if (hwnd == NULL || !IsWindow(hwnd))
+        return;
+    MaybeSetWindowTheme(hwnd, useDark);
+    if (useDark)
+        SetWindowSubclass(hwnd, PluginEditFrameSubclassProc, PLUGIN_EDIT_FRAME_SUBCLASS_ID, 0);
+    else
+        RemoveWindowSubclass(hwnd, PluginEditFrameSubclassProc, PLUGIN_EDIT_FRAME_SUBCLASS_ID);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    InvalidateRect(hwnd, NULL, TRUE);
+}
+
+void ApplyComboBoxChildThemes(HWND hwnd, BOOL useDark)
+{
+    COMBOBOXINFO cbi = {0};
+    cbi.cbSize = sizeof(cbi);
+    if (!GetComboBoxInfo(hwnd, &cbi))
+        return;
+    if (cbi.hwndItem != NULL)
+        ApplyPluginEditLikeTheme(cbi.hwndItem, useDark); // the edit inside the combo
+    if (cbi.hwndList != NULL)
+        MaybeSetWindowTheme(cbi.hwndList, useDark); // the drop-down list
+}
+
 void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
 {
     if (hwnd == NULL || !IsWindow(hwnd))
@@ -212,6 +499,31 @@ void ApplyListTreeThemeToControl(HWND hwnd, BOOL useDark)
     if (_tcsicmp(className, TOOLTIPS_CLASS) == 0)
     {
         PluginDarkMode_ApplyTooltipTheme(hwnd);
+        return;
+    }
+
+    // #98: plugin dialogs already got dark BACKGROUNDS (WM_CTLCOLOR* in winliblt), but
+    // buttons, edits and comboboxes were never themed, so Windows drew them with their
+    // light frames - bright white borders on every control in dark mode. The core does
+    // theme these classes (darkmode.cpp ApplyListTreeThemeToControl); this helper did not,
+    // which is why EVERY plugin dialog (not just FTP) looked half-themed.
+    if (_tcsicmp(className, BUTTON_CLASS_NAME) == 0)
+    {
+        MaybeSetWindowTheme(hwnd, useDark);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return;
+    }
+
+    if (_tcsicmp(className, EDIT_CLASS_NAME) == 0)
+    {
+        ApplyPluginEditLikeTheme(hwnd, useDark); // #98: paints its own frame in dark mode
+        return;
+    }
+
+    if (_tcsicmp(className, COMBOBOX_CLASS_NAME) == 0)
+    {
+        ApplyPluginEditLikeTheme(hwnd, useDark); // #98
+        ApplyComboBoxChildThemes(hwnd, useDark);
         return;
     }
 }

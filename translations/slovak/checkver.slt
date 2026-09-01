@@ -70,7 +70,7 @@ COMMENT,"Slovenská verzia"
 218,1,"Plugin pracuje s internetom.\nChcete prerušiť túto internetovú reláciu?"
 220,1,"Inicializujem internetové spojenie..."
 221,1,"Inicializácia zlyhala: %s"
-222,1,"Pripájam sa na \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"Pripájam sa na \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"Pripojenie zlyhalo: %s"
 
 [STRINGTABLE 2]

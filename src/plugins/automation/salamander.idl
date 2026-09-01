@@ -316,7 +316,7 @@ interface ISalamander : IUnknown
 
 	/// \brief Sends an error message to the Trace Server.
 	///
-	/// The \b TraceE method sends the error level message to the Altap
+	/// The \b TraceE method sends the error level message to the Sally
 	/// Trace Server.
 	///
 	/// \param message Required. String to be sent to the Trace Server.

@@ -10,9 +10,9 @@ WEB,"forum.altap.cz/viewtopic.php?f=23&t=6168"
 COMMENT,"Versión en español"
 
 [STRINGTABLE 0]
-10100,1,"Visor de Internet Explorer"
-10101,1,"No se puede abrir el Visor de Internet Explorer.\nPor favor, informe de este problema a support@altap.cz."
+10100,1,"Visor Web"
+10101,1,"No se puede abrir el Visor Web.\nPor favor, asegúrese de que Microsoft Edge WebView2 Runtime está instalado."
 10102,1,"Error"
-10103,1,"Visor ligero para HTML y XML basado en Internet Explorer."
+10103,1,"Visor ligero de HTML, XML y Markdown basado en Microsoft Edge WebView2."
 10105,1,"Acerca del Plugin"
 

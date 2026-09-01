@@ -30,7 +30,7 @@ COMMENT,"Versión en español"
 10100,1,"Visor de ejecutable portátil"
 10101,1,"Imposible abrir el fichero %s."
 10102,1,"Ha fallado la creación de un fichero temporal."
-10103,1,"Ha sucedido una excepción.\n\nFichero visto: %s\n\nSi cree que el fichero visto no está corrupto, envíe este fichero a support@altap.cz.\nLo reproduciremos y corregiremos el fallo. ¡Gracias por su cooperación!"
+10103,1,"Ha sucedido una excepción.\n\nFichero visto: %s\n\nSi cree que el fichero visto no está corrupto, abra una incidencia en https://github.com/0xeb/sally/issues y adjunte este fichero.\nLo reproduciremos y corregiremos el fallo. ¡Gracias por su cooperación!"
 10104,1,"Presenta información sobre ficheros ejecutables portátiles como EXE, DLL, etc."
 
 [STRINGTABLE 2]

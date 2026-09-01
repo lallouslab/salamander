@@ -70,7 +70,7 @@ COMMENT,"Nederlandse versie"
 218,1,"Plugin is bezig.\nWilt u deze internet sessie beëindigen?"
 220,1,"Initialiseren internet verbinding..."
 221,1,"Initialiseren mislukt: %s"
-222,1,"Verbinden met \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"Verbinden met \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"Verbinding mislukt: %s"
 
 [STRINGTABLE 2]

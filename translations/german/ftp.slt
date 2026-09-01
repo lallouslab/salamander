@@ -1536,7 +1536,7 @@ COMMENT,"Deutsche Version"
 10674,1,"Ungültige Zeichenkette in ausgeschriebenen Monaten (Format: 12 Monate getrennt mit Leerzeichen)."
 10680,1,"Bedingungen für die automatische Ermittlung enthalten Fehler.\n\nFehler: %s"
 10685,1,"Unbekannter Servertyp, kann die Textauflistung nicht analysieren...\r\n"
-10686,1,"Kann die Liste der Dateien und Verzeichnisse des Servers nicht analysieren. Nur die eindeutige Textliste wird im Fenster angezeigt.\n\nBitte überprüfen Sie unsere Seite auf eine neuere Sally Version. Wenn Sie die aktuelle Version benutzen, senden Sie uns bitte die einfache Auflistung (im Fenster rechts klicken > Einfache Liste zeigen > Speichern unter) an die E-Mail-Adresse support@altap.cz. Bitte helfen Sie uns möglichst viele Typen von Servern zu unterstützen."
+10686,1,"Kann die Liste der Dateien und Verzeichnisse des Servers nicht analysieren. Nur die eindeutige Textliste wird im Fenster angezeigt.\n\nBitte überprüfen Sie unsere Seite auf eine neuere Sally Version. Wenn Sie die aktuelle Version benutzen, erstellen Sie bitte ein Issue auf https://github.com/0xeb/sally/issues und hängen Sie die einfache Auflistung an (im Fenster rechts klicken > Einfache Liste zeigen > Speichern unter). Bitte helfen Sie uns möglichst viele Typen von Servern zu unterstützen."
 10687,1,"Kann die Textauflistung des gewählten Servertyps nicht analysieren...\r\n"
 
 [STRINGTABLE 42]

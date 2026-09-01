@@ -70,7 +70,7 @@ COMMENT,"Version française"
 218,1,"Le module travaille avec Internet.\nVoulez-vous interrompre cette session Internet?"
 220,1,"Initialisation de la connexion Internet..."
 221,1,"Echec de l'initialisation: %s"
-222,1,"Connexion à \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"Connexion à \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"Echec de la connexion: %s"
 
 [STRINGTABLE 2]

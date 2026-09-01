@@ -30,7 +30,7 @@ COMMENT,"Slovenská verzia"
 10100,1,"Prehliadač spustitelných súborov"
 10101,1,"Nie je možné otvoriť súbor %s."
 10102,1,"Vytvorenie dočasného súboru zlyhalo."
-10103,1,"Vyskytla sa výnimka.\n\nPrehliadaný súbor: %s\n\nAk si myslíte, že prehliadaný súbor nie je poškodený, prosím pošlite tento súbor na support@altap.cz.\nMy preveríme a opravíme chybu prehliadača. Ďakujeme za spoluprácu!"
+10103,1,"Vyskytla sa výnimka.\n\nPrehliadaný súbor: %s\n\nAk si myslíte, že prehliadaný súbor nie je poškodený, založte prosím issue na https://github.com/0xeb/sally/issues a priložte tento súbor.\nMy preveríme a opravíme chybu prehliadača. Ďakujeme za spoluprácu!"
 10104,1,"Zobrazí informácie o prenosných spustiteľných súboroch, napr.: EXE, DLL, atď."
 
 [STRINGTABLE 2]

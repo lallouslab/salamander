@@ -3,7 +3,7 @@
 // Unpack Multiple Archives using 7-Zip archiver
 //
 // Microsoft JScript for Open Salamander Automation plugin
-// Contact us on forum.altap.cz
+// Report issues at https://github.com/0xeb/sally/issues
 //
 // Copyright (c) 2010-2023 Open Salamander Authors
 //
@@ -79,7 +79,7 @@ var archivesMask = "*";                        // only archives with name matchi
 //   with opearation summary.
 //
 // Installation and Requirements:
-//   Open Salamander: https://www.altap.cz/
+//   Sally: https://github.com/0xeb/sally
 //   7-Zip: http://www.7-zip.org/ (download any Windows x86 or x64 version)
 //   Install both applications
 //   OPTIONAL: Set 'pathTo7Zip' variable to the 7z.exe.
@@ -395,7 +395,7 @@ function CheckVersions()
     if (typeof(WScript) != "undefined")
     {
       var infText = "This script requires Open Salamander with Automation plugin installed.\n";
-      infText += "Please download latest version of Open Salamander from www.altap.cz.\n";
+      infText += "Please download latest version of Sally from github.com/0xeb/sally.\n";
       infText += "Install it and use menu Plugins > Automation > Run Focused Script to start this script.";
       try
       {

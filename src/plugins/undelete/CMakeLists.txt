@@ -8,6 +8,7 @@ sal_add_plugin(NAME undelete
     "${SAL_SHARED}/dbg.cpp"
     "${SAL_SHARED}/mhandles.cpp"
     "${SAL_SHARED}/plugindarkmode.cpp"
+    "${SAL_SRC}/combo_dark_paint.cpp"
     "${SAL_SHARED}/winliblt.cpp"
     # Plugin sources
     "${SAL_PLUGINS}/undelete/dialogs.cpp"

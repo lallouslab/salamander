@@ -8,6 +8,7 @@ sal_add_plugin(NAME filecomp
     "${SAL_SHARED}/auxtools.cpp"
     "${SAL_SHARED}/dbg.cpp"
     "${SAL_SHARED}/plugindarkmode.cpp"
+    "${SAL_SRC}/combo_dark_paint.cpp"
     "${SAL_SHARED}/winliblt.cpp"
     "${SAL_SHARED}/plugcore/messages.cpp"
     "${SAL_SHARED}/plugcore/str.cpp"

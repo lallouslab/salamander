@@ -151,7 +151,7 @@ vendor="Self-Extractor © 2000-2023 Open Salamander Authors"
 
 ;www odkaz v pravém dolním rohu dialogového okénka
 
-link="https://www.altap.cz"
+link="https://github.com/0xeb/sally"
 
 ;soubor obsahující ikonu, mùže to být buï ICO soubor nebo PE spusti-
 ;telný modul (jako jsou win32 EXE a DLL soubory) obsahující ikonu

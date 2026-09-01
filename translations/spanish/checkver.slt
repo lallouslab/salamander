@@ -70,7 +70,7 @@ COMMENT,"Versión en español"
 218,1,"El plugin está trabajando con Internet.\n¿Desea interrumpir esta sesión de Internet?"
 220,1,"Inicializando conexión con Internet..."
 221,1,"Inicialización fallida: %s"
-222,1,"Conectando con \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"Conectando con \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"Conexión fallida: %s"
 
 [STRINGTABLE 2]

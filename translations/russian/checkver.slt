@@ -70,7 +70,7 @@ COMMENT,"Русская версия"
 218,1,"Модуль работает с Интернетом.\nВы хотите завершить эту сессию?"
 220,1,"Инициализация соединения с Интернетом..."
 221,1,"Ошибка инициализации: %s"
-222,1,"Подключение к \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"Подключение к \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"Ошибка подключения: %s"
 
 [STRINGTABLE 2]

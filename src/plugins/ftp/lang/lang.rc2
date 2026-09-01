@@ -473,7 +473,7 @@ STRINGTABLE
  IDS_STPAR_UNABLECOMPAUTODCOND, "Autodetect condition contains error.\n\nError: %s"
 
  IDS_LOGMSGUNKNOWNSRVTYPE, "Unknown server type, unable to parse text listing...\r\n"
- IDS_UNKNOWNSRVTYPEINFO, "Unable to parse listing of files and directories from server. Only plain text of listing will be displayed in panel.\n\nPlease check our web pages for newer version of Sally. If you are using the latest version, please send us raw listing (if not confidential; right click in panel > Show Raw Listing > Save As) to email github.com/0xeb/sally/issues. Please help us to support as many types of servers as possible."
+ IDS_UNKNOWNSRVTYPEINFO, "Unable to parse listing of files and directories from server. Only plain text of listing will be displayed in panel.\n\nPlease check our web pages for newer version of Sally. If you are using the latest version, please open an issue at https://github.com/0xeb/sally/issues and attach the raw listing (if not confidential; right click in panel > Show Raw Listing > Save As). Please help us to support as many types of servers as possible."
  IDS_LOGMSGUNKNOWNSRVTYPE2, "Unable to parse text listing using selected server type...\r\n"
  IDS_UNKNOWNSRVTYPEINFO2, "Unable to parse listing of files and directories from server. Only plain text of listing will be displayed in panel.\n\nTry to select different server type or let FTP client to autodetect it (use Advanced button in Connect to FTP Server dialog)."
  IDS_LOGMSGPARSEDBYSRVTYPE, "Text listing was parsed by ""%s"" server type...\r\n"

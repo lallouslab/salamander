@@ -83,6 +83,7 @@ CToolBar::CToolBar(HWND hNotifyWindow, CObjectOrigin origin)
     Height = 0;
     HFont = NULL;
     FontHeight = 0;
+    UseBoldFont = FALSE;
     HNotifyWindow = hNotifyWindow;
     HImageList = NULL;
     HHotImageList = NULL;

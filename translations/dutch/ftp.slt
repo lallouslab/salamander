@@ -1536,7 +1536,7 @@ COMMENT,"Nederlandse versie"
 10674,1,"Ongeldige tekenreeks in geschreven maanden (formaat: 12 maanden door spatie gescheiden)."
 10680,1,"Autodetect conditie bevat fout.\n\nFout: %s"
 10685,1,"Onbekende server type, kan text lijst niet analyseren...\r\n"
-10686,1,"Kan de lijst van bestanden en mappen van de server niet analyseren. Alleen de normale text lijst kan in het paneel weergegeven worden.\n\nZie aub onze web paginas voor een nieuwe versie van Sally. Als u de nieuwste versie al gebruikt, stuur ons aub de ruwe weergave lijst (Rechtse klik in het paneel > Ruwe Lijst Weergave > Opslaan Als) naar email support@altap.cz. Help ons aub om zoveel mogelijk servers te ondersteunen als mogelijk."
+10686,1,"Kan de lijst van bestanden en mappen van de server niet analyseren. Alleen de normale text lijst kan in het paneel weergegeven worden.\n\nZie aub onze web paginas voor een nieuwe versie van Sally. Als u de nieuwste versie al gebruikt, maak dan a.u.b. een issue aan op https://github.com/0xeb/sally/issues en voeg de ruwe weergave lijst toe (Rechtse klik in het paneel > Ruwe Lijst Weergave > Opslaan Als). Help ons aub om zoveel mogelijk servers te ondersteunen als mogelijk."
 10687,1,"Kan de text lijst van het geselecteerde server type niet analyseren...\r\n"
 
 [STRINGTABLE 42]

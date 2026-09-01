@@ -1151,7 +1151,7 @@
 
 // message to Log when it's not possible to find parser for text listing (autodetecting server type): Unknown server type, unable to parse text listing...\r\n
 #define IDS_LOGMSGUNKNOWNSRVTYPE      10685
-// message for user when it's not possible to find parser for text listing (autodetecting server type): Unable to parse listing of files and directories from server. Only plain text of listing will be displayed in panel.\n\nPlease check our web pages for newer version of Open Salamander. If you are using the latest version, please send us raw listing (if not confidential; right click in panel > Show Raw Listing > Save As) to email support@altap.cz. Please help us to support as many types of servers as possible.
+// message for user when it's not possible to find parser for text listing (autodetecting server type): Unable to parse listing of files and directories from server. Only plain text of listing will be displayed in panel.\n\nPlease check our web pages for newer version of Sally. If you are using the latest version, please open an issue at https://github.com/0xeb/sally/issues and attach the raw listing (if not confidential; right click in panel > Show Raw Listing > Save As). Please help us to support as many types of servers as possible.
 #define IDS_UNKNOWNSRVTYPEINFO        10686
 // message to Log when it's not possible to use selected parser for text listing: Unable to parse text listing using selected server type...\r\n
 #define IDS_LOGMSGUNKNOWNSRVTYPE2     10687

@@ -86,7 +86,7 @@ void CToolBar::SetFont()
 
     if (Style & TLB_STYLE_TEXT)
     {
-        HFont = EnvFont;
+        HFont = (UseBoldFont && EnvFontBold != NULL) ? EnvFontBold : EnvFont; // #96
 
         HDC hDC = HANDLES(GetDC(NULL));
         TEXTMETRIC tm;

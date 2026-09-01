@@ -1536,7 +1536,7 @@ COMMENT,"Versiunea romana"
 10674,1,"Sir invalid cu luni in mod text (format: 12 luni separate cu spatii)."
 10680,1,"Conditia autodetect contine eroare.\n\nEroare: %s"
 10685,1,"Tip server necunoscut, nu pot analiza listarea...\r\n"
-10686,1,"Nu pot analiza listarea fisierelor si directoarelor de pe server. Numai tip text din listare va fi afisat in panou.\n\nVa rugam verificati paginile noastre web pentru o versiune mai noua a Sally. Daca folositi ultima versiune, va rugam sa ne trimiteti listarea raw (daca nu e confidentiala; click drt in panou > Arata Listare Raw > Salveaza Ca) la email support@altap.cz. Va rugam ajutati-ne sa sustinem cat mai multe tipuri de server-e."
+10686,1,"Nu pot analiza listarea fisierelor si directoarelor de pe server. Numai tip text din listare va fi afisat in panou.\n\nVa rugam verificati paginile noastre web pentru o versiune mai noua a Sally. Daca folositi ultima versiune, va rugam deschideti un issue la https://github.com/0xeb/sally/issues si atasati listarea raw (daca nu e confidentiala; click drt in panou > Arata Listare Raw > Salveaza Ca). Va rugam ajutati-ne sa sustinem cat mai multe tipuri de server-e."
 10687,1,"Nu pot analiza listarea text folosind tip server selectat...\r\n"
 
 [STRINGTABLE 42]

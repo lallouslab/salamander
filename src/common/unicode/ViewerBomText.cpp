@@ -142,8 +142,37 @@ void DecodedRun::AppendCell(std::uint32_t scalar, std::int64_t rawStart, std::in
 
 void DecodedRun::AppendRun(const DecodedRun& other)
 {
-    for (std::size_t i = 0; i < other.CellCount(); ++i)
-        AppendCell(other.Scalars[i], other.RawStart[i], other.RawEnd[i]);
+    // Bulk-append rather than replaying AppendCell per cell. DecodeTextRange concatenates a
+    // freshly decoded chunk into an accumulating run, so the per-cell form made every character
+    // pay for a second full materialisation - five push_backs each - purely to copy data that
+    // was already laid out correctly.
+    //
+    // This is exactly equivalent because 'other' was itself built by AppendCell: its Text and
+    // CellTextIndex are already what AppendCell would produce, and Text indices only need
+    // rebasing onto our current Text length. Note AppendCell stores the ORIGINAL scalar in
+    // Scalars while encoding a clamped value into Text, so copying both verbatim preserves that
+    // asymmetry - re-deriving Text from Scalars here would not.
+    const std::size_t count = other.CellCount();
+    if (count == 0)
+    {
+        RawBytesConsumed += other.RawBytesConsumed;
+        return;
+    }
+
+    const std::size_t textBase = Text.size();
+    CellTextIndex.reserve(CellTextIndex.size() + count);
+    RawStart.reserve(RawStart.size() + count);
+    RawEnd.reserve(RawEnd.size() + count);
+    Scalars.reserve(Scalars.size() + count);
+    Text.reserve(textBase + other.Text.size());
+
+    for (std::size_t i = 0; i < count; ++i)
+        CellTextIndex.push_back(textBase + other.CellTextIndex[i]);
+    RawStart.insert(RawStart.end(), other.RawStart.begin(), other.RawStart.end());
+    RawEnd.insert(RawEnd.end(), other.RawEnd.begin(), other.RawEnd.end());
+    Scalars.insert(Scalars.end(), other.Scalars.begin(), other.Scalars.end());
+    Text.append(other.Text);
+
     RawBytesConsumed += other.RawBytesConsumed;
 }
 
@@ -181,6 +210,18 @@ DecodedRun DecodeBytes(BomEncoding encoding, const std::uint8_t* data, std::size
     DecodedRun run;
     if (data == nullptr || size == 0 || !IsDecodedEncoding(encoding))
         return run;
+
+    // Upper bound on cells is known at entry, so pay one allocation per container instead of
+    // ~10 geometric reallocations each. UTF-16 consumes two bytes per code unit; UTF-8 is one
+    // byte per cell in the worst case (all ASCII).
+    const std::size_t maxCells =
+        (encoding == BomEncoding::Utf16Le || encoding == BomEncoding::Utf16Be) ? (size / 2) + 1
+                                                                              : size;
+    run.CellTextIndex.reserve(maxCells);
+    run.RawStart.reserve(maxCells);
+    run.RawEnd.reserve(maxCells);
+    run.Scalars.reserve(maxCells);
+    run.Text.reserve(maxCells);
 
     std::size_t i = 0;
     if (encoding == BomEncoding::Utf8)

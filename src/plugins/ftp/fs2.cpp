@@ -1232,7 +1232,7 @@ BOOL CPluginFSInterface::ListCurrentPath(CSalamanderDirectoryAbstract* dir,
 
             if (!err)
             {
-                if (needSimpleListing) // unknown listing; show a message about sending the information to ALTAP
+                if (needSimpleListing) // unknown listing; show a message about reporting the listing on the Sally issue tracker
                 {                      // and log "Unknown Server Type"
                     lstrcpyn(logBuf, LoadStr(AutodetectSrvType ? IDS_LOGMSGUNKNOWNSRVTYPE : IDS_LOGMSGUNKNOWNSRVTYPE2),
                              logBuf.Size());

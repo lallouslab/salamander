@@ -5,6 +5,8 @@
 #include "precomp.h"
 
 #include "shellib.h"
+#include "drop_effect_policy.h"
+#include "dragdrop_diag.h"
 #include "cfgdlg.h"
 #include "plugins.h"
 extern "C"
@@ -28,32 +30,13 @@ BOOL DragFromPluginFSEffectIsFromPlugin = FALSE;
 
 static DWORD GetOwnFolderDropEffect(DWORD allowedEffects, DWORD keyState)
 {
-    if ((keyState & (MK_SHIFT | MK_CONTROL)) == (MK_SHIFT | MK_CONTROL) &&
-        (allowedEffects & DROPEFFECT_LINK) != 0)
-    {
-        return DROPEFFECT_NONE;
-    }
-
-    allowedEffects &= DROPEFFECT_COPY | DROPEFFECT_MOVE;
-
-    if ((keyState & MK_SHIFT) != 0 && (keyState & MK_CONTROL) == 0 &&
-        (allowedEffects & DROPEFFECT_MOVE) != 0)
-    {
-        return DROPEFFECT_MOVE;
-    }
-
-    if ((keyState & MK_SHIFT) == 0 && (keyState & MK_CONTROL) != 0 &&
-        (allowedEffects & DROPEFFECT_COPY) != 0)
-    {
-        return DROPEFFECT_COPY;
-    }
-
-    if ((allowedEffects & DROPEFFECT_COPY) != 0)
-        return DROPEFFECT_COPY;
-    if ((allowedEffects & DROPEFFECT_MOVE) != 0)
-        return DROPEFFECT_MOVE;
-
-    return DROPEFFECT_NONE;
+    // #101: the modifier->effect mapping (incl. Alt / Ctrl+Shift -> shortcut) lives in the
+    // testable drop_effect_policy unit.
+    //
+    // This is the OWN-FOLDER branch, which is entered only when CurDirDropTarget is NULL - i.e.
+    // the shell drop target could not be created. Nothing here can make a .lnk, so no shell
+    // target is available to perform a link and the policy must not offer one.
+    return ComputeOwnFolderDropEffect(allowedEffects, keyState, /*shellTargetAvailable*/ false);
 }
 
 static BOOL CanUseOwnFolderDrop(IDataObject* dataObject, BOOL isFakeDataObject, BOOL tgtFile,
@@ -735,6 +718,9 @@ STDMETHODIMP CImpDropTarget::DragEnter(IDataObject* pDataObject,
                         CanUseOwnFolderDrop(OldDataObject, OldDataObjectIsFake, tgtFile, UseOwnRutine);
     }
 
+    if (DragDropDiagEnabled())
+        DragDropDiagDataObject(OldDataObject, CurDir);
+
     if (CurDirDropTarget != NULL) // only idtttWindows
     {
         HRESULT res = CurDirDropTarget->DragEnter(pDataObject, grfKeyState, pt, pdwEffect);
@@ -826,8 +812,12 @@ STDMETHODIMP CImpDropTarget::DragEnter(IDataObject* pDataObject,
         }
         else
         {
+            const DWORD diagAllowed = *pdwEffect;
             *pdwEffect = DROPEFFECT_NONE;
             LastEffect = -1;
+            if (DragDropDiagEnabled())
+                DragDropDiagRecord("fallbackNONE", origKeyState, diagAllowed, *pdwEffect,
+                                   TgtType, CurDirDropTarget != NULL, false, false);
         }
     }
     return S_OK;
@@ -846,12 +836,14 @@ STDMETHODIMP CImpDropTarget::DragOver(DWORD grfKeyState, POINTL pt,
         ImageDragMove(pt.x, pt.y);
 
     BOOL ownFolderDrop = FALSE;
+    BOOL diagTgtFile = FALSE;
     if (GetCurDir != NULL)
     {
         BOOL tgtFile;
         int tgtType;
         const char* tgtPath = GetCurDir(pt, GetCurDirParam, pdwEffect, RButton, tgtFile,
                                         grfKeyState, tgtType, OldDataObjectSrcType);
+        diagTgtFile = tgtFile;
         SetDirectory(tgtPath, grfKeyState, pt, pdwEffect, OldDataObject, tgtFile, tgtType);
         if (TgtType != idtttWindows && TgtType != idtttFullPluginFSPath)
         { // if selection is not from one path (risk likely only with Find), we can't copy/move to archive or FS
@@ -893,12 +885,20 @@ STDMETHODIMP CImpDropTarget::DragOver(DWORD grfKeyState, POINTL pt,
             }
         }
         LastEffect = (pdwEffect != NULL) ? *pdwEffect : -1;
+        if (DragDropDiagEnabled())
+            DragDropDiagRecord("shellTarget", origKeyState, origEffect,
+                               pdwEffect != NULL ? *pdwEffect : 0, TgtType, true,
+                               ownFolderDrop != FALSE, diagTgtFile != FALSE);
         return res;
     }
     else if (ownFolderDrop)
     {
+        const DWORD diagAllowed = *pdwEffect;
         *pdwEffect = GetOwnFolderDropEffect(*pdwEffect, origKeyState);
         LastEffect = *pdwEffect != DROPEFFECT_NONE ? *pdwEffect : -1;
+        if (DragDropDiagEnabled())
+            DragDropDiagRecord("ownFolder", origKeyState, diagAllowed, *pdwEffect, TgtType,
+                               false, true, diagTgtFile != FALSE);
         return S_OK;
     }
     else
@@ -946,8 +946,12 @@ STDMETHODIMP CImpDropTarget::DragOver(DWORD grfKeyState, POINTL pt,
         }
         else
         {
+            const DWORD diagAllowed = *pdwEffect;
             *pdwEffect = DROPEFFECT_NONE;
             LastEffect = -1;
+            if (DragDropDiagEnabled())
+                DragDropDiagRecord("fallbackNONE", origKeyState, diagAllowed, *pdwEffect,
+                                   TgtType, CurDirDropTarget != NULL, false, false);
         }
         return S_OK;
     }

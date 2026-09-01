@@ -22,17 +22,32 @@
 #define VERSINFO_xstr(s) VERSINFO_str(s)
 #define VERSINFO_str(s) #s
 
+// SINGLE SOURCE OF TRUTH for the Sally application version.
+//
+// cmake/git_version.cmake READS these three numbers rather than carrying its own copy.
+// It used to hardcode the version separately, and the two drifted: the About box said
+// 1.0.25 while the file-properties dialog still said 1.0, because only one was bumped.
+// Bump these and everything - resources, About box, and CMake - follows.
+//
+// The dependency points this way because the resource compiler is the constrained end:
+// rc.exe has no __has_include, so it cannot tolerate a CMake-generated header that is
+// absent in a fresh clone before configure. A plain header it can always read.
 #define VERSINFO_SALAMANDER_MAJOR 1
 #define VERSINFO_SALAMANDER_MINORA 0
-#define VERSINFO_SALAMANDER_MINORB 0
+#define VERSINFO_SALAMANDER_MINORB 25
 
-#if (VERSINFO_SALAMANDER_MINORB == 0) // we don't write zero in hundredths 2.50 -> 2.5
-#define VERSINFO_SALAMANDER_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) "." VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) VERSINFO_BETAVERSION_TXT
-#define VERSINFO_SAL_SHORT_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) VERSINFO_BETAVERSIONSHORT_TXT
-#else
-#define VERSINFO_SALAMANDER_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) "." VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) VERSINFO_xstr(VERSINFO_SALAMANDER_MINORB) VERSINFO_BETAVERSION_TXT
+// Sally versions are three dotted parts (1.0.25). Open Salamander used "hundredths",
+// concatenating MINORB with no separator - 2,5,1 read as "2.51" - and suppressing a zero
+// MINORB so 2,5,0 read as "2.5". Under that scheme 1,0,25 would render as "1.025".
+//
+// So the separator is explicit here and the zero-suppression is gone: 1,0,0 now reads
+// "1.0.0", which is what a three-part scheme should say.
+//
+// This applies ONLY to the application version. The plugin block below is untouched:
+// each plugin still numbers itself in hundredths, and 7zip at 1,3,1 must keep reading
+// "1.31" rather than turning into "1.3.1".
+#define VERSINFO_SALAMANDER_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) "." VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) "." VERSINFO_xstr(VERSINFO_SALAMANDER_MINORB) VERSINFO_BETAVERSION_TXT
 #define VERSINFO_SAL_SHORT_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) VERSINFO_xstr(VERSINFO_SALAMANDER_MINORB) VERSINFO_BETAVERSIONSHORT_TXT
-#endif
 
 #ifdef VERSINFO_MAJOR      // defined only if used from plugin
 #if (VERSINFO_MINORB == 0) // we don't write zero in hundredths 2.50 -> 2.5

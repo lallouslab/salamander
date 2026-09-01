@@ -1329,6 +1329,9 @@ CBottomToolBar::CBottomToolBar(HWND hNotifyWindow, CObjectOrigin origin)
     Padding.ButtonIconText = 1; // pull text close to icon
     Padding.IconLeft = 2;       // space before icon
     Padding.TextRight = 2;      // space after text
+#if SALLY_BOTTOMBAR_BOLD_LABELS
+    UseBoldFont = TRUE;         // #96: bold labels (opt-in; see SALLY_BOTTOMBAR_BOLD_LABELS)
+#endif
 }
 
 // Fills the 'Text' variable in the BottomTBData array, which is read from resources.
@@ -1395,6 +1398,9 @@ BOOL CBottomToolBar::InitDataFromResources()
 void CBottomToolBar::SetFont()
 {
     CToolBar::SetFont();
+    // #96: leave a real gap between the key cap and its label. It was 1px ("pull text close
+    // to icon"), which renders as "F1Help"; the reference build clearly separates the two.
+    Padding.ButtonIconText = (WORD)(FontHeight / 4 > 3 ? FontHeight / 4 : 3);
     SetMaxItemWidths();
 }
 
@@ -1424,7 +1430,9 @@ BOOL CBottomToolBar::SetMaxItemWidths()
             if (r.right > maxWidth)
                 maxWidth = (WORD)r.right;
         }
-        maxWidth = 3 + BOTTOMBAR_CX + 1 + maxWidth + 3;
+        // #96: the cap is now font-sized, so use the real image width and the gap above
+        // instead of the old hard-coded 17px glyph and 1px separator.
+        maxWidth = (WORD)(3 + ImageWidth + Padding.ButtonIconText + maxWidth + 3);
         TLBI_ITEM_INFO2 tii;
         tii.Mask = TLBI_MASK_WIDTH;
         tii.Width = maxWidth;

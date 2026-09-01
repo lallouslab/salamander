@@ -10,9 +10,9 @@ WEB,"forum.altap.cz/viewtopic.php?f=23&t=7334"
 COMMENT,"Deutsche Version"
 
 [STRINGTABLE 0]
-10100,1,"Internet Explorer Betrachter"
-10101,1,"Internet Explorer Betrachter konnte nicht geöffnet werden.\nBitte melden Sie dieses Problem an support@altap.cz."
+10100,1,"Web-Betrachter"
+10101,1,"Web-Betrachter konnte nicht geöffnet werden.\nBitte stellen Sie sicher, dass die Microsoft Edge WebView2 Runtime installiert ist."
 10102,1,"Fehler"
-10103,1,"Schlanker HTML- und XML-Betrachter basierend auf dem Internet Explorer."
+10103,1,"Schlanker HTML-, XML- und Markdown-Betrachter auf Basis von Microsoft Edge WebView2."
 10105,1,"Über Plugin"
 

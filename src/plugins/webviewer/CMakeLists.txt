@@ -6,6 +6,7 @@ sal_add_plugin(NAME webviewer
     "${SAL_SHARED}/auxtools.cpp"
     "${SAL_SHARED}/dbg.cpp"
     "${SAL_SHARED}/plugindarkmode.cpp"
+    "${SAL_SRC}/combo_dark_paint.cpp"
     "${SAL_PLUGINS}/webviewer/cmark-gfm/extensions/autolink.c"
     "${SAL_PLUGINS}/webviewer/cmark-gfm/extensions/core-extensions.c"
     "${SAL_PLUGINS}/webviewer/cmark-gfm/extensions/ext_scanners.c"

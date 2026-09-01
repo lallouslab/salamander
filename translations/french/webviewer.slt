@@ -10,9 +10,9 @@ WEB,"forum.altap.cz/viewtopic.php?f=23&t=6162"
 COMMENT,"Version française"
 
 [STRINGTABLE 0]
-10100,1,"Visualiseur Internet Explorer"
-10101,1,"Impossible d'ouvrir le Visualiseur Internet Explorer.\nVeuillez signaler ce problème à support@altap.cz."
+10100,1,"Visualiseur Web"
+10101,1,"Impossible d'ouvrir le Visualiseur Web.\nVeuillez vérifier que Microsoft Edge WebView2 Runtime est installé."
 10102,1,"Erreur"
-10103,1,"Visualiseur rapide HTML et XML basé sur Internet Explorer."
+10103,1,"Visualiseur léger HTML, XML et Markdown basé sur Microsoft Edge WebView2."
 10105,1,"A propos du module"
 

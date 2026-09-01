@@ -21,6 +21,7 @@
 #include "mainwnd.h"
 #include "plugins.h"
 #include "fileswnd.h"
+#include "paste_path_policy.h"
 #include "stswnd.h"
 #include "filesbox.h"
 #include "dialogs.h"
@@ -738,7 +739,24 @@ void CFilesWindow::ClipboardPastePath()
         ChangeDir(buff); // change path
     }
     else
-        ChangePathToDiskW(HWindow, pathW.c_str()); // change path
+    {
+        // A pasted path that names a FILE lists its directory and focuses the file. The ANSI
+        // branch above gets this from ChangeDir(); ChangePathToDiskW() has no such split, so
+        // without this the whole file path was handed to the directory-listing code and came
+        // back as "(267) The directory name is invalid." (see paste_path_policy.h).
+        std::wstring directoryW;
+        std::string focusNameA;
+        if (sally::ResolvePastedFilePathW(pathW.c_str(), GetFileAttributesW(pathW.c_str()),
+                                          directoryW, focusNameA))
+        {
+            // Focus is matched against CFileData::Name, which is ANSI; PanelAnsiNameFromWideW
+            // spells it exactly as the panel does, so a non-ANSI name still lands on its row.
+            ChangePathToDiskW(HWindow, directoryW.c_str(), -1,
+                              focusNameA.empty() ? NULL : focusNameA.c_str());
+        }
+        else
+            ChangePathToDiskW(HWindow, pathW.c_str()); // change path
+    }
 }
 
 void CFilesWindow::ChangeFilter(BOOL disable)

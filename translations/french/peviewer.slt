@@ -30,7 +30,7 @@ COMMENT,"Version française"
 10100,1,"Visualiseur de fichier exécutable"
 10101,1,"Impossible d'ouvrir le fichier %s."
 10102,1,"La création d'un fichier temporaire a échoué."
-10103,1,"Une exception s'est produite.\n\nFichier visualisé: %s\n\nSi vous pensez que le fichier visualisé n'est pas corrompu, veuillez l'envoyer à support@altap.cz.\nNous reproduirons et réparerons le bogue du visualiseur. Merci de votre coopération!"
+10103,1,"Une exception s'est produite.\n\nFichier visualisé: %s\n\nSi vous pensez que le fichier visualisé n'est pas corrompu, veuillez ouvrir un ticket sur https://github.com/0xeb/sally/issues et y joindre ce fichier.\nNous reproduirons et réparerons le bogue du visualiseur. Merci de votre coopération!"
 10104,1,"Affiche des informations sur les fichiers exécutables de type EXE, DLL, etc."
 
 [STRINGTABLE 2]

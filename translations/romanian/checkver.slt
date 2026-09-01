@@ -70,7 +70,7 @@ COMMENT,"Versiunea romana"
 218,1,"Plugin lucreaza cu Internetul.\nDoriti sa anulati aceasta sesiune de Internet?"
 220,1,"Initializez conexiunea la Internet..."
 221,1,"Initializare esuata: %s"
-222,1,"Ma conectez la \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"Ma conectez la \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"Conexiune esuata: %s"
 
 [STRINGTABLE 2]

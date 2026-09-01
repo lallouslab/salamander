@@ -40,6 +40,7 @@
 #include "color.h"
 #include "toolbar.h"
 #include "darkmode.h"
+#include "bottombar_keycaps.h"
 #include "salext_cleanup.h"
 #include "common/IFileSystem.h"
 
@@ -182,7 +183,7 @@ void X64StressTestAlloc()
     // verify success
     void* testNew = new char; // new goes through alloc, but let's verify anyway
     if (testNew <= (LPVOID)(UINT_PTR)0x00000000ffffffff)
-        MessageBox(NULL, "new address <= 0x00000000ffffffff!\nPlease contact jan.rysavy@altap.cz with this information.", "X64_STRESS_TEST", MB_OK | MB_ICONEXCLAMATION);
+        MessageBox(NULL, "new address <= 0x00000000ffffffff!\nPlease open an issue at https://github.com/0xeb/sally/issues with this information.", "X64_STRESS_TEST", MB_OK | MB_ICONEXCLAMATION);
     delete testNew;
 }
 
@@ -344,6 +345,7 @@ LOGFONT LogFont;
 int FontCharHeight = 0;
 
 HFONT EnvFont = NULL;
+HFONT EnvFontBold = NULL;
 HFONT EnvFontUL = NULL;
 //LOGFONT EnvLogFont;
 int EnvFontCharHeight = 0;
@@ -2103,6 +2105,12 @@ void ReleaseConstGraphics()
         EnvFont = NULL;
     }
 
+    if (EnvFontBold != NULL)
+    {
+        HANDLES(DeleteObject(EnvFontBold));
+        EnvFontBold = NULL;
+    }
+
     if (EnvFontUL != NULL)
     {
         HANDLES(DeleteObject(EnvFontUL));
@@ -2387,6 +2395,83 @@ static HICON GetDirectoryIconSEH(const char* path, CIconSizeEnum sizeIndex)
     return hIcon;
 }
 
+// #96: the F-key indicators used to be a fixed 17x13 bitmap (bottomtb.bmp) with no DPI
+// scaling, so at high DPI the labels grew with the font and the keys stayed tiny. Generate
+// them from the environment font instead. Enabled caps are "inverted" (light cap, dark text
+// in dark mode; dark cap, light text in light mode) exactly as the reference build draws
+// them; the grayed list is dimmer, since CToolBar::DrawItem uses HImageList for grayed items
+// and HHotImageList for enabled ones.
+// #96: the cap label is drawn in a SMALLER font than the bar label, as the reference build
+// does. That keeps the cap compact, so the row height is driven by the label text and the cap
+// sits inside it with margin instead of filling the whole row.
+static HFONT CreateBottomTBCapFont()
+{
+    LOGFONT lf;
+    if (EnvFont == NULL || GetObject(EnvFont, sizeof(lf), &lf) == 0)
+        return NULL;
+    lf.lfHeight = lf.lfHeight * 4 / 5; // lfHeight is negative, so this is 80% of the size
+    lf.lfWeight = FW_NORMAL;
+    return CreateFontIndirect(&lf);
+}
+
+static void GetBottomTBKeyCapSize(int* cx, int* cy)
+{
+    HDC hDC = HANDLES(GetDC(NULL));
+    HFONT hCapFont = CreateBottomTBCapFont();
+    SIZE size = CalcBottomBarKeyCapSize(hDC, hCapFont != NULL ? hCapFont : EnvFont);
+    if (hCapFont != NULL)
+        DeleteObject(hCapFont);
+    HANDLES(ReleaseDC(NULL, hDC));
+    *cx = (int)size.cx;
+    *cy = (int)size.cy;
+}
+
+static HBITMAP CreateBottomTBKeyCapStrip(int capW, int capH, COLORREF fill, COLORREF textColor,
+                                         COLORREF outline)
+{
+    HDC hScreenDC = HANDLES(GetDC(NULL));
+    HDC hDC = HANDLES(CreateCompatibleDC(hScreenDC));
+    HBITMAP hBmp = hDC != NULL ? HANDLES(CreateCompatibleBitmap(hScreenDC, capW * 12, capH)) : NULL;
+    HANDLES(ReleaseDC(NULL, hScreenDC));
+    if (hDC == NULL || hBmp == NULL)
+    {
+        if (hBmp != NULL)
+            HANDLES(DeleteObject(hBmp));
+        if (hDC != NULL)
+            HANDLES(DeleteDC(hDC));
+        return NULL;
+    }
+
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hDC, hBmp);
+    HFONT hCapFont = CreateBottomTBCapFont();
+    HFONT hOldFont = (HFONT)SelectObject(hDC, hCapFont != NULL ? hCapFont
+                                                               : (EnvFont != NULL ? EnvFont : (HFONT)GetStockObject(DEFAULT_GUI_FONT)));
+
+    // magenta is the transparency key used by ImageList_AddMasked below
+    RECT all = {0, 0, capW * 12, capH};
+    HBRUSH hMagenta = CreateSolidBrush(RGB(255, 0, 255));
+    if (hMagenta != NULL)
+    {
+        FillRect(hDC, &all, hMagenta);
+        DeleteObject(hMagenta);
+    }
+
+    for (int keyIndex = 0; keyIndex < 12; keyIndex++)
+    {
+        char keyText[8];
+        sprintf_s(keyText, "F%d", keyIndex + 1);
+        RECT cap = {keyIndex * capW, 0, (keyIndex + 1) * capW - 1, capH}; // 1px gap between caps
+        DrawBottomBarKeyCap(hDC, &cap, keyText, fill, textColor, outline);
+    }
+
+    SelectObject(hDC, hOldFont);
+    if (hCapFont != NULL)
+        DeleteObject(hCapFont);
+    SelectObject(hDC, hOldBmp);
+    HANDLES(DeleteDC(hDC));
+    return hBmp;
+}
+
 BOOL InitializeGraphics(BOOL colorsOnly)
 {
     // 48x48 only from XP
@@ -2601,8 +2686,10 @@ BOOL InitializeGraphics(BOOL colorsOnly)
             return FALSE;
         }
 
-        HBottomTBImageList = ImageList_Create(BOTTOMBAR_CX, BOTTOMBAR_CY, ILC_MASK | ILC_COLORDDB, 12, 0);
-        HHotBottomTBImageList = ImageList_Create(BOTTOMBAR_CX, BOTTOMBAR_CY, ILC_MASK | ILC_COLORDDB, 12, 0);
+        int capCX, capCY; // #96: sized from the environment font, not a fixed 17x13 bitmap
+        GetBottomTBKeyCapSize(&capCX, &capCY);
+        HBottomTBImageList = ImageList_Create(capCX, capCY, ILC_MASK | ILC_COLORDDB, 12, 0);
+        HHotBottomTBImageList = ImageList_Create(capCX, capCY, ILC_MASK | ILC_COLORDDB, 12, 0);
         if (HBottomTBImageList == NULL || HHotBottomTBImageList == NULL)
         {
             TRACE_E("Unable to create image list.");
@@ -2765,21 +2852,33 @@ BOOL InitializeGraphics(BOOL colorsOnly)
         return FALSE;
     }
 
-    clrMap[0].from = RGB(128, 128, 128); // gray -> COLOR_BTNSHADOW
-    clrMap[0].to = GetSysColor(COLOR_BTNSHADOW);
-    clrMap[1].from = RGB(0, 0, 0); // black -> COLOR_BTNTEXT
-    clrMap[1].to = GetSysColor(COLOR_BTNTEXT);
-    clrMap[2].from = RGB(255, 255, 255); // white -> transparent
-    clrMap[2].to = RGB(255, 0, 255);
-    HBITMAP hBottomTB = HANDLES(CreateMappedBitmap(HInstance, IDB_BOTTOMTOOLBAR, 0, clrMap, 3));
-    BOOL remapWhite = FALSE;
-    if (GetCurrentBPP() > 8)
+    // #96: draw the F-key caps at the image list's CURRENT size (queried, so a colours-only
+    // rebuild - which does not recreate the lists - still fills them correctly).
+    int capW = BOTTOMBAR_CX, capH = BOTTOMBAR_CY;
+    ImageList_GetIconSize(HBottomTBImageList, &capW, &capH);
+    BOOL capsUseDark = DarkMode_ShouldUseDark();
+    // "inverted" relative to the bar, which is what the reference build does and what the
+    // reporter asked for: the cap reads as a key, not as more body text.
+    // Measured from the reference build the reporter praised: in dark mode the cap is only
+    // slightly lighter than the bar - RGB(56,56,56) on RGB(32,32,32) - with a dark outline and
+    // LIGHT text. Deliberately not an inverted white block.
+    COLORREF capFillEnabled = capsUseDark ? RGB(70, 70, 74) : RGB(214, 214, 214);
+    COLORREF capTextEnabled = capsUseDark ? RGB(232, 232, 232) : RGB(30, 30, 30);
+    COLORREF capEdgeEnabled = capsUseDark ? RGB(25, 25, 28) : RGB(120, 120, 120);
+    COLORREF capFillGrayed = capsUseDark ? RGB(58, 58, 61) : RGB(228, 228, 228);
+    COLORREF capTextGrayed = capsUseDark ? RGB(132, 132, 132) : RGB(140, 140, 140);
+    COLORREF capEdgeGrayed = capsUseDark ? RGB(30, 30, 33) : RGB(175, 175, 175);
+    HBITMAP hBottomTB = CreateBottomTBKeyCapStrip(capW, capH, capFillGrayed, capTextGrayed, capEdgeGrayed);
+    HBITMAP hHotBottomTB = CreateBottomTBKeyCapStrip(capW, capH, capFillEnabled, capTextEnabled, capEdgeEnabled);
+    if (hBottomTB == NULL || hHotBottomTB == NULL)
     {
-        clrMap[2].from = RGB(255, 255, 255); // white -> light gray (so it doesn't stand out so much)
-        clrMap[2].to = RGB(235, 235, 235);
-        remapWhite = TRUE;
+        TRACE_E("Unable to build bottom toolbar key caps.");
+        if (hBottomTB != NULL)
+            HANDLES(DeleteObject(hBottomTB));
+        if (hHotBottomTB != NULL)
+            HANDLES(DeleteObject(hHotBottomTB));
+        return FALSE;
     }
-    HBITMAP hHotBottomTB = HANDLES(CreateMappedBitmap(HInstance, IDB_BOTTOMTOOLBAR, 0, clrMap, remapWhite ? 3 : 2));
     ImageList_RemoveAll(HBottomTBImageList);
     ImageList_AddMasked(HBottomTBImageList, hBottomTB, RGB(255, 0, 255));
     ImageList_RemoveAll(HHotBottomTBImageList);
@@ -4276,6 +4375,9 @@ FIND_NEW_SLG_FILE:
         }
     }
 
+    // Plugins read "Theme mode" from this key too; tell them which one it is.
+    PublishConfigRootToEnvironment();
+
     InitializeShellib(); // OLE needs to be initialized before opening HTML help - CSalamanderEvaluation
 
     // if new configuration key doesn't exist yet, we'll create it before potential deletion
@@ -4575,6 +4677,7 @@ FIND_NEW_SLG_FILE:
                         FindPluginsWithoutImportedCfg(&doNotDeleteImportedCfg))
                     {                               // software exit without saving configuration is needed
                         SALAMANDER_ROOT_REG = NULL; // this should reliably prevent writing to configuration in registry
+                        PublishConfigRootToEnvironment();
                         PostMessage(MainWindow->HWindow, WM_USER_FORCECLOSE_MAINWND, 0, 0);
                     }
                     else
@@ -4611,6 +4714,7 @@ FIND_NEW_SLG_FILE:
 
                         // save will now go to newest key
                         SALAMANDER_ROOT_REG = SalamanderConfigurationRoots[0];
+                        PublishConfigRootToEnvironment();
                         // we'll save configuration immediately, while it's still clean conversion of old version -- user may
                         // have "Save Cfg on Exit" disabled and if they change something during Salamander operation, they don't want to save it at the end
                         if (saveNewConfig)

@@ -71,6 +71,7 @@ protected:
     int Height;
     HFONT HFont;
     int FontHeight;
+    BOOL UseBoldFont; // #96: draw text in the bold env font (bottom toolbar shortcut labels)
     HWND HNotifyWindow; // where notifications are delivered
     HIMAGELIST HImageList;
     HIMAGELIST HHotImageList;

@@ -7,6 +7,10 @@
 
 #include "ui/IPrompter.h"
 #include "common/IFileSystem.h"
+
+// #97: defined in main_window_config_persistence.cpp - clamps a normal window rect to a
+// visible, sane size on a real monitor.
+RECT SanitizeMainWindowNormalRect(RECT rect);
 #include "common/fsutil.h"
 #include "common/unicode/helpers.h"
 #include "common/IEnvironment.h"
@@ -1551,6 +1555,28 @@ MENU_TEMPLATE_ITEM AddToSystemMenu[] =
         // the color depth may have changed - rebuild image lists to obtain new icons
         ColorsChanged(TRUE, FALSE, TRUE); // rebuild everything; we have enough time
         return 0;
+    }
+
+    case WM_DISPLAYCHANGE:
+    {
+        // #97: a resolution/monitor change (e.g. resume-from-sleep at high DPI, where the
+        // monitor reattaches) could leave the main window tiny or off-screen. Re-clamp a
+        // normal (non-minimized, non-maximized) window to a visible, sane size; a window
+        // that is already fine is left untouched.
+        if (!IsIconic(HWindow) && !IsZoomed(HWindow))
+        {
+            RECT cur;
+            GetWindowRect(HWindow, &cur);
+            RECT fixed = SanitizeMainWindowNormalRect(cur);
+            if (fixed.left != cur.left || fixed.top != cur.top ||
+                fixed.right != cur.right || fixed.bottom != cur.bottom)
+            {
+                SetWindowPos(HWindow, NULL, fixed.left, fixed.top,
+                             fixed.right - fixed.left, fixed.bottom - fixed.top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+        break;
     }
 
     case WM_SETTINGCHANGE:

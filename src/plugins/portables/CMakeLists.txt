@@ -6,6 +6,7 @@ sal_add_plugin(NAME portables
     "${SAL_SHARED}/dbg.cpp"
     "${SAL_SHARED}/mhandles.cpp"
     "${SAL_SHARED}/plugindarkmode.cpp"
+    "${SAL_SRC}/combo_dark_paint.cpp"
     "${SAL_SHARED}/winliblt.cpp"
     "${SAL_PLUGINS}/portables/device.cpp"
     "${SAL_PLUGINS}/portables/entry.cpp"

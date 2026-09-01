@@ -70,7 +70,7 @@ COMMENT,"简体中文版"
 218,1,"插件正在用因特网工作。\n你想中止此因特网会话吗？"
 220,1,"正在初始化因特网连接..."
 221,1,"初始化失败: %s"
-222,1,"正在连接到 \tuwww.altap.cz\tlhttps://www.altap.cz\tn..."
+222,1,"正在连接到 \tuGitHub Releases API\tlhttps://api.github.com/repos/0xeb/sally/releases/latest\tn..."
 223,1,"连接失败: %s"
 
 [STRINGTABLE 2]

@@ -13,6 +13,7 @@
 #include "markdown.h"
 
 #include <shlobj.h>
+#include <stdarg.h>
 
 // plugin interface object, its methods are called from Salamander
 CPluginInterface PluginInterface;
@@ -235,6 +236,66 @@ static std::wstring GetWebView2UserDataFolder()
     return L"";
 }
 
+// ---------------------------------------------------------------------------------------
+// DPI diagnostics for the "markdown renders at half size" report.
+//
+// Sally is SYSTEM-DPI aware (src/manifest.xml: <dpiAware>true</dpiAware>) and explicitly does
+// not support per-monitor DPI, while the WebView2 runtime IS per-monitor aware and paints in
+// physical pixels. If the monitor's scale differs from the system DPI captured at logon, the
+// bounds we hand to put_Bounds and the scale WebView2 renders at disagree, and the page ends
+// up covering the wrong fraction of the window (measured: exactly half at a 2x mismatch).
+//
+// This records the numbers so a recurrence explains itself instead of costing another round of
+// screenshots. Written to %TEMP%\sally-webviewer-dpi.log.
+// Debug builds only.
+//
+// This was unconditional: every viewer open and every resize appended to a log file in %TEMP%,
+// on every user machine, forever. It exists to diagnose the half-size rendering caused by the
+// system-DPI vs per-monitor-DPI mismatch, which is a development concern - a shipped build
+// should not be quietly writing diagnostics to disk.
+//
+// Emptying the function body is NOT enough: the format strings are call ARGUMENTS, so they
+// are still emitted into .rdata and shipped. Measured in the Release DLL - "DPI FIX APPLIED",
+// "resize IGNORED" and the rest were all present with the body already compiled out. So the
+// call sites themselves have to disappear, which needs a macro, not an empty function.
+#ifdef _DEBUG
+static void WebViewerDiagLogImpl(const char* fmt, ...)
+{
+    char path[MAX_PATH];
+    if (GetTempPathA(MAX_PATH, path) == 0)
+        return;
+    lstrcatA(path, "sally-webviewer-dpi.log");
+    FILE* f = NULL;
+    if (fopen_s(&f, path, "a") != 0 || f == NULL)
+        return;
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d  ", st.wYear, st.wMonth, st.wDay,
+            st.wHour, st.wMinute, st.wSecond);
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(f, fmt, args);
+    va_end(args);
+    fputc(10, f); // newline
+    fclose(f);
+}
+#define WebViewerDiagLog(...) WebViewerDiagLogImpl(__VA_ARGS__)
+#else
+// Release: the whole call vanishes, arguments and literals included.
+#define WebViewerDiagLog(...) ((void)0)
+#endif // _DEBUG
+
+// Opt-in candidate fix: pin the controller's rasterization scale to the host's DPI so both
+// sides use the same coordinate space. Enabled with SALLY_WEBVIEWER_DPI_FIX=1 so it can be
+// tested against the unfixed behaviour on the machine that reproduces the bug, rather than
+// shipped on a hypothesis.
+static BOOL WebViewerDpiFixEnabled()
+{
+    char value[8] = {0};
+    return GetEnvironmentVariableA("SALLY_WEBVIEWER_DPI_FIX", value, sizeof(value)) > 0 &&
+           value[0] == '1';
+}
+
 bool CWebView2Host::Create(HWND hwndParent)
 {
     CALL_STACK_MESSAGE1("CWebView2Host::Create()");
@@ -291,6 +352,53 @@ bool CWebView2Host::Create(HWND hwndParent)
                             RECT bounds;
                             GetClientRect(m_hwndParent, &bounds);
                             m_controller->put_Bounds(bounds);
+
+                            // --- DPI diagnostics + opt-in rasterization-scale fix ---
+                            {
+                                HDC hScreen = GetDC(NULL);
+                                int systemDpi = hScreen != NULL ? GetDeviceCaps(hScreen, LOGPIXELSX) : 0;
+                                if (hScreen != NULL)
+                                    ReleaseDC(NULL, hScreen);
+
+                                // GetDpiForWindow is Win10 1607+; resolve dynamically so this
+                                // still builds and runs on older targets.
+                                UINT windowDpi = 0;
+                                HMODULE hUser32 = GetModuleHandleA("user32.dll");
+                                if (hUser32 != NULL)
+                                {
+                                    typedef UINT(WINAPI * PFNGETDPIFORWINDOW)(HWND);
+                                    PFNGETDPIFORWINDOW pGetDpiForWindow =
+                                        (PFNGETDPIFORWINDOW)GetProcAddress(hUser32, "GetDpiForWindow");
+                                    if (pGetDpiForWindow != NULL)
+                                        windowDpi = pGetDpiForWindow(m_hwndParent);
+                                }
+
+                                double rasterScale = 0.0;
+                                ComPtr<ICoreWebView2Controller3> controller3;
+                                if (SUCCEEDED(m_controller->QueryInterface(IID_ICoreWebView2Controller3,
+                                                                           &controller3)) &&
+                                    controller3 != nullptr)
+                                {
+                                    controller3->get_RasterizationScale(&rasterScale);
+
+                                    if (WebViewerDpiFixEnabled() && windowDpi != 0)
+                                    {
+                                        // Make WebView2 use the SAME scale the host lays out in.
+                                        const double hostScale = (double)windowDpi / 96.0;
+                                        controller3->put_ShouldDetectMonitorScaleChanges(FALSE);
+                                        controller3->put_RasterizationScale(hostScale);
+                                        WebViewerDiagLog("DPI FIX APPLIED: rasterizationScale %.3f -> %.3f",
+                                                         rasterScale, hostScale);
+                                        controller3->get_RasterizationScale(&rasterScale);
+                                    }
+                                }
+
+                                WebViewerDiagLog("viewer open: clientRect=%ldx%ld systemDpi=%d "
+                                                 "windowDpi=%u rasterizationScale=%.3f fix=%d",
+                                                 bounds.right - bounds.left, bounds.bottom - bounds.top,
+                                                 systemDpi, windowDpi, rasterScale,
+                                                 WebViewerDpiFixEnabled() ? 1 : 0);
+                            }
 
                             // Configure settings
                             ComPtr<ICoreWebView2Settings> settings;
@@ -427,6 +535,20 @@ void CWebView2Host::Resize(int width, int height)
     {
         RECT bounds = {0, 0, width, height};
         m_controller->put_Bounds(bounds);
+
+        // Log the first few resizes: if the page still covers only part of the window AFTER a
+        // resize, the bounds are fine and the mismatch is DPI - if it snaps to fill, the initial
+        // bounds were simply stale.
+        static int loggedResizes = 0;
+        if (loggedResizes < 8)
+        {
+            loggedResizes++;
+            WebViewerDiagLog("resize: put_Bounds %dx%d", width, height);
+        }
+    }
+    else
+    {
+        WebViewerDiagLog("resize IGNORED (controller not created yet): %dx%d", width, height);
     }
 }
 

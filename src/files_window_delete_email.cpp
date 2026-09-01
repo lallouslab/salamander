@@ -12,6 +12,7 @@
 #include "snooper.h"
 #include "worker.h"
 #include "pack.h"
+#include "pack_target_policy.h"
 #include "mapi.h"
 #include "ui/IPrompter.h"
 #include "common/fsutil.h"
@@ -535,6 +536,56 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                 std::wstring nextFocusW;
                 CPathBuffer textBuf;
                 BOOL useWideTargetPath = copyMoveDlg.IsUnicodeMode() && target->Is(ptDisk);
+
+                // #94: A Copy/Move target that names an existing, packable archive without a
+                // trailing backslash was silently overwritten (the whole archive destroyed) via
+                // the plain file-overwrite path. Detect that and append a backslash so ParsePath
+                // below routes it to the archive/pack flow ("Add to existing archive?"), matching
+                // drag & drop. Brand-new "name.zip" targets and non-archives are left untouched.
+                if ((type == atCopy || type == atMove) && !backslashAtEnd && path[0] != 0 &&
+                    !IsPluginFSPath(path))
+                {
+                    // Probe in WIDE. The ANSI mirror is a best-fit conversion of pathW
+                    // (WideToAnsi, flags 0 - best-fit ON and the loss is not even reported), so
+                    // asking the filesystem about it can answer about a DIFFERENT file: under
+                    // CP-1252 a target of "A-with-macron.zip" collapses to "A.zip", and if that
+                    // exists we would reroute into the wrong archive. Unicode mode is entered
+                    // precisely when the path does NOT round-trip, so the trigger and the hazard
+                    // are the same condition.
+                    std::wstring fullW = pathW;
+                    if (SalGetFullNameW(fullW, NULL, GetPathW()))
+                    {
+                        // PackIsArchive is ANSI-only and matches by SUFFIX, walking backwards
+                        // from the last character. So ask it about a synthetic ASCII name
+                        // carrying just the extension: that answers the same question while
+                        // requiring only the EXTENSION to convert exactly. Converting the whole
+                        // path would fail for a genuinely non-ANSI archive name and silently
+                        // re-open the #94 overwrite for those files.
+                        int fmt = 0;
+                        std::string probeName;
+                        if (BuildArchiveProbeNameFromWidePath(fullW.c_str(), probeName))
+                            fmt = PackerFormatConfig.PackIsArchive(probeName.c_str());
+
+                        DWORD attrs = (fmt != 0 && gFileSystem != NULL)
+                                          ? gFileSystem->GetFileAttributes(fullW.c_str())
+                                          : INVALID_FILE_ATTRIBUTES;
+                        BOOL exists = (attrs != INVALID_FILE_ATTRIBUTES);
+                        BOOL isDir = exists && (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                        if (ShouldRerouteCopyTargetToArchive(true, false, exists != FALSE, isDir != FALSE,
+                                                             fmt, fmt != 0 && PackerFormatConfig.GetUsePacker(fmt - 1)))
+                        {
+                            SalPathAddBackslash(path, path.Size());
+                            backslashAtEnd = TRUE;
+                            len = (int)strlen(path);
+                            // Append to the wide path directly. The previous
+                            // pathW = AnsiToWide(path) replaced the exact target with the
+                            // best-fit alias - which is what made this write to the wrong file.
+                            if (pathW.empty() || pathW.back() != L'\\')
+                                pathW.push_back(L'\\');
+                        }
+                    }
+                }
+
                 BOOL parsedOk = FALSE;
                 if (useWideTargetPath)
                 {

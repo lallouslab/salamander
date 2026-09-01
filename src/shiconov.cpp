@@ -405,8 +405,7 @@ void InitShellIconOverlays()
     ShellOverlayDiag.Header.IconSizes[2] = IconSizes[ICONSIZE_48];
     ShellOverlayDiag.Header.SystemDpi = (UINT)SystemDPI;
     ShellOverlayDiag.Header.EnableCustomIconOverlays = Configuration.EnableCustomIconOverlays != FALSE;
-    lstrcpynA(ShellOverlayDiag.Header.ConfigRoot, SALAMANDER_ROOT_REG,
-              (int)sizeof(ShellOverlayDiag.Header.ConfigRoot));
+    SetOverlayDiagConfigRoot(ShellOverlayDiag.Header, SALAMANDER_ROOT_REG);
     if (Configuration.DisabledCustomIconOverlays != NULL)
     {
         MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, Configuration.DisabledCustomIconOverlays, -1,

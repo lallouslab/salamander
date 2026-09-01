@@ -3,8 +3,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
+#include "combo_dark_paint.h"
+
+#include <vector>
 
 #include "menu.h"
+#include "find_dialog_theme_ids.h"
 #include "ui/IPrompter.h"
 #include "common/IFileSystem.h"
 #include "common/unicode/ComboSyncPolicy.h"
@@ -384,6 +388,11 @@ static BOOL GetChildRectInParent(HWND hParent, HWND hChild, RECT* rect)
     if (hParent == NULL || hChild == NULL || rect == NULL || !IsWindow(hParent) || !IsWindow(hChild))
         return FALSE;
 
+    // A drop-list combo reports itself (or nothing) as hwndItem; treating the control as its own
+    // child gives a rect covering the whole client, which ExcludeClipRect then blanks out.
+    if (hChild == hParent)
+        return FALSE;
+
     if (!GetWindowRect(hChild, rect))
         return FALSE;
     MapWindowPoints(NULL, hParent, (POINT*)rect, 2);
@@ -505,8 +514,11 @@ static void ApplyFindComboSkin(HWND hCombo)
 
 static void ApplyFindComboSkins(HWND hDialog)
 {
-    int comboIDs[] = {IDC_FIND_NAMED, IDC_FIND_LOOKIN, IDC_FIND_CONTAINING};
-    for (int i = 0; i < _countof(comboIDs); i++)
+    // #99: skin all four Find comboboxes (the "Type:" combo IDC_FIND_FILETYPE was missing
+    // here, leaving it white in dark mode). The set lives in find_dialog_theme_ids.cpp.
+    int count = 0;
+    const int* comboIDs = GetFindThemedComboIds(count);
+    for (int i = 0; i < count; i++)
         ApplyFindComboSkin(GetDlgItem(hDialog, comboIDs[i]));
 }
 
@@ -594,6 +606,14 @@ static BOOL PaintFindDarkCombo(HWND hwnd, HDC paintDC)
         SelectObject(paintDC, oldPen);
         FindDrawComboArrow(paintDC, &button, IsWindowEnabled(hwnd) ? colors.InputText : colors.DisabledText);
     }
+
+    // IDC_FIND_FILETYPE is CBS_DROPDOWNLIST and so has no edit child - without this its
+    // selected value ("All files and folders") was never drawn and the field read as empty.
+    // The other three skinned combos here are CBS_DROPDOWN, whose edit child covered for the
+    // omission, which is why this went unnoticed since v1.0.14 and was then copied wholesale
+    // into the general dark-mode painter.
+    if (!haveEditRect)
+        ComboDarkDrawSelectedItem(hwnd, paintDC, client, button, {colors.InputText, colors.DisabledText, colors.Highlight, colors.HighlightText});
 
     RestoreDC(paintDC, savedDC);
     FindDrawRectOutline(paintDC, &client, FIND_DARK_FRAME);

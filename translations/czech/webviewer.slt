@@ -10,9 +10,9 @@ WEB,"forum.altap.cz/viewtopic.php?f=23&t=7008"
 COMMENT,"Česká verze"
 
 [STRINGTABLE 0]
-10100,1,"Prohlížeč Internet Explorer"
-10101,1,"Nelze otevřít Prohlížeč Internet Explorer.\nProsíme o nahlášení tohoto problému na support@altap.cz."
+10100,1,"Webový prohlížeč"
+10101,1,"Nelze otevřít Webový prohlížeč.\nZkontrolujte prosím, že je nainstalováno prostředí Microsoft Edge WebView2 Runtime."
 10102,1,"Chyba"
-10103,1,"Jednoduchý HTML nebo XML prohlížeč založený na Internet Exploreru."
+10103,1,"Jednoduchý prohlížeč HTML, XML a Markdownu založený na Microsoft Edge WebView2."
 10105,1,"O pluginu"
 

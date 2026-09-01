@@ -30,7 +30,7 @@ COMMENT,"Nederlandse versie"
 10100,1,"Portable Executable Viewer"
 10101,1,"Kan bestand %s niet openen."
 10102,1,"Maken van tijdelijk bestand is mislukt."
-10103,1,"Uitzondering opgetreden.\n\nGeopend bestand: %s\n\nAls u er zeker van bent dat dit bestand niet is beschadigd, stuurt u dit bestand dan a.u.b. op naar support@altap.cz.\nWij zullen uw probleem reproduceren en het voor u oplossen. Alvast bedankt voor uw medewerking!"
+10103,1,"Uitzondering opgetreden.\n\nGeopend bestand: %s\n\nAls u er zeker van bent dat dit bestand niet is beschadigd, maak dan a.u.b. een issue aan op https://github.com/0xeb/sally/issues en voeg dit bestand toe.\nWij zullen uw probleem reproduceren en het voor u oplossen. Alvast bedankt voor uw medewerking!"
 10104,1,"Informatie weergeven over de Portable Executable bestanden zoals EXE, DLL, etc."
 
 [STRINGTABLE 2]

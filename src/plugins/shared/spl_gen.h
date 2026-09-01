@@ -1880,9 +1880,9 @@ public:
 
     // sets message to be displayed by Bug Report dialog if crash occurs inside plugin
     // (inside plugin = at least one call-stack-message saved from plugin) and allows redefining
-    // standard bug-report email address (support@altap.cz); 'message' is new message
-    // (NULL means "no message"); 'email' is new email address (NULL means "use
-    // standard"; max email length is 100 chars); this method can be called repeatedly, original
+    // standard bug-report contact address (https://github.com/0xeb/sally/issues); 'message' is new message
+    // (NULL means "no message"); 'email' is the new contact address (NULL means "use
+    // standard"; max length is 100 chars); this method can be called repeatedly, original
     // message and email are overwritten; Salamander doesn't remember message or email for next
     // run, so this method must be called again on each plugin load (preferably in entry-point)
     // limitation: main thread (otherwise plugin configuration may change during call)
@@ -2549,7 +2549,7 @@ public:
     //
     virtual BOOL WINAPI InstallWordBreakProc(HWND hWindow) = 0;
 
-    // Salamander 3 or newer: returns TRUE if this Altap Salamander instance was
+    // Salamander 3 or newer: returns TRUE if this Sally instance was
     // first to start (at instance startup time, other running instances
     // of version 3 or newer are searched for);
     //

@@ -1957,13 +1957,39 @@ void ShellAction(CFilesWindow* panel, CShellAction action, BOOL useSelection,
                 BOOL hasWideName = FALSE;
                 if (CollectSelectedPathsW(panel, idxs, idxCount, selectedPathsW, hasWideName))
                 {
-                    sally::clipboard::HDropWideDataObject* wideDataObject = new sally::clipboard::HDropWideDataObject(selectedPathsW);
-                    if (wideDataObject != NULL)
+                    // #101: prefer the Shell's own data object, exactly as saCopyToClipboard does
+                    // above for Paste Shortcut (#87).
+                    //
+                    // A CF_HDROP-only object cannot produce a shortcut: the shell folder drop
+                    // target builds a link from the shell ID list (a PIDL array), not from file
+                    // paths. With only CF_HDROP it answers DROPEFFECT_NONE for the link
+                    // modifiers, which is the blocked cursor users see on Alt+drag and
+                    // Ctrl+Shift+drag. Measured on a live drag before this change:
+                    //
+                    //   probe CF_HDROP            -> PRESENT
+                    //   probe Shell IDList Array  -> absent
+                    //   key=0x0021 ALT  allowedIn=[COPY MOVE LINK]  effectOut=[NONE]
+                    //
+                    // Copy and Move were unaffected because those the shell can do from
+                    // CF_HDROP alone - which is why only the link modifiers appeared broken.
+                    IDataObject* shellDataObject = NULL;
+                    if (SUCCEEDED(sally::clipboard::CreateShellSelectionDataObject(
+                            panel->GetPathW(), selectedPathsW, &shellDataObject)) &&
+                        shellDataObject != NULL)
                     {
-                        if (wideDataObject->IsValid())
-                            dataObject = wideDataObject;
-                        else
-                            wideDataObject->Release();
+                        dataObject = shellDataObject; // reference passes to dataObject
+                    }
+
+                    if (dataObject == NULL)
+                    { // fall back to the wide CF_HDROP object: no shortcuts, but non-ANSI names survive
+                        sally::clipboard::HDropWideDataObject* wideDataObject = new sally::clipboard::HDropWideDataObject(selectedPathsW);
+                        if (wideDataObject != NULL)
+                        {
+                            if (wideDataObject->IsValid())
+                                dataObject = wideDataObject;
+                            else
+                                wideDataObject->Release();
+                        }
                     }
                 }
             }

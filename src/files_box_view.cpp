@@ -2219,6 +2219,23 @@ BOOL CFilesBox::ShowHideChilds()
                                        NULL, //HMenu
                                        HInstance,
                                        NULL);
+            // Keep the panel scrollbar on the CLASSIC style, with visible up/down arrows.
+            //
+            // DarkMode_ApplyListTreeThemeToControl() themes any "ScrollBar" control with
+            // DarkMode_Explorer. On Windows 11 that is the auto-hiding overlay scrollbar: a 4px
+            // sliver with NO arrow buttons until the pointer enters it (measured on a panel
+            // screenshot - the band was 4px wide where a classic bar is SM_CXVSCROLL ~17px, and
+            // the top and bottom rows were flat track colour with no glyph).
+            //
+            // v1.0.24 shipped with visible arrows here even in the dark theme. That theming code
+            // was already present then, so it was never reaching this control - the theme walk
+            // simply ran at a moment when this lazily-created scrollbar did not exist yet. #95
+            // moved the startup theme walk earlier (before SetWindowPlacement, so the first
+            // painted frame is dark) and the panel scrollbar started being caught by it.
+            //
+            // Opting this one control out restores the 1.0.24 appearance without touching how
+            // dialog scrollbars are themed, and without depending on walk ordering again.
+            DarkMode_SetLightSurface(HVScrollBar, TRUE);
             change = TRUE;
         }
     }

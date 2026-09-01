@@ -10,6 +10,7 @@
 #include "fileswnd.h"
 #include "filesbox.h"
 #include "mainwnd.h"
+#include "toolbar_font_policy.h"
 #include "editwnd.h"
 #include "cfgdlg.h"
 #include "dialogs.h"
@@ -1402,6 +1403,19 @@ BOOL CreateEnvFonts()
         TRACE_E("Unable to create font.");
         return FALSE;
     }
+
+#if SALLY_BOTTOMBAR_BOLD_LABELS
+    // #96: bold variant for the bottom toolbar's labels (kept behind the switch)
+    if (EnvFontBold != NULL)
+        HANDLES(DeleteObject(EnvFontBold));
+    LOGFONT lfBold = MakeBoldToolbarLogFont(lf);
+    EnvFontBold = HANDLES(CreateFontIndirect(&lfBold));
+    if (EnvFontBold == NULL)
+    {
+        TRACE_E("Unable to create font.");
+        return FALSE;
+    }
+#endif
 
     // create an underlined variant
     lf.lfUnderline = TRUE;

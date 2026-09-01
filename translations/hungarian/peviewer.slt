@@ -30,7 +30,7 @@ COMMENT,"Magyar változat"
 10100,1,"Hordozható futtatható néző"
 10101,1,"A(z) %s nem nyitható meg."
 10102,1,"Ideiglenes fájl létrehozása sikertelen."
-10103,1,"Kivétel lépett fel.\n\nNézett fájl: %s\n\nHa biztos, hogy a megnézett fájl nem sérült, küldje el a fájlt a support@altap.cz címre.\nÚjra előidézzük és kijavítjuk a hibát. Köszönjük az együttműködését!"
+10103,1,"Kivétel lépett fel.\n\nNézett fájl: %s\n\nHa biztos, hogy a megnézett fájl nem sérült, nyisson egy hibajegyet itt: https://github.com/0xeb/sally/issues és csatolja a fájlt.\nÚjra előidézzük és kijavítjuk a hibát. Köszönjük az együttműködését!"
 10104,1,"Olyan futtatható fájlok információinak megjelenítése, mint EXE, DLL, stb."
 
 [STRINGTABLE 2]

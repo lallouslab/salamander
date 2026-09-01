@@ -563,6 +563,7 @@ CViewerWindow::CViewerWindow(const char* fileName, CViewType type, const char* c
     UseCodeTable = FALSE;
     TextEncoding = Sally::Unicode::BomEncoding::LegacyBytes;
     TextContentOffset = 0;
+    ResetDecodedLineIndex();
     if (fileName == NULL)
         ClearViewedFile(); // error
     else
@@ -800,6 +801,32 @@ void AppendVisualCell(Sally::Unicode::DecodedRun& visual, std::uint32_t scalar,
         visual.AppendCell(scalar, rawStart, rawEnd);
 }
 
+// Same expansion as AppendVisualCell, but the run is optional: when 'visual' is NULL the cells
+// are only counted. Tab width depends solely on the running cell count, so the counting and
+// materialising modes cannot disagree - which is the property the line index relies on.
+void AppendOrCountVisualCell(Sally::Unicode::DecodedRun* visual, __int64& cellCount,
+                             std::uint32_t scalar, __int64 rawStart, __int64 rawEnd, int tabSize)
+{
+    if (scalar == L'\t')
+    {
+        int tab = (int)(tabSize - (cellCount % tabSize));
+        if (tab <= 0)
+            tab = 1;
+        cellCount += tab;
+        if (visual != NULL)
+        {
+            while (tab-- > 0)
+                visual->AppendCell(L' ', rawStart, rawEnd);
+        }
+    }
+    else
+    {
+        cellCount++;
+        if (visual != NULL)
+            visual->AppendCell(scalar, rawStart, rawEnd);
+    }
+}
+
 std::size_t DecodedSelectionStartCell(const Sally::Unicode::DecodedRun& visual, __int64 offset)
 {
     for (std::size_t i = 0; i < visual.CellCount(); ++i)
@@ -899,12 +926,14 @@ BOOL CViewerWindow::ReadDecodedScalar(HANDLE* hFile, __int64 offset, Sally::Unic
     return TRUE;
 }
 
-BOOL CViewerWindow::ReadDecodedTextLine(HANDLE* hFile, __int64 lineOffset, __int64 maxCells,
-                                        Sally::Unicode::DecodedRun& visualLine, __int64& lineEnd,
-                                        __int64& nextLineBegin, BOOL& eol, BOOL& wrapped,
-                                        int& eolBytes, BOOL& fatalErr)
+BOOL CViewerWindow::DecodeOrScanTextLine(HANDLE* hFile, __int64 lineOffset, __int64 maxCells,
+                                         Sally::Unicode::DecodedRun* visualLine, __int64& cellCount,
+                                         __int64& lineEnd, __int64& nextLineBegin, BOOL& eol,
+                                         BOOL& wrapped, int& eolBytes, BOOL& fatalErr)
 {
-    visualLine.Clear();
+    if (visualLine != NULL)
+        visualLine->Clear();
+    cellCount = 0;
     fatalErr = FALSE;
     eol = FALSE;
     wrapped = FALSE;
@@ -994,10 +1023,11 @@ BOOL CViewerWindow::ReadDecodedTextLine(HANDLE* hFile, __int64 lineOffset, __int
                 }
             }
 
-            AppendVisualCell(visualLine, scalar, decoded.RawStart[i], decoded.RawEnd[i], Configuration.TabSize);
+            AppendOrCountVisualCell(visualLine, cellCount, scalar, decoded.RawStart[i],
+                                    decoded.RawEnd[i], Configuration.TabSize);
             lineEnd = decoded.RawEnd[i];
             nextLineBegin = lineEnd;
-            if (WrapText && maxCells > 0 && (__int64)visualLine.CellCount() >= maxCells)
+            if (WrapText && maxCells > 0 && cellCount >= maxCells)
             {
                 wrapped = TRUE;
                 return TRUE;
@@ -1009,6 +1039,25 @@ BOOL CViewerWindow::ReadDecodedTextLine(HANDLE* hFile, __int64 lineOffset, __int
     }
     lineEnd = nextLineBegin = max(lineEnd, off);
     return TRUE;
+}
+
+BOOL CViewerWindow::ReadDecodedTextLine(HANDLE* hFile, __int64 lineOffset, __int64 maxCells,
+                                        Sally::Unicode::DecodedRun& visualLine, __int64& lineEnd,
+                                        __int64& nextLineBegin, BOOL& eol, BOOL& wrapped,
+                                        int& eolBytes, BOOL& fatalErr)
+{
+    __int64 cellCount = 0;
+    return DecodeOrScanTextLine(hFile, lineOffset, maxCells, &visualLine, cellCount, lineEnd,
+                                nextLineBegin, eol, wrapped, eolBytes, fatalErr);
+}
+
+BOOL CViewerWindow::ScanDecodedTextLine(HANDLE* hFile, __int64 lineOffset, __int64 maxCells,
+                                        __int64& cellCount, __int64& lineEnd,
+                                        __int64& nextLineBegin, BOOL& eol, BOOL& wrapped,
+                                        int& eolBytes, BOOL& fatalErr)
+{
+    return DecodeOrScanTextLine(hFile, lineOffset, maxCells, NULL, cellCount, lineEnd,
+                                nextLineBegin, eol, wrapped, eolBytes, fatalErr);
 }
 
 void CViewerWindow::PaintDecodedText(HDC dc, const RECT& fullLine, int lines, int columns,

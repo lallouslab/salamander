@@ -30,7 +30,7 @@ COMMENT,"Česká verze"
 10100,1,"Prohlížeč spustitelných souborů"
 10101,1,"Nelze otevřít soubor %s."
 10102,1,"Vytvoření dočasného souboru selhalo."
-10103,1,"Došlo k výjimce.\n\nProhlížený soubor: %s\n\nPokud si myslíte, že prohlížený soubor není poškozený, prosím zašlete tento soubor na support@altap.cz.\nChybu prohlížeče zopakujeme a opravíme. Děkujeme za spolupráci!"
+10103,1,"Došlo k výjimce.\n\nProhlížený soubor: %s\n\nPokud si myslíte, že prohlížený soubor není poškozený, založte prosím issue na https://github.com/0xeb/sally/issues a přiložte tento soubor.\nChybu prohlížeče zopakujeme a opravíme. Děkujeme za spolupráci!"
 10104,1,"Zobrazí informace o spustitelných souborech - EXE, DLL, atd."
 
 [STRINGTABLE 2]

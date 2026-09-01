@@ -131,3 +131,9 @@ const char* OverlayOutcomeText(OverlayOutcome outcome);
 // Renders one record as a single ASCII line into 'buf'. Wide names are emitted both as the
 // lossy ACP rendering and \uXXXX-escaped when the two differ. Returns characters written.
 int FormatShellOverlayDiagRecord(const ShellOverlayDiagRecord& record, char* buf, int bufSize);
+
+// Records which configuration root this run resolved. SALAMANDER_ROOT_REG is legitimately
+// NULL on a first run (no configuration exists in the registry yet); copying it raw faults,
+// so render that state as a legible token instead. The field is only ever printed into the
+// Bug Report, so the token also disambiguates "first run" from "the copy failed".
+void SetOverlayDiagConfigRoot(ShellOverlayDiagHeader& header, const char* rootReg);

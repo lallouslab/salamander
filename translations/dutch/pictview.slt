@@ -27,7 +27,7 @@ COMMENT,"Nederlandse versie"
 [DIALOG 2020]
 288,150,1,"Weergave"
 3000,6,5,276,53,1,"Venster grootte"
-2021,14,17,151,12,1,"Gelijk aan Altap Sala&mander"
+2021,14,17,151,12,1,"Gelijk aan &Sally"
 2022,14,29,148,12,1,"&Groter indien nodig maar niet kleiner"
 2023,14,41,148,12,1,"Indien &nodig"
 3001,6,60,276,67,1,"Standaard zoom"

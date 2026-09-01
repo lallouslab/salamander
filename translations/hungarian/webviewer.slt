@@ -10,9 +10,9 @@ WEB,"forum.altap.cz/viewtopic.php?f=23&t=6164"
 COMMENT,"Magyar változat"
 
 [STRINGTABLE 0]
-10100,1,"Internet Explorer Néző"
-10101,1,"Nem sikerült megnyitni az Internet Explorer Nézőt.\nKérjük, jelentse ezt a problémát a support@altap.cz címen."
+10100,1,"Web Néző"
+10101,1,"Nem sikerült megnyitni a Web Nézőt.\nKérjük, ellenőrizze, hogy a Microsoft Edge WebView2 Runtime telepítve van-e."
 10102,1,"Hiba"
-10103,1,"Internet Explorer-re épülő Lightweight HTML és XML néző."
+10103,1,"Egyszerű HTML, XML és Markdown néző Microsoft Edge WebView2 alapon."
 10105,1,"Plugin névjegy"
 

@@ -2761,7 +2761,26 @@ void CFilesWindow::RenameFile(int specialIndex)
     char buff[200];
     sprintf(buff, LoadStr(IDS_RENAME_TO), LoadStr(isDir ? IDS_QUESTION_DIRECTORY : IDS_QUESTION_FILE));
     CTruncatedString subject;
-    subject.Set(buff, useUnicode ? "..." : formatedFileName.Get());
+    // #103: a non-ANSI name used to be replaced by a literal "..." here, because the label
+    // was byte-owned. That is no longer true: CTruncatedString carries wide text (SetW/GetW),
+    // and the dialog constructed below is CCopyMoveDialog, whose DialogProc renders it
+    // (IsWide() -> SetWindowTextW) and which is a Unicode window because SetUnicodePath() is
+    // called a few lines down. Same idiom as the Copy/Delete confirmation subject in
+    // files_window_delete_email.cpp.
+    //
+    // Note useUnicode is also TRUE when only the PATH needs exact preservation, so the old
+    // code hid even plain ASCII names behind "..." in such a directory. The narrow fallback
+    // below shows the real name in that case, and is never worse than "...".
+    const BOOL haveWideName = f->NameW != NULL && f->NameW[0] != 0;
+    if (useUnicode && haveWideName)
+    {
+        std::wstring subjectW = FormatStrW(LoadStrW(IDS_RENAME_TO),
+                                           LoadStrW(isDir ? IDS_QUESTION_DIRECTORY : IDS_QUESTION_FILE));
+        std::wstring formatedFileNameW = AlterFileNameW(f->NameW, Configuration.FileNameFormat, 0, isDir != 0);
+        subject.SetW(subjectW.c_str(), formatedFileNameW.c_str());
+    }
+    else
+        subject.Set(buff, formatedFileName.Get());
     std::wstring initialRenameNameW = (f->NameW != NULL && f->NameW[0] != L'\0') ? f->NameW : AnsiToWide(formatedFileName.Get());
     if (useUnicode && f->NameW != NULL && f->NameW[0] != L'\0')
     {
